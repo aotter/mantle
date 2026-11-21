@@ -229,8 +229,8 @@ test("era classification and the host rule, request by request", async () => {
   const handle = mcp(handTools, {
     gateway: { tenant: "example" },
     accessTargets: async () => ({
-      [PINNED]: { targetHash: "hash", opaque: false },
-      "procedure:poke": { targetHash: "other", opaque: false },
+      [PINNED]: { targetHash: "hash" },
+      "procedure:poke": { targetHash: "other" },
     }),
     db: () => ({}),
   });
@@ -376,7 +376,7 @@ test("a host's 2025-era initialize the SDK refuses is recorded as an error, one 
     ] as Tool<object>[],
     {
       gateway: { tenant: "example" },
-      accessTargets: async () => ({ [PINNED]: { targetHash: "hash", opaque: false } }),
+      accessTargets: async () => ({ [PINNED]: { targetHash: "hash" } }),
       db: () => ({}),
       onAccess: event => void events.push(event),
     },

@@ -53,10 +53,6 @@ export function selectedWeb<Database, E>(
       }
       // An index of static sitemap paths alone reads no View and is still an observed answer.
       if (!visit.ran && !index) return result;
-      if (pipeline.dryRun) {
-        const response = pipeline.dryRunResponse();
-        return method === "fetch" ? response : "";
-      }
       pipeline.finish();
       return result;
     } catch (error) {

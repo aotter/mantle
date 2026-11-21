@@ -2369,7 +2369,7 @@ test("native Admin enforces field scope and { all: true } variants for entries, 
   }
 });
 
-test("Store, Admin native and prepare refuse the same forbidden writes before SQL on every target", async () => {
+test("Store, Admin native and the Admin create route refuse the same forbidden writes before SQL on every target", async () => {
   const { authenticatedAs } = await import("@aotter/mantle/testing"),
     { entries } = await import("../../mantle-admin/src/server/entries.js");
   const m = JSON.parse(source.text);
@@ -2449,9 +2449,11 @@ test("Store, Admin native and prepare refuse the same forbidden writes before SQ
         ),
         routes = entries(bindings.schemas, adapter),
         create = routes.find(r => r.method === "POST" && r.path === "/entries")!;
-      const prepare = (caller: any, data: object) =>
-        create.prepare!({
+      // The route's own run, over a database that refuses SQL: the refusal must come first.
+      const route = (caller: any, data: object) =>
+        create.run({
           caller,
+          db,
           params: {},
           url: new URL("https://app.test/admin/api/entries"),
           request: new Request("https://app.test/admin/api/entries", {
@@ -2469,7 +2471,7 @@ test("Store, Admin native and prepare refuse the same forbidden writes before SQ
           codes = await Promise.all([
             code(() => store(db, caller).collection("records").insert(values)),
             code(() => native.nativeEntryProcedure(s.binding, adapter, db, caller, "create", values)),
-            code(() => prepare(caller, data)),
+            code(() => route(caller, data)),
           ]);
         expect(codes).toEqual(["AUTH_DENIED", "AUTH_DENIED", "AUTH_DENIED"]);
       }

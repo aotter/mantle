@@ -1,6 +1,6 @@
 /**
  * One decision matrix for the three request surfaces: caller kind x target x request shape, with and without gateway
- * mode, application `authorize` and dry runs. Every cell is recorded in `request-pipeline-matrix.golden.txt`, so a
+ * mode and application `authorize`. Every cell is recorded in `request-pipeline-matrix.golden.txt`, so a
  * change to any surface's caller, Origin, scope, `requires` or authorization step shows as a diff of that file.
  * Regenerate it with `UPDATE_MATRIX=1 bun test tests/request-pipeline-matrix.test.ts` and review the diff.
  */
@@ -97,11 +97,9 @@ const hostCallers: Readonly<Record<string, Partial<HostProps> | undefined>> = {
   "host-member": { layer: "member" },
   "host-member-session": { layer: "member", credential: "session" },
   "host-member-snapshot": { layer: "member", authenticatedAs: "snapshot" },
-  "host-member-dry-run": { layer: "member", dryRun: true },
   "host-admin": { layer: "admin" },
   "host-admin-session": { layer: "admin", credential: "session" },
   "host-admin-snapshot": { layer: "admin", authenticatedAs: "snapshot" },
-  "host-admin-dry-run": { layer: "admin", dryRun: true },
 };
 const shapes: Readonly<Record<string, Record<string, string>>> = {
   "same-origin": { origin: ORIGIN, "sec-fetch-site": "same-origin" },
@@ -111,7 +109,7 @@ const shapes: Readonly<Record<string, Record<string, string>>> = {
 type Surface = "rest" | "mcp" | "web";
 type Authorization = "off" | "allow" | "deny";
 
-/** What a surface decided, without its transport: `allow`, `dry-run`, or `deny:<code>`. */
+/** What a surface decided, without its transport: `allow` or `deny:<code>`. */
 interface Outcome {
   readonly decision: string;
   readonly detail: string;
@@ -141,7 +139,6 @@ async function httpOutcome(response: Response | undefined): Promise<Outcome> {
     const error = errorOf(payload);
     return error ? denied(error, transport) : { decision: `deny:HTTP_${response.status}`, detail: transport };
   }
-  if (payload?.dryRun === true) return { decision: "dry-run", detail: transport };
   // MCP answers a tool's own failure inside a successful JSON-RPC result.
   if (payload?.jsonrpc === "2.0") {
     if (payload.error) return { decision: `deny:RPC_${payload.error.code}`, detail: transport };
@@ -151,7 +148,6 @@ async function httpOutcome(response: Response | undefined): Promise<Outcome> {
         result.structuredContent?.diagnostics?.[0] ?? JSON.parse(result.content[0].text).diagnostics[0];
       return denied(errorOf({ error: diagnostic })!, `${transport} tool-error`);
     }
-    if (result?.structuredContent?.dryRun === true) return { decision: "dry-run", detail: `${transport} tool-result` };
     return { decision: "allow", detail: `${transport} tool-result` };
   }
   return { decision: "allow", detail: transport };
@@ -188,7 +184,7 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
       acquired = 0,
       authorizations = 0,
       resolutions = 0;
-    const events: { outcome: string; reason?: string; target: string; dryRun: boolean }[] = [];
+    const events: { outcome: string; reason?: string; target: string }[] = [];
     const pages = Object.fromEntries(
       targets
         .filter(target => target.web)
@@ -278,8 +274,7 @@ test("REST, MCP and web decide the same caller x target x request-shape matrix",
         const outcome = await call();
         await new Promise(resolve => setTimeout(resolve, 0));
         const observed = events.map(
-          event =>
-            `${event.outcome}${event.reason ? `:${event.reason}` : ""}@${event.target}${event.dryRun ? " dry" : ""}`,
+          event => `${event.outcome}${event.reason ? `:${event.reason}` : ""}@${event.target}`,
         );
         const event = observed.join(",") || "none";
         decisions.push(outcome.decision);

@@ -44,7 +44,6 @@ export interface Context<Env, Database> {
 export interface Route<Env, Database> {
   /** What application `authorize` decides on, from the request (`params`, `input`, `url`, `caller`); not `db` or `authorize`. */
   readonly target?: (context: Context<Env, Database>) => Target;
-  readonly prepare?: (context: Context<Env, Database>) => void | Promise<void>;
   readonly method: string;
   /** Relative to /admin/api; {name} captures one segment, {name*} captures a suffix. */
   readonly path: string;
@@ -416,15 +415,6 @@ export function admin<Env, Database, Handlers = never>(
     {
       method: "GET",
       path: "/views/{name}",
-      prepare: async c => {
-        const view = views.find(v => v.name === c.params.name);
-        if (!view) throw missing();
-        deny(c.caller, view.allows(c.caller), "views/" + view.name);
-        view.check?.(c.caller);
-        if (options.authorize) await checkTarget(c, { kind: "view", name: view.name });
-        const input = { ...view.query(c.url.searchParams).input };
-        convert(input, view.convert);
-      },
       run: c => viewPage(c),
     },
     // Nav badges: up to 20 Views in one read, each as the caller through the single route's checks. A refused or missing View
@@ -432,9 +422,6 @@ export function admin<Env, Database, Handlers = never>(
     {
       method: "GET",
       path: "/view-batch",
-      prepare: c => {
-        batchNames(c.url);
-      },
       run: async c => {
         const out: [string, unknown][] = [];
         for (const name of batchNames(c.url)) {
@@ -465,14 +452,6 @@ export function admin<Env, Database, Handlers = never>(
     {
       method: "POST",
       path: "/operations/{name}",
-      prepare: async c => {
-        const operation = operations.find(p => p.name === c.params.name);
-        if (!operation) throw missing();
-        deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
-        operation.check?.(c.caller);
-        if (options.authorize) await checkTarget(c, { kind: "procedure", name: operation.name });
-        convert(operation.validate(await json(c)), operation.convert);
-      },
       run: async c => {
         const operation = operations.find(p => p.name === c.params.name && (options.authorize || p.allows(c.caller)));
         if (operation && options.authorize) deny(c.caller, operation.allows(c.caller), "procedures/" + operation.name);
@@ -509,7 +488,7 @@ export function admin<Env, Database, Handlers = never>(
     input: Record<string, unknown> | undefined,
     bound: RouteAccess,
     getDb: () => Database = () => {
-      throw new Error("Only an Admin route's run acquires the database (not its target or prepare)");
+      throw new Error("Only an Admin route's run acquires the database (not its target)");
     },
   ): Context<Env, Database> => {
     const c: Context<Env, Database> = {
@@ -533,7 +512,7 @@ export function admin<Env, Database, Handlers = never>(
   const unbound: RouteAccess = { authorize: refuse, authorized: refuse };
   const entry = (
     route: Route<Env, Database>,
-    named?: { path: string; name: string; variant: string; readOnly?: boolean },
+    named?: { path: string; name: string; readOnly?: boolean },
   ): RestRoute<Database, Handlers, Env> => {
     // The pattern grammar describe's matchTarget compiles from the same ids.
     const { source, keys } = routeSource(named?.path ?? route.path, ADMIN_API_BASE, true);
@@ -547,16 +526,11 @@ export function admin<Env, Database, Handlers = never>(
       rawBody: route.rawBody,
       // Every Admin read is a GET; a POST reads only through a read-only operation.
       readOnly: route.method === "GET" || named?.readOnly === true,
-      variant: named?.variant,
       target:
         options.authorize && route.target
           ? (request, env, caller, params, input) =>
               route.target!(context(request, env, caller, paramsOf(params), input, unbound))
           : undefined,
-      prepare: route.prepare
-        ? (request, env, caller, params, input, bound) =>
-            route.prepare!(context(request, env, caller, paramsOf(params), input, bound))
-        : undefined,
       handle: async (request, env, getDb, caller, params, _handlers, input, bound) => {
         const result = await route.run(context(request, env, caller, paramsOf(params), input, bound, getDb));
         if (!(result instanceof Response)) return result;
@@ -567,25 +541,12 @@ export function admin<Env, Database, Handlers = never>(
       },
     };
   };
-  // A View or operation route is matched once per name, so a host caller's dry run and freshness follow that View
-  // or Procedure (its access variant, and whether it is read-only); the template answers any other name.
-  const perName: Readonly<Record<string, readonly { name: string; variant: string; readOnly?: boolean }[]>> = {
-    "GET /views/{name}": views.map(v => ({ name: v.name, variant: `view:${v.name}` })),
-    "GET /views/{name}/export": views.map(v => ({ name: v.name, variant: `view:${v.name}` })),
-    "GET /developer/views/{name}": (options.developerViews ?? views).map(v => ({
-      name: v.name,
-      variant: `view:${v.name}`,
-    })),
-    "POST /operations/{name}": operations.map(p => ({
-      name: p.name,
-      variant: `procedure:${p.name}`,
-      readOnly: p.readOnly === true,
-    })),
-  };
+  // An operation route is matched once per Procedure, so a host caller's freshness follows whether that Procedure is
+  // read-only; the template answers any other name.
   const table = routes.flatMap(route => [
-    ...(Object.hasOwn(perName, `${route.method} ${route.path}`)
-      ? perName[`${route.method} ${route.path}`]!.map(named =>
-          entry(route, { ...named, path: route.path.replace("{name}", named.name) }),
+    ...(route.method === "POST" && route.path === "/operations/{name}"
+      ? operations.map(p =>
+          entry(route, { name: p.name, readOnly: p.readOnly === true, path: route.path.replace("{name}", p.name) }),
         )
       : []),
     entry(route),

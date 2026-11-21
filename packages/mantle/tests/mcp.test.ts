@@ -1096,7 +1096,7 @@ test("a 2025-era batch whose second call the caller may not make runs neither ca
 test("gateway: an empty or malformed body is the client's parse error, not a server fault", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { mantleProps, pinned } = await import("./gateway-fixture.js");
-  const targets = { "procedure:peek": { targetHash: "h", opaque: false } };
+  const targets = { "procedure:peek": { targetHash: "h" } };
   const events: { outcome: string; reason?: string }[] = [];
   const handle = mcp(
     [
@@ -1471,7 +1471,7 @@ test("withResult sends native content blocks after Core's blocks; a block the SD
   expect(direct.content).toBe(blocks);
 });
 
-test("a hosted withResult call: a dry run carries no app blocks, a refused block is a failed access event", async () => {
+test("a hosted withResult call carries its blocks; a refused block is a failed access event", async () => {
   const { mcp, withResult } = await import("../src/kernel/mcp.js");
   const { mantleProps, pinned } = await import("./gateway-fixture.js");
   let ran = 0;
@@ -1484,8 +1484,8 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
     run: async () => (ran++, withResult({ ok: true }, { content })),
   });
   const targets = {
-    "admin:tool:pic": { targetHash: "pic-hash", opaque: false },
-    "admin:tool:bad": { targetHash: "bad-hash", opaque: false },
+    "admin:tool:pic": { targetHash: "pic-hash" },
+    "admin:tool:bad": { targetHash: "bad-hash" },
   };
   const events: any[] = [];
   const handle = mcp(
@@ -1497,7 +1497,7 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
       onAccess: e => void events.push(e),
     },
   );
-  const call = async (name: string, dryRun: boolean) => {
+  const call = async (name: string) => {
     const response = await handle(
       new Request(
         "https://app.test/mcp/admin",
@@ -1507,23 +1507,19 @@ test("a hosted withResult call: a dry run carries no app blocks, a refused block
         ),
       ),
       {},
-      { props: { mantle: await pinned(mantleProps({ dryRun }), targets, `admin:tool:${name}`) } },
+      { props: { mantle: await pinned(mantleProps(), targets, `admin:tool:${name}`) } },
     );
     const text = await response!.text();
     return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
   };
-  const dry = await call("pic", true);
-  expect(ran).toBe(0);
-  expect(dry.content).toHaveLength(1);
-  expect(dry.structuredContent).toMatchObject({ dryRun: true });
-  expect((await call("pic", false)).content.map((c: any) => c.type)).toEqual(["text", "image"]);
+  expect((await call("pic")).content.map((c: any) => c.type)).toEqual(["text", "image"]);
+  expect(ran).toBe(1);
   const quiet = console.error;
   console.error = () => {};
-  const bad = await call("bad", false).finally(() => (console.error = quiet));
+  const bad = await call("bad").finally(() => (console.error = quiet));
   expect(bad.isError).toBe(true);
   expect(bad.structuredContent.diagnostics[0].code).toBe("INTERNAL_ERROR");
   expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
-    ["admin:tool:pic", "allow", undefined],
     ["admin:tool:pic", "allow", undefined],
     ["admin:tool:bad", "error", "INTERNAL_ERROR"],
   ]);
@@ -1869,9 +1865,7 @@ test("gateway: a call cancelled before it settles is recorded as cancelled once,
       return {};
     }),
   ];
-  const targets = Object.fromEntries(
-    tools.map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash`, opaque: false }]),
-  );
+  const targets = Object.fromEntries(tools.map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash` }]));
   const events: { target: string; outcome: string; reason?: string }[] = [];
   const completions: unknown[][] = [];
   const handle = mcp(tools as never, {

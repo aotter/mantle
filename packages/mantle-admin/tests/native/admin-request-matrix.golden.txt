@@ -2598,106 +2598,106 @@ gateway=on authorize=off caller=host-member shape=wrong-hash route=preflight-ope
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=entry-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=entry-write-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=entry-create
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=publish
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=operation-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=operation-ref
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=site-settings-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=site-settings-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=media
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /media hash=<hash:admin:GET /media> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=identity
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /members hash=<hash:admin:GET /members> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=me
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /me hash=<hash:admin:GET /me> dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=custom-opaque
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /save hash=custom-save dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=off caller=host-member shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=off caller=host-member shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=user/member/person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
 gateway=on authorize=off caller=host-admin shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[]
@@ -3198,106 +3198,106 @@ gateway=on authorize=off caller=host-admin shape=wrong-hash route=preflight-oper
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=entry-write
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=entry-create
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=publish
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=operation-write
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=off caller=host-admin-session shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[]
@@ -3798,106 +3798,106 @@ gateway=on authorize=off caller=host-admin-session shape=wrong-hash route=prefli
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=entry-write
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=entry-create
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=publish
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=operation-write
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-session shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-session shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=off caller=host-admin-snapshot shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[]
@@ -4398,106 +4398,106 @@ gateway=on authorize=off caller=host-admin-snapshot shape=wrong-hash route=prefl
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=entry-write
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=entry-write-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=entry-create
-  403 error{code=STALE_CALLER target=admin:POST /entries message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=publish
-  403 error{code=STALE_CALLER target=admin:POST /entries/:id/publish message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=operation-write
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=operation-ref
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=site-settings-write
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=site-settings-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=custom-opaque
-  403 error{code=STALE_CALLER target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=off caller=host-admin-snapshot shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=off caller=host-admin-snapshot shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=off authorize=allow caller=anonymous shape=same-origin route=collection-list
   401 error{code=UNAUTHENTICATED path=admin message} keys=error cache=private, no-store
   db=0 resolver=1 authorize=[]
@@ -7098,106 +7098,106 @@ gateway=on authorize=allow caller=host-member shape=wrong-hash route=preflight-o
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=entry-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=entry-write-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=entry-create
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=publish
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=operation-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=operation-ref
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=site-settings-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=site-settings-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=media
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /media hash=<hash:admin:GET /media> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=identity
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /members hash=<hash:admin:GET /members> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=me
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /me hash=<hash:admin:GET /me> dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=custom-opaque
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /save hash=custom-save dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=allow caller=host-member shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=allow caller=host-member shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=user/member/person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[schema:records:read]
@@ -7698,106 +7698,106 @@ gateway=on authorize=allow caller=host-admin shape=wrong-hash route=preflight-op
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=entry-write
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:update]
-  event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=entry-create
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:create]
-  event=allow@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=publish
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:records.publish]
-  event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=operation-write
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:write]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[schema:records:read]
@@ -8298,106 +8298,106 @@ gateway=on authorize=allow caller=host-admin-session shape=wrong-hash route=pref
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=entry-write
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:update]
-  event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=entry-create
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:create]
-  event=allow@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=publish
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:records.publish]
-  event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=operation-write
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:write]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-session shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-session shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=same-origin route=collection-list
   200 keys=items,next_cursor cache=private, no-store
   db=1 resolver=0 authorize=[schema:records:read]
@@ -8898,106 +8898,106 @@ gateway=on authorize=allow caller=host-admin-snapshot shape=wrong-hash route=pre
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=collection-list
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=entry-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=entry-write
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=entry-write-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=entry-create
-  403 error{code=STALE_CALLER target=admin:POST /entries message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=publish
-  403 error{code=STALE_CALLER target=admin:POST /entries/:id/publish message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=view-read
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=allow@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=operation-write
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=operation-read-only
-  200 dry-run keys=dryRun,event cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=allow@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=operation-ref
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=site-settings-write
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=site-settings-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=custom-opaque
-  403 error{code=STALE_CALLER target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=allow caller=host-admin-snapshot shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=allow caller=host-admin-snapshot shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=off authorize=deny caller=anonymous shape=same-origin route=collection-list
   401 error{code=UNAUTHENTICATED path=admin message} keys=error cache=private, no-store
   db=0 resolver=1 authorize=[]
@@ -11598,106 +11598,106 @@ gateway=on authorize=deny caller=host-member shape=wrong-hash route=preflight-op
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=entry-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=entry-write-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=entry-create
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=publish
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=operation-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=operation-ref
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=site-settings-write
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=site-settings-malformed-json
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=media
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /media hash=<hash:admin:GET /media> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=identity
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /members hash=<hash:admin:GET /members> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=me
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:GET /me hash=<hash:admin:GET /me> dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=custom-opaque
-  403 error{code=AUTH_DENIED target=admin message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:AUTH_DENIED@admin:PATCH /save hash=custom-save dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=user/member/person
-gateway=on authorize=deny caller=host-member shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=user/member/person
+gateway=on authorize=deny caller=host-member shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=user/member/person
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=user/member/person
 gateway=on authorize=deny caller=host-admin shape=same-origin route=collection-list
   403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[schema:records:read]
@@ -12198,106 +12198,106 @@ gateway=on authorize=deny caller=host-admin shape=wrong-hash route=preflight-ope
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=entry-write
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:update]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=entry-create
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:create]
-  event=deny:AUTH_DENIED@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=publish
-  403 error{code=AUTH_DENIED target=procedure/records.publish message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:records.publish]
-  event=deny:AUTH_DENIED@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=view/recent message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=operation-write
-  403 error{code=AUTH_DENIED target=procedure/write message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:write]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=procedure/peek message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=deny caller=host-admin-session shape=same-origin route=collection-list
   403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[schema:records:read]
@@ -12798,106 +12798,106 @@ gateway=on authorize=deny caller=host-admin-session shape=wrong-hash route=prefl
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=entry-write
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:update]
-  event=deny:AUTH_DENIED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=entry-write-malformed-json
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=entry-create
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:create]
-  event=deny:AUTH_DENIED@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=publish
-  403 error{code=AUTH_DENIED target=procedure/records.publish message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:records.publish]
-  event=deny:AUTH_DENIED@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=view/recent message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=operation-write
-  403 error{code=AUTH_DENIED target=procedure/write message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:write]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=procedure/peek message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=operation-ref
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=site-settings-write
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=site-settings-malformed-json
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=custom-opaque
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-session shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-session shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
 gateway=on authorize=deny caller=host-admin-snapshot shape=same-origin route=collection-list
   403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[schema:records:read]
@@ -13398,103 +13398,103 @@ gateway=on authorize=deny caller=host-admin-snapshot shape=wrong-hash route=pref
   405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
   db=0 resolver=0 authorize=[]
   event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=collection-list
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries hash=<hash:admin:GET /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=entry-read
-  403 error{code=AUTH_DENIED target=schema/records message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[schema:records:read]
-  event=deny:AUTH_DENIED@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=entry-write
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=collection-list
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=entry-write-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=entry-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=entry-create
-  403 error{code=STALE_CALLER target=admin:POST /entries message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=entry-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries hash=<hash:admin:POST /entries> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=publish
-  403 error{code=STALE_CALLER target=admin:POST /entries/:id/publish message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=entry-write-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=view-read
-  403 error{code=AUTH_DENIED target=view/recent message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[view:recent]
-  event=deny:AUTH_DENIED@admin:GET /views/:name hash=<hash:admin:GET /views/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=operation-write
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/entries/<id> hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=entry-create
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=operation-read-only
-  403 error{code=AUTH_DENIED target=procedure/peek message} keys=error cache=private, no-store
-  db=0 resolver=0 authorize=[procedure:peek]
-  event=deny:AUTH_DENIED@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=operation-ref
-  403 error{code=STALE_CALLER target=admin:POST /operations/:name message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=publish
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:POST /operations/:name hash=<hash:admin:POST /operations/:name> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=site-settings-write
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/entries/<id>/publish hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=view-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=site-settings-malformed-json
-  403 error{code=STALE_CALLER target=admin:PATCH /site-settings message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/views/recent hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=operation-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /site-settings hash=<hash:admin:PATCH /site-settings> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=media
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /media message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/write hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=operation-read-only
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /media hash=<hash:admin:GET /media> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=identity
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /members message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/peek hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=operation-ref
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /members hash=<hash:admin:GET /members> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=me
-  412 error{code=DRY_RUN_UNSUPPORTED target=admin:GET /me message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/operations/touch hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=site-settings-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:DRY_RUN_UNSUPPORTED@admin:GET /me hash=<hash:admin:GET /me> dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=custom-opaque
-  403 error{code=STALE_CALLER target=admin:PATCH /save message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=site-settings-malformed-json
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=deny:STALE_CALLER@admin:PATCH /save hash=custom-save dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=method-mismatch
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/site-settings hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=media
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:PUT /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=unmatched-read
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/media hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=identity
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=unmatched-write
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/members hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=me
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:POST /admin/api/nope hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=base
-  404 error{code=NOT_FOUND target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/me hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=custom-opaque
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:NOT_FOUND@rest:GET /admin/api hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=malformed-slash
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PATCH /admin/api/save hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=method-mismatch
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%2Fx hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=malformed-nul
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:PUT /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=unmatched-read
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%00 hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=malformed-escape
-  400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=unmatched-write
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:INPUT_VALIDATION_FAILED@rest:GET /admin/api/entries%zz hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=preflight
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=GET, POST
+  event=error:HOST_CONTRACT field=dryRun@rest:POST /admin/api/nope hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=base
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/entries hash=- dry caller=host/admin/host:person
-gateway=on authorize=deny caller=host-admin-snapshot shape=dry-run route=preflight-operation
-  405 error{code=METHOD_NOT_ALLOWED target=rest message} keys=error cache=private, no-store allow=POST
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=malformed-slash
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
   db=0 resolver=0 authorize=[]
-  event=error:METHOD_NOT_ALLOWED@rest:OPTIONS /admin/api/operations/write hash=- dry caller=host/admin/host:person
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%2Fx hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=malformed-nul
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%00 hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=malformed-escape
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:GET /admin/api/entries%zz hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=preflight
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/entries hash=- caller=host/admin/host:person
+gateway=on authorize=deny caller=host-admin-snapshot shape=removed-dryRun route=preflight-operation
+  412 error{code=HOST_CONTRACT field=dryRun message} keys=error cache=private, no-store
+  db=0 resolver=0 authorize=[]
+  event=error:HOST_CONTRACT field=dryRun@rest:OPTIONS /admin/api/operations/write hash=- caller=host/admin/host:person

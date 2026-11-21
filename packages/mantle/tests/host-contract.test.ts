@@ -1,10 +1,11 @@
 /**
- * Host platform contract v1. This fixture changes only together with a `v` bump.
+ * Host platform contract v1. This fixture changes only together with a `v` bump or an ADR-0046 amendment.
  *
  * Evolution rule: `hostCaller` refuses unknown top-level keys, so input props evolve only by bumping `v`, never by
  * adding an optional key. A `mantle describe` report without a `hostContract` field means the application accepts
  * `v: 1` only; the core release that introduces a later version adds `hostContract` to its describe report, listing
- * the versions it accepts. ADR-0046 amendment #2050 adds caller-facing messages to 4xx responses.
+ * the versions it accepts. ADR-0046 amendment #2050 adds caller-facing messages to 4xx responses; amendment #2101 removes
+ * `dryRun`: a host that sends it, `true` or `false`, is refused with `HOST_CONTRACT` naming the key.
  *
  * Fixed `ctx.props.mantle` inputs and the exact outputs a host observes: the caller `hostCaller` builds, every refusal
  * it makes, and what REST, MCP and web answer and report to `onAccess` in gateway mode. The expectations live in
@@ -109,7 +110,6 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       plain: {},
       snapshot: { authenticatedAs: "snapshot" as const },
       session: { credential: "session" as const },
-      "dry-run": { dryRun: true },
       "all-values": { user: { ...user, region: { all: true as const } } },
     })) {
       const props =
@@ -139,6 +139,11 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     "an array": [base()],
     "a class instance": new (class Props {})(),
     "unknown key": { ...base(), extra: 1 },
+    "dryRun true (removed, #2101)": { ...base(), dryRun: true },
+    "dryRun false (removed, #2101)": { ...base(), dryRun: false },
+    // Only a short identifier is named; any other unknown key is refused without echoing it.
+    "unknown key of 100 characters": { ...base(), ["k".repeat(100)]: 1 },
+    "unknown key with a newline": { ...base(), "a\nb": 1 },
     "v 2": { ...base(), v: 2 },
     "v missing": without(base(), "v"),
     "tenant mismatch": base({ tenant: "other" }),
@@ -154,7 +159,6 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     "target empty": base({ target: "" }),
     "target not text": { ...base(), target: 1 },
     "targetHash not text": { ...base(), targetHash: true },
-    "dryRun not boolean": { ...base(), dryRun: "true" },
     "admin without target": without(base(), "target"),
     "admin without targetHash": without(base(), "targetHash"),
     "user id empty": base({ user: { ...user, id: "" } }),
@@ -301,17 +305,17 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       "rest STALE_CALLER snapshot write",
       restCall(pinnedTo(WRITE, { authenticatedAs: "snapshot" }), "/api/write", input),
     );
-    await record("rest dry run write", restCall(pinnedTo(WRITE, { dryRun: true }), "/api/write", input));
-    await record("rest DRY_RUN_UNSUPPORTED ref handler", restCall(pinnedTo(TOUCH, { dryRun: true }), "/api/touch", {}));
+    // A forwarded `dryRun` is an unknown key since #2101, whatever its value.
+    for (const dryRun of [true, false])
+      await record(
+        `rest HOST_CONTRACT dryRun ${dryRun}`,
+        restCall({ ...pinnedTo(WRITE), dryRun }, "/api/write", input),
+      );
     await record(
       "rest deny member write",
       restCall(without(base({ layer: "member" }), "target", "targetHash"), "/api/write", input),
     );
     await record("rest error invalid input", restCall(pinnedTo(WRITE), "/api/write", "{"));
-    await record(
-      "rest error invalid input dry run",
-      restCall(pinnedTo(WRITE, { dryRun: true }), "/api/write", { ...input, title: 1 }),
-    );
     await record(
       "rest HOST_CONTRACT unknown key",
       restCall({ ...pinnedTo(READ), extra: 1 }, "/api/views/public-records"),
@@ -372,8 +376,10 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     await recordMcp("mcp STALE_CALLER snapshot write", () =>
       mcpCall(pinnedTo(PROCEDURE, { authenticatedAs: "snapshot" }), "write", input),
     );
-    await recordMcp("mcp dry run write", () => mcpCall(pinnedTo(PROCEDURE, { dryRun: true }), "write", input));
-    await recordMcp("mcp DRY_RUN_UNSUPPORTED ref handler", () => mcpCall(pinnedTo(REF, { dryRun: true }), "touch"));
+    for (const dryRun of [true, false])
+      await recordMcp(`mcp HOST_CONTRACT dryRun ${dryRun}`, () =>
+        mcpCall({ ...pinnedTo(PROCEDURE), dryRun }, "write", input),
+      );
     await recordMcp("mcp deny member write", () =>
       mcpCall(without(base({ layer: "member" }), "target", "targetHash"), "write", input),
     );
@@ -418,7 +424,8 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     await record("web allow snapshot llms.txt", page(pinnedTo(VIEW, { authenticatedAs: "snapshot" }), "/llms.txt"));
     await record("web TARGET_MISMATCH", page(pinnedTo(VIEW, { target: PROCEDURE })));
     await record("web TARGET_HASH_MISMATCH", page(pinnedTo(VIEW, { targetHash: "old" })));
-    await record("web dry run", page(pinnedTo(VIEW, { dryRun: true })));
+    for (const dryRun of [true, false])
+      await record(`web HOST_CONTRACT dryRun ${dryRun}`, page({ ...pinnedTo(VIEW), dryRun }));
     await record("web HOST_CONTRACT unknown key", page({ ...pinnedTo(VIEW), extra: 1 }));
     await record(
       "web HOST_CONTRACT missing user field",
@@ -426,7 +433,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     );
     await record("web unserved path", page(pinnedTo(VIEW), "/unknown.md"));
     await record("web head allow", head(pinnedTo(VIEW)));
-    await record("web head dry run", head(pinnedTo(VIEW, { dryRun: true })));
+    await record("web head HOST_CONTRACT dryRun", head({ ...pinnedTo(VIEW), dryRun: true }));
     await record("web head TARGET_MISMATCH", head(pinnedTo(VIEW, { target: PROCEDURE })));
     await record("web head HOST_CONTRACT", head({ ...pinnedTo(VIEW), extra: 1 }));
 
@@ -560,7 +567,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       Object.fromEntries(
         ["rest:POST /api/peek", "rest:POST /api/poke", "procedure:peek", "procedure:poke"].map(id => [
           id,
-          { targetHash: `hash of ${id}`, opaque: false },
+          { targetHash: `hash of ${id}` },
         ]),
       );
     const snapshot = (id: string) => base({ target: id, targetHash: `hash of ${id}`, authenticatedAs: "snapshot" });
@@ -612,43 +619,6 @@ test("host contract v1: callers, refusals, surface answers and access events", a
           ),
       );
     }
-
-    // A dry run answers the decision whatever the root of the tool's listed outputSchema: an array here (listed on
-    // 2026-07-28 only; a 2025 revision lists no non-object schema).
-    const LIST = "procedure:peek_list";
-    const listMcp = kernelMcp(
-      [
-        {
-          name: "peek_list",
-          surface: "public",
-          target: { kind: "procedure", name: "peek_list" },
-          description: "peek_list",
-          inputSchema: { type: "object" },
-          outputSchema: { type: "array", items: { type: "string" } },
-          validate: raw => raw as Record<string, unknown>,
-          run: async () => {
-            ran++;
-            return ["a"];
-          },
-        },
-      ] as Tool<Database>[],
-      {
-        ...shared,
-        accessTargets: async () => ({ [LIST]: { targetHash: `hash of ${LIST}`, opaque: false } }),
-        db: getDb,
-      },
-    );
-    await recordMcp(
-      ["mcp dry run array output (2025)", "mcp dry run array output"],
-      () => async () =>
-        http(
-          await listMcp(
-            bare("/mcp", rpcInit(callMessage("peek_list"))),
-            {},
-            { props: { mantle: base({ target: LIST, targetHash: `hash of ${LIST}`, dryRun: true }) } },
-          ),
-        ),
-    );
 
     // Store writes under a snapshot caller.
     for (const layer of ["member", "admin"] as const) {
@@ -749,14 +719,29 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     ])
       expect([name, answers[name]!.status, codeOf(name)]).toEqual([name, 200, undefined]);
     expect(ran).toBe(3);
-    // 4a. A dry run answers its decision as structured content, also for a tool whose output is an array.
-    for (const name of [...both("mcp dry run write"), "mcp dry run array output", "mcp dry run array output (2025)"])
-      expect([name, answers[name]]).toMatchObject([
+    // 4a. A forwarded `dryRun`, true or false, is refused as an unknown key naming it (ADR-0046 #2101), before any
+    // database handle is acquired.
+    for (const dryRun of [true, false])
+      for (const name of [
+        `rest HOST_CONTRACT dryRun ${dryRun}`,
+        ...both(`mcp HOST_CONTRACT dryRun ${dryRun}`),
+        `web HOST_CONTRACT dryRun ${dryRun}`,
+      ])
+        expect([name, answers[name]!.status, codeOf(name), acquisitions[name]]).toEqual([
+          name,
+          412,
+          "HOST_CONTRACT",
+          0,
+        ]);
+    expect(recorded["refusal: dryRun false (removed, #2101)"]).toMatchObject({
+      code: "HOST_CONTRACT",
+      message: "Unknown key 'dryRun'.",
+      fields: { field: "dryRun" },
+    });
+    for (const name of ["unknown key of 100 characters", "unknown key with a newline"])
+      expect([name, recorded[`refusal: ${name}`]]).toMatchObject([
         name,
-        {
-          status: 200,
-          body: { result: { isError: false, structuredContent: { dryRun: true, event: { outcome: "allow" } } } },
-        },
+        { code: "HOST_CONTRACT", message: "Malformed host contract or tenant mismatch.", fields: null },
       ]);
     // 5. One unbatched tools/call per request in either form, without a connect step; a batch or any other method is
     // refused. The connect step is `initialize` (2025) or `server/discover` (2026-07-28), pinned to a mounted tool.

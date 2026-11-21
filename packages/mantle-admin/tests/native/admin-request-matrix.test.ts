@@ -2,8 +2,8 @@
  * Admin's request decisions as one matrix: caller kind x route kind x request shape, with and without gateway mode and
  * application `authorize`. Every cell is recorded in `admin-request-matrix.golden.txt`: status, error envelope, the
  * headers a client reads, the body's top-level keys, database acquisition, caller resolution, every `authorize` call
- * and the `AccessEvent` given to `onAccess`. A change to Admin's caller, layer, Origin, path, freshness, pinning,
- * dry-run or authorization rules shows as a diff of that file.
+ * and the `AccessEvent` given to `onAccess`. A change to Admin's caller, layer, Origin, path, freshness, pinning or
+ * authorization rules shows as a diff of that file.
  *
  * Two conditions let a forwarded host session read cross-origin (a same-site page can send it), and every cell pins
  * them: no response carries an `access-control-*` header (recorded when present, and asserted absent), and a read
@@ -166,11 +166,14 @@ const origins: Readonly<Record<string, Record<string, string>>> = {
   "cross-origin": { origin: "https://other.test", "sec-fetch-site": "cross-site" },
   "no-origin": {},
 };
-/** Host-only shapes: a same-origin request whose pin or dry-run flag differs. */
+/**
+ * Host-only shapes: a same-origin request whose pin differs, or that still sends `dryRun`, which left host contract v1
+ * (ADR-0046 #2101) and is refused as an unknown key.
+ */
 const pins: Readonly<Record<string, Record<string, unknown>>> = {
   "wrong-target": { target: "admin:GET /me" },
   "wrong-hash": { targetHash: "not-the-hash" },
-  "dry-run": { dryRun: true },
+  "removed-dryRun": { dryRun: true },
 };
 type Authorization = "off" | "allow" | "deny";
 
@@ -197,19 +200,10 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
       "peek:true",
       "touch:false",
     ]);
-    const accessTargets: Record<string, { targetHash: string; opaque: boolean }> = {
+    const accessTargets: Record<string, { targetHash: string }> = {
       ...generatedTargets,
-      "admin:PATCH /save": { targetHash: "custom-save", opaque: true },
+      "admin:PATCH /save": { targetHash: "custom-save" },
     };
-    // The operations template is opaque because of the ref Procedure; only its variant lets a SQL Procedure dry-run.
-    expect(accessTargets["admin:POST /operations/:name"]).toMatchObject({
-      opaque: true,
-      variants: [
-        { id: "procedure:peek", opaque: false },
-        { id: "procedure:touch", opaque: true },
-        { id: "procedure:write", opaque: false },
-      ],
-    });
 
     // Per-cell observations.
     let current: Caller = { kind: "anonymous" },
@@ -330,7 +324,6 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
             .map(key => `${key}=${error[key]}`);
           parts.push(`error{${fields.join(" ")}${"message" in error ? " message" : ""}}`);
         }
-        if (payload.dryRun === true) parts.push("dry-run");
         parts.push(`keys=${Object.keys(payload).sort().join(",") || "-"}`);
       } else parts.push(`body=${payload === undefined ? "text" : typeof payload}`);
       parts.push(`cache=${response.headers.get("cache-control") ?? "-"}`);
@@ -343,7 +336,7 @@ test("Admin decides the same caller x route x request-shape matrix", async () =>
     const describeEvent = (event: any) =>
       normalize(
         `${event.outcome}${event.reason ? ":" + event.reason : ""}${event.field ? ` field=${event.field}` : ""}` +
-          `@${event.target} hash=${event.targetHash || "-"}${event.dryRun ? " dry" : ""}` +
+          `@${event.target} hash=${event.targetHash || "-"}` +
           ` caller=${event.caller.kind}/${event.caller.layer}/${event.caller.subject || "-"}`,
       );
 

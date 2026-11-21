@@ -37,7 +37,6 @@ test("Admin gateway enforces layers, draft scope, contract errors, stale writes 
       "admin:PATCH /save": {
         targetHash: "custom-save",
         readOnly: false,
-        opaque: true,
         requires: { all: ["ctx.admin"] },
       },
     };
@@ -124,13 +123,21 @@ test("Admin gateway enforces layers, draft scope, contract errors, stale writes 
       expect(response!.status).toBe(412);
       expect((await response!.json()).error).toMatchObject({ code: "HOST_CONTRACT", field: "region" });
     }
-    const beforeDry = db.query("SELECT title,version FROM records WHERE id=?").get(own.id);
+    // A forwarded `dryRun` left host contract v1 (ADR-0046 #2101): refused as an unknown key, and nothing is written.
+    const before = db.query("SELECT title,version FROM records WHERE id=?").get(own.id);
     const raw = JSON.stringify({ data: { title: "dry" }, expectedVersion: own.version });
-    const dry = await ask(mantleProps({ dryRun: true }), `/entries/${own.id}?collection=records`, "PATCH", raw);
-    expect(dry!.status).toBe(200);
-    expect((await dry!.json()).event).toEqual(events.at(-1));
-    expect(events.at(-1)).toMatchObject({ outcome: "allow", dryRun: true, target: "admin:PATCH /entries/:id" });
-    expect(db.query("SELECT title,version FROM records WHERE id=?").get(own.id)).toEqual(beforeDry);
+    const refused = await ask(
+      { ...mantleProps(), dryRun: true },
+      `/entries/${own.id}?collection=records`,
+      "PATCH",
+      raw,
+    );
+    expect([refused!.status, (await refused!.json()).error]).toEqual([
+      412,
+      { code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", field: "dryRun" },
+    ]);
+    expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "HOST_CONTRACT", field: "dryRun" });
+    expect(db.query("SELECT title,version FROM records WHERE id=?").get(own.id)).toEqual(before);
     const unpinned = { ...mantleProps() };
     delete (unpinned as any).target;
     delete (unpinned as any).targetHash;

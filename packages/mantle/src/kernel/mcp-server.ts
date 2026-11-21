@@ -423,9 +423,8 @@ async function invoke<Env, Database, Handlers>(
       resultMeta: Readonly<Record<string, unknown>> | undefined,
       blocks: readonly unknown[] | undefined;
     const run = async (input: Record<string, unknown>) => {
-      const dryRun = pipeline.dryRun ? () => pipeline.dryRunResult() : undefined;
       const getDb = () => (db ??= options.db(serving.env));
-      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, dryRun, toolCall);
+      const output = await callTool(tool, input, getDb, caller, options.handlers as Handlers, toolCall);
       // A re-run for a smaller page replaces the first run's blocks and meta, also when it returns no wrapper.
       resultMeta = blocks = undefined;
       // withResult: the data is the result; its blocks follow Core's, its meta reaches only the result `_meta`.
@@ -449,8 +448,8 @@ async function invoke<Env, Database, Handlers>(
     // On 2026-07-28 structuredContent is any JSON value (SEP-2106); on a 2025 revision only an object, so other data is
     // sent as its text block alone (the schema of such a tool is not listed there). A listed outputSchema requires one
     // of its root type on success: data that does not fit fails here, before it is recorded, instead of reaching the
-    // client as a result its schema refuses. A dry run answers the decision (`{ dryRun, event }`) instead of the tool's output, whatever its schema.
-    if (listed && !pipeline.dryRun && !rootAllows(listed, data))
+    // client as a result its schema refuses.
+    if (listed && !rootAllows(listed, data))
       throw new Error(
         `MCP tool ${tool.name} returned ${data === undefined ? "no value" : JSON.stringify(data === null ? "null" : Array.isArray(data) ? "array" : typeof data)}, which the root of its listed outputSchema (type ${JSON.stringify(listed.type)}) does not allow.`,
       );

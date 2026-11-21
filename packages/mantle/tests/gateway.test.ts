@@ -63,13 +63,33 @@ test("host contract shares validation, freezes identity, preserves layers and lo
 });
 
 test("v1 validates supported forwarding controls and own field specs", () => {
-  expect(hostCaller(mantleProps({ dryRun: true }), { tenant: "example" })).toMatchObject({ dryRun: true });
   for (const field of ["target", "targetHash"])
     for (const value of [true, false, undefined])
       expect(() => hostCaller({ ...mantleProps(), [field]: value }, { tenant: "example" })).toThrow(
         expect.objectContaining({ code: "HOST_CONTRACT", fields: { field } }),
       );
-  expect(() => hostCaller(mantleProps({ dryRun: "true" as any }), { tenant: "example" })).toThrow();
+  // `dryRun` left the contract (ADR-0046 #2101): any value is an unknown key, refused by name.
+  for (const dryRun of [true, false, "true"])
+    expect(() => hostCaller({ ...mantleProps(), dryRun }, { tenant: "example" })).toThrow(
+      expect.objectContaining({ code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", fields: { field: "dryRun" } }),
+    );
+  // A key that is not a short identifier is never echoed: the generic refusal, with no field.
+  for (const key of ["k".repeat(100), "a\nb", "k".repeat(33)]) {
+    let refusal: any;
+    try {
+      hostCaller({ ...mantleProps(), [key]: 1 }, { tenant: "example" });
+    } catch (error) {
+      refusal = error;
+    }
+    expect([refusal?.code, refusal?.message, refusal?.fields]).toEqual([
+      "HOST_CONTRACT",
+      "Malformed host contract or tenant mismatch.",
+      undefined,
+    ]);
+  }
+  expect(() => hostCaller({ ...mantleProps(), ["k".repeat(32)]: 1 }, { tenant: "example" })).toThrow(
+    expect.objectContaining({ message: `Unknown key '${"k".repeat(32)}'.`, fields: { field: "k".repeat(32) } }),
+  );
   const user = { ...mantleProps().user, constructor: "unused", ignored: false as never };
   expect(
     hostCaller(mantleProps({ layer: "member", user }), { tenant: "example", fields: { region: fields.region } })
@@ -387,13 +407,15 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
       expect((await site.fetch(request("/records.md", "GET", undefined, headers), {})).status).toBe(401);
       expect((await site.fetch(request("/records.md", "GET", undefined, headers), {}, { props: {} })).status).toBe(401);
     }
-    const dryWeb = await site.fetch(
-      request("/records.md"),
-      {},
-      { props: { mantle: await pinned(mantleProps({ dryRun: true }), targets, "view:public-records") } },
-    );
-    expect(dryWeb.status).toBe(200);
-    expect((await dryWeb.json()).dryRun).toBe(true);
+    // A forwarded `dryRun`, true or false, is refused before any View is read (ADR-0046 #2101).
+    for (const dryRun of [true, false]) {
+      const props = { ...((await pinned(mantleProps(), targets, "view:public-records")) as object), dryRun };
+      const refused = await site.fetch(request("/records.md"), {}, { props: { mantle: props } });
+      expect([refused.status, (await refused.json()).error]).toEqual([
+        412,
+        { code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", field: "dryRun" },
+      ]);
+    }
     // A sitemap of static paths alone reads no View and is still an observed answer.
     const seen: any[] = [];
     const staticSite = web({
@@ -407,7 +429,8 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
     };
     const staticMap = await staticSite.fetch(request("/sitemap.xml"), {}, memberCtx);
     expect(await staticMap.text()).toContain("<loc>https://app.test/</loc>");
-    expect(seen).toMatchObject([{ target: "web", outcome: "allow", dryRun: false }]);
+    expect(seen).toMatchObject([{ target: "web", outcome: "allow" }]);
+    expect(seen[0]).not.toHaveProperty("dryRun");
     expect(resolves).toBe(0);
     // Workers pass `ctx.props` as `{}` on ordinary requests: only `props.mantle` is the host contract.
     for (const props of [{}, { other: 1 }])
@@ -457,7 +480,7 @@ test("snapshot publishing transitions refuse before changing rows", async () => 
   }
 });
 
-test("forwarded pinning, dry runs and access decisions share one boundary", async () => {
+test("forwarded pinning and access decisions share one boundary", async () => {
   const files = await generateOrThrow("bun-sqlite", [
     {
       sourceId: "gateway.yaml",
@@ -480,7 +503,6 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     db = new Database(":memory:");
   const events: any[] = [];
   let acquired = 0,
-    touched = 0,
     allow = true,
     limit = false;
   try {
@@ -501,10 +523,7 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
         return db;
       },
       handlers: {
-        touch: () => {
-          touched++;
-          return {};
-        },
+        touch: () => ({}),
       },
       authorize: () =>
         limit
@@ -587,44 +606,33 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     expect(events.length).toBe(eventCount + 1);
     const writeProps = (await pinned(mantleProps(), targets, writeId)) as any;
     const before = acquired;
-    const dry = await call({ ...writeProps, dryRun: true }, "/api/write", raw);
-    expect(dry.status).toBe(200);
-    const event = (await dry.json()).event;
-    expect(event).toEqual(events.at(-1));
-    expect(Object.keys(event).sort()).toEqual([
-      "caller",
-      "dryRun",
-      "outcome",
-      "requestId",
-      "target",
-      "targetHash",
-      "v",
-    ]);
-    expect(event).toMatchObject({
-      dryRun: true,
-      outcome: "allow",
-      caller: { kind: "host", subject: "host:person", layer: "admin" },
-      target: writeId,
-      targetHash: targets[writeId].targetHash,
-    });
+    // A forwarded `dryRun`, true or false, is an unknown key (ADR-0046 #2101): refused before a database handle.
+    for (const dryRun of [true, false]) {
+      const refused = await call({ ...writeProps, dryRun }, "/api/write", raw);
+      expect([refused.status, (await refused.json()).error]).toEqual([
+        412,
+        { code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", field: "dryRun" },
+      ]);
+      expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "HOST_CONTRACT", field: "dryRun" });
+    }
     expect(acquired).toBe(before);
     expect(db.query("SELECT title FROM records").get()).toEqual({ title: "original" });
+    // Input is validated before a database handle is acquired.
     const invalidRaw = JSON.stringify({ id: row.id, version: row.version, title: 123 });
-    const invalidDry = await call(
-      await pinned(mantleProps({ dryRun: true }), targets, writeId),
-      "/api/write",
-      invalidRaw,
-    );
-    expect(invalidDry.status).toBe(400);
+    const invalid = await call(writeProps, "/api/write", invalidRaw);
+    expect(invalid.status).toBe(400);
     expect(acquired).toBe(before);
-    expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "INPUT_VALIDATION_FAILED", dryRun: true });
-    const ref = await pinned(mantleProps({ dryRun: true }), targets, "rest:POST /api/touch");
-    const unsupported = await call(ref, "/api/touch", "{}");
-    expect(unsupported.status).toBe(412);
-    expect((await unsupported.json()).error.code).toBe("DRY_RUN_UNSUPPORTED");
-    expect(touched).toBe(0);
+    expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "INPUT_VALIDATION_FAILED", target: writeId });
     expect((await call(await pinned(mantleProps(), targets, readId))).status).toBe(200);
-    expect(events.at(-1)).toMatchObject({ outcome: "allow" });
+    // The v1 event an allowed call hands onAccess.
+    const event = events.at(-1);
+    expect(Object.keys(event).sort()).toEqual(["caller", "outcome", "requestId", "target", "targetHash", "v"]);
+    expect(event).toMatchObject({
+      outcome: "allow",
+      caller: { kind: "host", subject: "host:person", layer: "admin" },
+      target: readId,
+      targetHash: targets[readId].targetHash,
+    });
     const member = mantleProps({ layer: "member", target: undefined, targetHash: undefined });
     delete (member as any).target;
     delete (member as any).targetHash;
@@ -634,7 +642,7 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     const all = await pinned(mantleProps({ user: { ...mantleProps().user, region: { all: true } } }), targets, readId);
     expect((await call(all)).status).toBe(200);
     const restricted = await pinned(
-      mantleProps({ dryRun: true, user: { ...mantleProps().user, region: { all: true } } }),
+      mantleProps({ user: { ...mantleProps().user, region: { all: true } } }),
       targets,
       "rest:GET /api/views/restricted-records",
     );
@@ -684,7 +692,7 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     const { nativeRest } = await import("../src/kernel/rest.js");
     const uploadId = "rest:POST /upload",
       uploadTargets = {
-        [uploadId]: { targetHash: "upload-hash", readOnly: false, opaque: true, requires: { all: ["ctx.admin"] } },
+        [uploadId]: { targetHash: "upload-hash", readOnly: false, requires: { all: ["ctx.admin"] } },
       };
     let uploads = 0;
     const uploadBody = "bound\0bytes";
@@ -712,13 +720,6 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     const uploaded = await upload(uploadRequest(), {}, { props: { mantle: uploadProps } });
     expect(uploaded!.status).toBe(200);
     expect(await uploaded!.json()).toEqual({ body: uploadBody });
-    const uploadDry = await upload(
-      uploadRequest(),
-      {},
-      { props: { mantle: { ...(uploadProps as any), dryRun: true } } },
-    );
-    expect(uploadDry!.status).toBe(412);
-    expect(await uploadDry!.json()).toMatchObject({ error: { code: "DRY_RUN_UNSUPPORTED" } });
     expect(uploads).toBe(1);
     const noGateway = rest({
       ...options,
@@ -747,75 +748,24 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     const missingRpc = await rpc("tools/call", { name: "missing", arguments: {} });
     await missingRpc.text();
     expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "INPUT_VALIDATION_FAILED" });
-    const rpcDry = await rpc(
-      "tools/call",
-      { name: "write", arguments: JSON.parse(raw) },
-      mantleProps({ dryRun: true }),
-    );
-    expect(rpcDry.status).toBe(200);
-    const dryRpc = await rpcDry.text();
-    const dryData = JSON.parse(dryRpc.startsWith("event:") ? dryRpc.split("data: ")[1]!.split("\n")[0]! : dryRpc).result
-      .structuredContent;
-    expect(dryData.event).toEqual(events.at(-1));
+    const beforeRpc = acquired;
+    for (const dryRun of [true, false]) {
+      const refused = await rpc("tools/call", { name: "write", arguments: JSON.parse(raw) }, {
+        ...mantleProps(),
+        dryRun,
+      } as never);
+      expect([refused.status, (await refused.json()).error]).toEqual([
+        412,
+        { code: "HOST_CONTRACT", message: "Unknown key 'dryRun'.", field: "dryRun" },
+      ]);
+      expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "HOST_CONTRACT", field: "dryRun" });
+    }
+    expect(acquired).toBe(beforeRpc);
     expect(db.query("SELECT title FROM records").get()).toEqual({ title: "original" });
     expect((await call(writeProps, "/api/write", raw)).status).toBe(200);
     expect(db.query("SELECT title FROM records").get()).toEqual({ title: "changed" });
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
-  }
-});
-
-test("MCP media writes refuse dry runs before acquiring a database or running tools", async () => {
-  const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
-  const { describeApp } = await import("../dist/domain/describe/index.js");
-  const { mediaDefinitions } = await import("../src/domain/generated-tools.js");
-  const { handler } = await import("../src/kernel/mcp-handler.js");
-  const compiled = await compilePlan(
-    { sources: [{ sourceId: "gateway.yaml", text: gatewaySource }] },
-    d1Dialect,
-    "operational",
-  );
-  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
-  const report = await describeApp(compiled.plan);
-  const targets = Object.fromEntries(report.targets.map(t => [t._meta.id, t._meta]));
-  const tools = mediaDefinitions().map(tool => ({
-    ...tool,
-    surface: "admin" as const,
-    readOnly: tool.annotations.readOnlyHint,
-    validate: () => ({}),
-    run: async () => {
-      throw Error("Media write ran");
-    },
-  }));
-  const api = handler(tools, {
-    gateway: { tenant: "example" },
-    accessTargets: async () => targets,
-    db: () => {
-      throw Error("Database acquired");
-    },
-  });
-  for (const tool of tools.filter(t => !t.readOnly)) {
-    const id = `admin:tool:${tool.name}`;
-    expect(targets[id]).toMatchObject({ readOnly: false, opaque: true });
-    const props = await pinned(mantleProps({ dryRun: true }), targets, id);
-    const response = await api(
-      new Request(
-        "https://app.test/mcp/admin",
-        mcpInit(
-          {
-            jsonrpc: "2.0",
-            id: 1,
-            method: "tools/call",
-            params: { name: tool.name, arguments: {} },
-          },
-          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
-        ),
-      ),
-      {},
-      { props: { mantle: props } },
-    );
-    expect(response!.status).toBe(412);
-    expect(await response!.json()).toMatchObject({ error: { code: "DRY_RUN_UNSUPPORTED" } });
   }
 });

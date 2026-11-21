@@ -22,8 +22,7 @@
       "credentialId": null,
       "clientId": null,
       "authenticatedAs": "fresh",
-      "requestId": "request-1",
-      "dryRun": false
+      "requestId": "request-1"
     },
     "keys": [
       "admin",
@@ -31,7 +30,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -89,8 +87,7 @@
       "authenticatedAs": "snapshot",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -98,7 +95,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -156,8 +152,7 @@
       "authenticatedAs": "fresh",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -165,74 +160,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
-      "fields",
-      "kind",
-      "requestId",
-      "role",
-      "roles",
-      "scopes",
-      "subject",
-      "target",
-      "targetHash"
-    ],
-    "frozen": true,
-    "brand": {
-      "admin": false,
-      "roles": [
-        "editor",
-        "content-admin"
-      ],
-      "fields": {
-        "region": [
-          "TW"
-        ],
-        "stores": [
-          "A"
-        ]
-      },
-      "hasContentAdmin": true
-    },
-    "copy": {
-      "admin": false,
-      "fields": {}
-    }
-  },
-  "caller member dry-run": {
-    "caller": {
-      "kind": "user",
-      "subject": "person",
-      "role": "editor,content-admin",
-      "admin": false,
-      "roles": [
-        "editor",
-        "content-admin"
-      ],
-      "fields": {
-        "region": [
-          "TW"
-        ],
-        "stores": [
-          "A"
-        ]
-      },
-      "scopes": [],
-      "credential": "oauth",
-      "credentialId": null,
-      "clientId": null,
-      "authenticatedAs": "fresh",
-      "requestId": "request-1",
-      "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": true
-    },
-    "keys": [
-      "admin",
-      "authenticatedAs",
-      "clientId",
-      "credential",
-      "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -290,8 +217,7 @@
       "authenticatedAs": "fresh",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -299,7 +225,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -357,8 +282,7 @@
       "authenticatedAs": "fresh",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -366,7 +290,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -424,8 +347,7 @@
       "authenticatedAs": "snapshot",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -433,7 +355,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -491,8 +412,7 @@
       "authenticatedAs": "fresh",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -500,74 +420,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
-      "fields",
-      "kind",
-      "requestId",
-      "role",
-      "roles",
-      "scopes",
-      "subject",
-      "target",
-      "targetHash"
-    ],
-    "frozen": true,
-    "brand": {
-      "admin": true,
-      "roles": [
-        "editor",
-        "content-admin"
-      ],
-      "fields": {
-        "region": [
-          "TW"
-        ],
-        "stores": [
-          "A"
-        ]
-      },
-      "hasContentAdmin": true
-    },
-    "copy": {
-      "admin": false,
-      "fields": {}
-    }
-  },
-  "caller admin dry-run": {
-    "caller": {
-      "kind": "host",
-      "subject": "host:person",
-      "role": "editor,content-admin",
-      "admin": true,
-      "roles": [
-        "editor",
-        "content-admin"
-      ],
-      "fields": {
-        "region": [
-          "TW"
-        ],
-        "stores": [
-          "A"
-        ]
-      },
-      "scopes": [],
-      "credential": "oauth",
-      "credentialId": null,
-      "clientId": null,
-      "authenticatedAs": "fresh",
-      "requestId": "request-1",
-      "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": true
-    },
-    "keys": [
-      "admin",
-      "authenticatedAs",
-      "clientId",
-      "credential",
-      "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -625,8 +477,7 @@
       "authenticatedAs": "fresh",
       "requestId": "request-1",
       "target": "view:public-records",
-      "targetHash": "hash-1",
-      "dryRun": false
+      "targetHash": "hash-1"
     },
     "keys": [
       "admin",
@@ -634,7 +485,6 @@
       "clientId",
       "credential",
       "credentialId",
-      "dryRun",
       "fields",
       "kind",
       "requestId",
@@ -692,6 +542,44 @@
     "fields": null
   },
   "refusal: unknown key": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Unknown key 'extra'.",
+    "path": "",
+    "fields": {
+      "field": "extra"
+    }
+  },
+  "refusal: dryRun true (removed, #2101)": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Unknown key 'dryRun'.",
+    "path": "",
+    "fields": {
+      "field": "dryRun"
+    }
+  },
+  "refusal: dryRun false (removed, #2101)": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Unknown key 'dryRun'.",
+    "path": "",
+    "fields": {
+      "field": "dryRun"
+    }
+  },
+  "refusal: unknown key of 100 characters": {
+    "instance": true,
+    "code": "HOST_CONTRACT",
+    "status": 412,
+    "message": "Malformed host contract or tenant mismatch.",
+    "path": "",
+    "fields": null
+  },
+  "refusal: unknown key with a newline": {
     "instance": true,
     "code": "HOST_CONTRACT",
     "status": 412,
@@ -825,16 +713,6 @@
       "field": "targetHash"
     }
   },
-  "refusal: dryRun not boolean": {
-    "instance": true,
-    "code": "HOST_CONTRACT",
-    "status": 412,
-    "message": "Invalid 'dryRun'.",
-    "path": "",
-    "fields": {
-      "field": "dryRun"
-    }
-  },
   "refusal: admin without target": {
     "instance": true,
     "code": "HOST_CONTRACT",
@@ -950,8 +828,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -985,8 +862,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1018,8 +894,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_MISMATCH"
       }
     ],
     "frozen": [
@@ -1051,8 +926,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_HASH_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_HASH_MISMATCH"
       }
     ],
     "frozen": [
@@ -1084,33 +958,23 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "rest dry run write": {
+  "rest HOST_CONTRACT dryRun true": {
     "answer": {
-      "status": 200,
+      "status": 412,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
-        "dryRun": true,
-        "event": {
-          "v": 1,
-          "requestId": "request-1",
-          "target": "rest:POST /api/write",
-          "targetHash": "<hash:rest:POST /api/write>",
-          "caller": {
-            "kind": "host",
-            "subject": "host:person",
-            "layer": "admin"
-          },
-          "outcome": "allow",
-          "dryRun": true
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1125,24 +989,25 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": true
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "rest DRY_RUN_UNSUPPORTED ref handler": {
+  "rest HOST_CONTRACT dryRun false": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "DRY_RUN_UNSUPPORTED",
-          "message": "DRY_RUN_UNSUPPORTED",
-          "target": "rest:POST /api/touch"
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1150,16 +1015,16 @@
       {
         "v": 1,
         "requestId": "request-1",
-        "target": "rest:POST /api/touch",
-        "targetHash": "<hash:rest:POST /api/touch>",
+        "target": "rest:POST /api/write",
+        "targetHash": "<hash:rest:POST /api/write>",
         "caller": {
           "kind": "host",
           "subject": "host:person",
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "DRY_RUN_UNSUPPORTED",
-        "dryRun": true
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
@@ -1191,8 +1056,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -1224,41 +1088,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "rest error invalid input dry run": {
-    "answer": {
-      "status": 400,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "error": {
-          "code": "INPUT_VALIDATION_FAILED",
-          "message": "Expected string.",
-          "target": "procedures/write/input/title"
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "rest:POST /api/write",
-        "targetHash": "<hash:rest:POST /api/write>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": true
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -1273,7 +1103,8 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
-          "message": "Malformed host contract or tenant mismatch."
+          "message": "Unknown key 'extra'.",
+          "field": "extra"
         }
       }
     },
@@ -1290,7 +1121,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "field": "extra"
       }
     ],
     "frozen": [
@@ -1323,8 +1154,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "target",
-        "dryRun": false
+        "field": "target"
       }
     ],
     "frozen": [
@@ -1357,8 +1187,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -1390,8 +1219,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -1422,8 +1250,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -1457,8 +1284,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1498,8 +1324,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1539,8 +1364,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1580,8 +1404,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1621,8 +1444,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -1654,8 +1476,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_MISMATCH"
       }
     ],
     "frozen": [
@@ -1687,8 +1508,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_MISMATCH"
       }
     ],
     "frozen": [
@@ -1720,8 +1540,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_HASH_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_HASH_MISMATCH"
       }
     ],
     "frozen": [
@@ -1753,8 +1572,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_HASH_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_HASH_MISMATCH"
       }
     ],
     "frozen": [
@@ -1786,8 +1604,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -1819,39 +1636,23 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "mcp dry run write": {
+  "mcp HOST_CONTRACT dryRun true": {
     "answer": {
-      "status": 200,
+      "status": 412,
       "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
+      "cacheControl": "private, no-store",
       "body": {
-        "result": {
-          "isError": false,
-          "structuredContent": {
-            "dryRun": true,
-            "event": {
-              "v": 1,
-              "requestId": "request-1",
-              "target": "procedure:write",
-              "targetHash": "<hash:procedure:write>",
-              "caller": {
-                "kind": "host",
-                "subject": "host:person",
-                "layer": "admin"
-              },
-              "outcome": "allow",
-              "dryRun": true
-            }
-          },
-          "diagnostics": null
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1866,39 +1667,25 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": true
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "mcp dry run write (2026-07-28)": {
+  "mcp HOST_CONTRACT dryRun true (2026-07-28)": {
     "answer": {
-      "status": 200,
+      "status": 412,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
-        "result": {
-          "isError": false,
-          "structuredContent": {
-            "dryRun": true,
-            "event": {
-              "v": 1,
-              "requestId": "request-1",
-              "target": "procedure:write",
-              "targetHash": "<hash:procedure:write>",
-              "caller": {
-                "kind": "host",
-                "subject": "host:person",
-                "layer": "admin"
-              },
-              "outcome": "allow",
-              "dryRun": true
-            }
-          },
-          "diagnostics": null
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1913,24 +1700,25 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": true
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "mcp DRY_RUN_UNSUPPORTED ref handler": {
+  "mcp HOST_CONTRACT dryRun false": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "DRY_RUN_UNSUPPORTED",
-          "message": "DRY_RUN_UNSUPPORTED",
-          "target": "procedure:touch"
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1938,32 +1726,32 @@
       {
         "v": 1,
         "requestId": "request-1",
-        "target": "procedure:touch",
-        "targetHash": "<hash:procedure:touch>",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
         "caller": {
           "kind": "host",
           "subject": "host:person",
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "DRY_RUN_UNSUPPORTED",
-        "dryRun": true
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "mcp DRY_RUN_UNSUPPORTED ref handler (2026-07-28)": {
+  "mcp HOST_CONTRACT dryRun false (2026-07-28)": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "error": {
-          "code": "DRY_RUN_UNSUPPORTED",
-          "message": "DRY_RUN_UNSUPPORTED",
-          "target": "procedure:touch"
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -1971,16 +1759,16 @@
       {
         "v": 1,
         "requestId": "request-1",
-        "target": "procedure:touch",
-        "targetHash": "<hash:procedure:touch>",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
         "caller": {
           "kind": "host",
           "subject": "host:person",
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "DRY_RUN_UNSUPPORTED",
-        "dryRun": true
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
@@ -2018,8 +1806,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2057,8 +1844,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2090,8 +1876,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2123,8 +1908,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2162,8 +1946,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -2201,8 +1984,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -2235,8 +2017,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -2269,8 +2050,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -2302,8 +2082,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2335,8 +2114,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2351,7 +2129,8 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
-          "message": "Malformed host contract or tenant mismatch."
+          "message": "Unknown key 'extra'.",
+          "field": "extra"
         }
       }
     },
@@ -2368,7 +2147,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "field": "extra"
       }
     ],
     "frozen": [
@@ -2383,7 +2162,8 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
-          "message": "Malformed host contract or tenant mismatch."
+          "message": "Unknown key 'extra'.",
+          "field": "extra"
         }
       }
     },
@@ -2400,7 +2180,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "field": "extra"
       }
     ],
     "frozen": [
@@ -2447,8 +2227,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -2495,8 +2274,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -2534,8 +2312,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2573,8 +2350,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2612,8 +2388,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2651,8 +2426,7 @@
           "layer": "member"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2689,8 +2463,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2727,8 +2500,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -2768,8 +2540,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -2809,8 +2580,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -2835,8 +2605,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -2861,8 +2630,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -2887,8 +2655,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -2920,8 +2687,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_MISMATCH"
       }
     ],
     "frozen": [
@@ -2953,56 +2719,14 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_HASH_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_HASH_MISMATCH"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "web dry run": {
-    "answer": {
-      "status": 200,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "dryRun": true,
-        "event": {
-          "v": 1,
-          "requestId": "request-1",
-          "target": "view:public-records",
-          "targetHash": "<hash:view:public-records>",
-          "caller": {
-            "kind": "host",
-            "subject": "host:person",
-            "layer": "admin"
-          },
-          "outcome": "allow",
-          "dryRun": true
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "view:public-records",
-        "targetHash": "<hash:view:public-records>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "allow",
-        "dryRun": true
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "web HOST_CONTRACT unknown key": {
+  "web HOST_CONTRACT dryRun true": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
@@ -3010,7 +2734,8 @@
       "body": {
         "error": {
           "code": "HOST_CONTRACT",
-          "message": "Malformed host contract or tenant mismatch."
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
         }
       }
     },
@@ -3027,7 +2752,73 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "field": "dryRun"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web HOST_CONTRACT dryRun false": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'dryRun'.",
+          "field": "dryRun"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "web HOST_CONTRACT unknown key": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Unknown key 'extra'.",
+          "field": "extra"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "extra"
       }
     ],
     "frozen": [
@@ -3060,8 +2851,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -3088,17 +2878,20 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
       true
     ]
   },
-  "web head dry run": {
+  "web head HOST_CONTRACT dryRun": {
     "answer": {
-      "tags": ""
+      "throws": {
+        "code": "HOST_CONTRACT",
+        "status": 412,
+        "path": ""
+      }
     },
     "events": [
       {
@@ -3111,8 +2904,9 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": true
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "dryRun"
       }
     ],
     "frozen": [
@@ -3139,8 +2933,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "TARGET_MISMATCH",
-        "dryRun": false
+        "reason": "TARGET_MISMATCH"
       }
     ],
     "frozen": [
@@ -3168,7 +2961,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "field": "extra"
       }
     ],
     "frozen": [
@@ -3358,8 +3151,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3399,8 +3191,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3440,8 +3231,7 @@
           "subject": "person",
           "layer": "member"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3475,8 +3265,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3516,8 +3305,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3557,8 +3345,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3590,8 +3377,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -3623,8 +3409,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -3656,8 +3441,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -3689,8 +3473,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -3730,8 +3513,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3771,8 +3553,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3804,8 +3585,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -3837,8 +3617,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
+        "reason": "INPUT_VALIDATION_FAILED"
       }
     ],
     "frozen": [
@@ -3870,8 +3649,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -3903,8 +3681,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -3935,8 +3712,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -3967,8 +3743,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4008,8 +3783,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4055,8 +3829,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4102,8 +3875,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4128,8 +3900,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4175,8 +3946,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4228,8 +3998,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4281,8 +4050,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4307,8 +4075,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4342,8 +4109,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4383,8 +4149,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4424,8 +4189,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4450,8 +4214,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -4482,8 +4245,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -4514,8 +4276,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -4546,8 +4307,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -4578,8 +4338,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -4612,8 +4371,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4660,8 +4418,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4708,8 +4465,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4742,8 +4498,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4776,8 +4531,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4824,8 +4578,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4872,8 +4625,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4906,8 +4658,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "region",
-        "dryRun": false
+        "field": "region"
       }
     ],
     "frozen": [
@@ -4940,8 +4691,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "stores",
-        "dryRun": false
+        "field": "stores"
       }
     ],
     "frozen": [
@@ -4988,8 +4738,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "stores",
-        "dryRun": false
+        "field": "stores"
       }
     ],
     "frozen": [
@@ -5036,8 +4785,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "stores",
-        "dryRun": false
+        "field": "stores"
       }
     ],
     "frozen": [
@@ -5070,8 +4818,7 @@
         },
         "outcome": "error",
         "reason": "HOST_CONTRACT",
-        "field": "stores",
-        "dryRun": false
+        "field": "stores"
       }
     ],
     "frozen": [
@@ -5102,8 +4849,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -5134,8 +4880,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -5166,8 +4911,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -5198,8 +4942,7 @@
           "layer": "admin"
         },
         "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "dryRun": false
+        "reason": "HOST_CONTRACT"
       }
     ],
     "frozen": [
@@ -5231,8 +4974,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -5263,8 +5005,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -5308,8 +5049,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -5353,8 +5093,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "AUTH_DENIED",
-        "dryRun": false
+        "reason": "AUTH_DENIED"
       }
     ],
     "frozen": [
@@ -5381,8 +5120,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -5415,8 +5153,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -5449,8 +5186,7 @@
           "subject": "host:person",
           "layer": "admin"
         },
-        "outcome": "allow",
-        "dryRun": false
+        "outcome": "allow"
       }
     ],
     "frozen": [
@@ -5482,8 +5218,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -5515,8 +5250,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [
@@ -5548,102 +5282,7 @@
           "layer": "admin"
         },
         "outcome": "deny",
-        "reason": "STALE_CALLER",
-        "dryRun": false
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp dry run array output (2025)": {
-    "answer": {
-      "status": 200,
-      "wwwAuthenticate": null,
-      "cacheControl": "no-cache, no-transform",
-      "body": {
-        "result": {
-          "isError": false,
-          "structuredContent": {
-            "dryRun": true,
-            "event": {
-              "v": 1,
-              "requestId": "request-1",
-              "target": "procedure:peek_list",
-              "targetHash": "hash of procedure:peek_list",
-              "caller": {
-                "kind": "host",
-                "subject": "host:person",
-                "layer": "admin"
-              },
-              "outcome": "allow",
-              "dryRun": true
-            }
-          },
-          "diagnostics": null
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "procedure:peek_list",
-        "targetHash": "hash of procedure:peek_list",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "allow",
-        "dryRun": true
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp dry run array output": {
-    "answer": {
-      "status": 200,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "result": {
-          "isError": false,
-          "structuredContent": {
-            "dryRun": true,
-            "event": {
-              "v": 1,
-              "requestId": "request-1",
-              "target": "procedure:peek_list",
-              "targetHash": "hash of procedure:peek_list",
-              "caller": {
-                "kind": "host",
-                "subject": "host:person",
-                "layer": "admin"
-              },
-              "outcome": "allow",
-              "dryRun": true
-            }
-          },
-          "diagnostics": null
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "procedure:peek_list",
-        "targetHash": "hash of procedure:peek_list",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "allow",
-        "dryRun": true
+        "reason": "STALE_CALLER"
       }
     ],
     "frozen": [

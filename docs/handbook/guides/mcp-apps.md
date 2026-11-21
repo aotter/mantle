@@ -232,7 +232,7 @@ Blocks are typed loosely (`McpContentBlock`); the SDK's own types, such as
 assignable to it. The installed SDK checks each block before the call is
 recorded: a block it refuses (bad base64, an unknown type) fails the call with
 an `INTERNAL_ERROR` diagnostic and a failed outcome, after `run` has already
-finished. A dry run and a thrown error carry no application blocks.
+finished. A thrown error carries no application blocks.
 
 `callTool` and `callToolLazy` return what the tool's `run` or `page` returned,
 the wrapper included, `{ data, content?, _meta? }`; for a generated ref
@@ -327,7 +327,7 @@ const handler = mcp({ db, caller, apps: { public: { resources: [{
 
 Mark the tool in place rather than passing a copied array to the kernel `mcp()`
 from `@aotter/mantle/mcp`: the generated `mcp()` also passes the access targets
-that gateway pins and dry runs check, the manifest's access user fields, and the
+that gateway pins check, the manifest's access user fields, and the
 read catalogue that lets a cookie-session read count as read-only, and a kernel
 composition would have to supply each of them again.
 

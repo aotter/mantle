@@ -1,16 +1,18 @@
 # ADR-lite #1971: Admin uses the kernel request pipeline
 
-Status: Accepted (Option B).
+Status: Accepted (Option B); amended 2026-11-21 (#2101): host dry runs are removed (ADR-0046), so the pipeline has no dry-run step and `nativeRest` no route `variant` or `prepare`.
 
 Admin's API is one `nativeRest` mount at `/admin/api`. Each request runs the
 kernel router's steps once, in its order: canonical path, route match, target,
-caller, mount admission, host admission, Origin, authorize, dry run, dispatch.
+caller, mount admission, host admission, Origin, authorize, ~~dry run,~~ dispatch
+*(the dry-run step was superseded 2026-11-21, #2101)*.
 Admin's earlier gate-before-route order (authenticate, admit and check Origin
 before matching any route) is dropped. Core gains no "gate before routing" or
 "Origin on every call" policy. `nativeRest` gains five small inputs instead:
-`base`, `admission`, a route's access `variant`, `prepare` for dry runs, and an
+`base`, `admission`, ~~a route's access `variant`, `prepare` for dry runs,~~ and an
 authorize target computed from the decoded request, with `authorize` and
-`authorized` bound to the caller for handlers.
+`authorized` bound to the caller for handlers. *(Superseded 2026-11-21, #2101: `variant` and
+`prepare` are removed with host dry runs, ADR-0046; three inputs remain.)*
 
 Consequences, each pinned by Admin's request matrix:
 
@@ -28,4 +30,4 @@ Consequences, each pinned by Admin's request matrix:
 - E. Within a matched route, refusals keep their order and answers.
 
 Matched routes keep their `admin:` ids, the `minimumRole` 403 body, freshness,
-target pinning and dry-run answers.
+target pinning ~~and dry-run answers~~ *(dry-run answers superseded 2026-11-21, #2101)*.
