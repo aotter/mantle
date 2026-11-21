@@ -163,7 +163,6 @@ export interface PlanLowered {
 
 export interface RuntimePlan {
   readonly access?: {
-    readonly roles: readonly string[];
     readonly userFields: Readonly<Record<string, UserFieldSpec>>;
     readonly warnings: readonly string[];
   };

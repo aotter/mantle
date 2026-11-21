@@ -1047,7 +1047,7 @@ export async function compileLinkedPlan(
       views,
       procedures,
       triggers,
-      ...(Object.keys(userFields).length ? { access: { roles: [], userFields, warnings } } : {}),
+      ...(Object.keys(userFields).length ? { access: { userFields, warnings } } : {}),
     },
   };
 }
