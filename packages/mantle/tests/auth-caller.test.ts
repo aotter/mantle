@@ -1326,6 +1326,57 @@ describe("OAuth grant revocation and consent routes", () => {
       "same-origin",
     );
   });
+  test("the consent pages show the application's escaped brand and load only its checked logo (#1943)", async () => {
+    const app = await makeApp();
+    const origin = new URL(app.baseURL).origin;
+    const brand = {
+      name: `Acme <script>alert("x")</script> & 'co'`,
+      logo: 'https://cdn.example.test/brand/logo.svg?v=1&x="',
+      primary: "#0f766e",
+      primaryForeground: "oklch(98% 0.01 180 / 90%)",
+    };
+    const routes = authRoutes(app.loader as never, { methods: [], brand });
+    const invalid = await routes(new Request(`${origin}/oauth/consent`, { headers: { "accept-language": "en" } }));
+    expect(invalid!.status).toBe(400);
+    const html = await invalid!.text();
+    expect(html).not.toContain("<script");
+    expect(html).toContain("<span>Acme &#60;script&#62;alert(&#34;x&#34;)&#60;/script&#62; &#38; &#39;co&#39;</span>");
+    expect(html).toContain(`<img src="https://cdn.example.test/brand/logo.svg?v=1&#38;x=&#34;" alt=""/>`);
+    expect(html).toContain("<title>Invalid authorization request · Acme &#60;script&#62;");
+    expect(html).toContain(
+      "html:root[data-theme]{--primary:#0f766e;--ring:#0f766e;--primary-foreground:oklch(98% 0.01 180 / 90%);}",
+    );
+    expect(invalid!.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https://cdn.example.test; frame-ancestors 'none'; base-uri 'none'",
+    );
+    const { cookie } = await app.signIn();
+    const local = authRoutes(app.loader as never, { methods: [], brand: { logo: "/brand.svg" } });
+    const apps = await local(new Request(`${origin}/oauth/consents`, { headers: { cookie } }));
+    expect(await apps!.text()).toContain('<header><div class="b"><img src="/brand.svg" alt=""/></div><nav');
+    expect(apps!.headers.get("content-security-policy")).toContain("img-src 'self';");
+    // without a brand the pages load no image and add no header
+    const plain = await authRoutes(app.loader as never, { methods: [] })(new Request(`${origin}/oauth/consent`));
+    expect(await plain!.text()).not.toMatch(/<header|<img|--primary:#/);
+    expect(plain!.headers.get("content-security-policy")).not.toContain("img-src");
+    for (const logo of [
+      "javascript:alert(1)",
+      "//evil.test/logo.svg",
+      "http://cdn.example.test/logo.svg",
+      "data:image/svg+xml,<svg/>",
+      "/a b.svg",
+      "/\\evil.test",
+    ])
+      expect(() => authRoutes(app.loader as never, { methods: [], brand: { logo } })).toThrow("brand.logo");
+    for (const primary of [
+      "red",
+      "#12345",
+      "#0f766e;}body{display:none",
+      "rgb(1 2 3);x:y",
+      "url(https://evil.test)",
+      "var(--x)",
+    ])
+      expect(() => authRoutes(app.loader as never, { methods: [], brand: { primary } })).toThrow("brand colours");
+  });
   test("a refused consent POST leaves no unread body", async () => {
     const app = await makeApp();
     const origin = new URL(app.baseURL).origin;

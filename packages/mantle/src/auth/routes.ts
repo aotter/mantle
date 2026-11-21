@@ -16,7 +16,24 @@ export interface AuthRoutesOptions {
     | { readonly kind: "email-otp" | "magic-link" | "passkey" }
   )[];
   readonly connectedAppsPage?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /** The application's name, logo and accent on Core's built-in consent and connected-apps pages; checked here. */
+  readonly brand?: ConsentPageBrand;
 }
+
+/** Plain values only: the pages escape the name and take no markup. */
+export interface ConsentPageBrand {
+  readonly name?: string;
+  /** An https URL or a same-origin path (`/logo.svg`). */
+  readonly logo?: string;
+  /** A CSS colour for the primary button and focus ring: hex, or rgb()/hsl()/oklch()/oklab()/lab()/lch() of numbers. */
+  readonly primary?: string;
+  /** The text on `primary`, in the same forms. */
+  readonly primaryForeground?: string;
+}
+
+const COLOR = /^(?:#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|(?:rgba?|hsla?|oklch|oklab|lab|lch)\([\d\s.,%/+-]+\))$/i;
+const sameOriginPath = (path: string) => path.startsWith("/") && !path.startsWith("//") && !/[\\\s]/.test(path);
 
 const basePathOf = (options: { basePath?: string }) => (options.basePath ?? "/api/auth").replace(/\/+$/, "");
 const WELL_KNOWN = /^\/\.well-known\/(oauth-authorization-server|oauth-protected-resource)(\/|$)/;
@@ -34,6 +51,12 @@ export function authRoutes(
       /[\\\r\n]/.test(options.connectedAppsPage))
   )
     throw new Error("connectedAppsPage must be a same-origin absolute path.");
+  const { logo, primary, primaryForeground } = options.brand ?? {};
+  if (logo !== undefined && !sameOriginPath(logo) && !(URL.canParse(logo) && new URL(logo).protocol === "https:"))
+    throw new Error("brand.logo must be an https URL or a same-origin path.");
+  for (const color of [primary, primaryForeground])
+    if (color !== undefined && !COLOR.test(color))
+      throw new Error("brand colours must be hex or rgb()/hsl()/oklch() values.");
   const resolve = options.resolver ?? ((request: Request) => resolveCaller(request, loader));
   return draining(async request => {
     const { pathname } = new URL(request.url);

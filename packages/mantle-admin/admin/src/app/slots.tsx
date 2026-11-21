@@ -75,6 +75,11 @@ export function Empty(): null {
   return null;
 }
 
+/** Internal: whether the application supplies a component for the slot. */
+export function useHasSlot(name: string): boolean {
+  return !!React.useContext(SurfaceContext)?.layers[name]?.length;
+}
+
 /** The admin MCP tool of a View or Procedure: its name lowercased, kebab to snake (`mcpToolNameSegment` in @aotter/mantle's compiler). */
 export const toolName: (name: string) => string = tool;
 

@@ -5,8 +5,14 @@ import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { signOut } from "../../lib/auth";
 import { LanguagePreferenceDropdown, ThemeToggle } from "../../layout/preference-controls";
+import { Empty, Slot, useHasSlot } from "../../app/slots";
+import type { BrandPlacement } from "../../app/slot-props";
 
-export function AdminAuthCard({ children, wide }: React.PropsWithChildren<{ wide?: boolean }>) {
+export function AdminAuthCard({
+  children,
+  wide,
+  placement,
+}: React.PropsWithChildren<{ wide?: boolean; placement: BrandPlacement }>) {
   return (
     <AuthCard
       wide={wide}
@@ -18,20 +24,66 @@ export function AdminAuthCard({ children, wide }: React.PropsWithChildren<{ wide
         </div>
       }
     >
+      <PreAuthBrand placement={placement} className="px-(--card-spacing) pe-24" />
       {children}
     </AuthCard>
   );
 }
 
 /**
+ * The application's `Brand` outside the console, in a box at most 40px high; nothing when it supplies none (#1943). A
+ * component written for the sidebar that throws here (one that needs the sidebar's context) renders nothing instead.
+ */
+function PreAuthBrand({
+  placement,
+  className = "",
+  fallback = null,
+}: {
+  placement: BrandPlacement;
+  className?: string;
+  fallback?: React.ReactNode;
+}): React.ReactNode {
+  if (!useHasSlot("Brand")) return fallback;
+  return (
+    <div className={`flex max-h-10 min-w-0 items-center overflow-hidden ${className}`}>
+      <BrandBoundary>
+        <AppBrand placement={placement} />
+      </BrandBoundary>
+    </div>
+  );
+}
+
+function AppBrand({ placement }: { placement: BrandPlacement }): React.ReactElement {
+  const { language } = usePreferences();
+  return (
+    <Slot
+      name="Brand"
+      Default={Empty}
+      props={{ title: t(language, "admin.consoleTitle"), href: "/admin", placement }}
+    />
+  );
+}
+
+class BrandBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render(): React.ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/**
  * While the session or `me` loads: a neutral page frame, not the sign-in card. A signed-in user who lands here from
- * an app's own sign-in page would otherwise read the card as a second sign-in step (#1943).
+ * an app's own sign-in page would otherwise read the card as a second sign-in step (#1943). The bar shows the
+ * application's `Brand` when it supplies one.
  */
 export function GateLoading(): React.ReactElement {
   return (
     <div role="status" aria-busy="true" className="min-h-svh bg-background">
       <div className="flex h-14 items-center border-b px-4">
-        <Skeleton className="h-5 w-32" />
+        <PreAuthBrand placement="loading" fallback={<Skeleton className="h-5 w-32" />} />
       </div>
       <div className="space-y-3 p-6">
         <Skeleton className="h-6 w-48" />
@@ -46,7 +98,7 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
   const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <AdminAuthCard>
+    <AdminAuthCard placement="error">
       <CardHeader className="text-center">
         <CardTitle className="text-xl">
           <h1>{t(language, "auth.error.title")}</h1>
@@ -60,7 +112,7 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
 export function AccessDeniedView({ login }: { login: string | null }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <AdminAuthCard wide>
+    <AdminAuthCard wide placement="access-denied">
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />

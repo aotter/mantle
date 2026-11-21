@@ -75,6 +75,22 @@ authorizes.
      the local controls; re-reads preserve dirty
      drafts, including ones typed while Save was in flight. Existing inputs
      need not use the optional channel. Procedure forms are unaffected.
+   - **Brand outside the console (#1943).** `BrandProps` adds `placement`
+     (`sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`,
+     `error`, `loading`). An application's `Brand` also renders above the card
+     of the pages shown before or without the console and in the bar of the
+     loading frame, in a box at most 40px high, behind an error boundary that
+     renders nothing when a component written for the sidebar throws there.
+     Site settings are read only after sign-in, so there `title` is the
+     generic console title, `image` is absent and `renderDefault` renders
+     nothing; with no `Brand` those pages are unchanged. The loading frame
+     stays neutral: brand, never the sign-in card. Core's script-free consent
+     and connected-apps pages, which run no slot, take
+     `authRoutes({ brand: { name, logo, primary, primaryForeground } })`:
+     plain values checked when the routes are built (the logo an https URL or
+     a same-origin path, the colours hex or numeric colour functions), the
+     name escaped, the logo's origin the page's only `img-src`, no markup
+     from the application.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,
    `useCollectionTotal`, `useMe`, `useBadges`) call only caller-authorized
    `/admin/api` routes in the browser (decision 8 covers MCP hosts), each of

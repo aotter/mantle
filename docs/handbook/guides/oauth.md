@@ -77,6 +77,30 @@ mutation; bearer credentials cannot grant or disconnect apps. Consent completion
 uses only the provider-validated signed query and redirect. All responses are
 private/no-store. Connected-app redirects must be same-origin paths.
 
+## Brand
+
+Core's consent and connected-apps pages show the application's name, logo and
+primary colour from `authRoutes`' `brand`. Admin's own pages use your `Brand`
+component instead ([Customising Admin](native-admin.md#brand)); pass both the
+same values.
+
+```ts
+const routes = authRoutes(auth, {
+  methods: [{ kind: "email-otp" }],
+  brand: { name: "Acme", logo: "/brand/logo.svg", primary: "#0f766e", primaryForeground: "#ffffff" },
+});
+```
+
+Every field is optional and plain text: the pages take no markup from the
+application. `name` is escaped and also ends the page title. `logo` must be an
+`https:` URL or a same-origin path such as `/brand/logo.svg` (not `//host`, no
+backslash or whitespace); it is shown at most 32px high, and its origin (or
+`'self'`) becomes the page's only `img-src`. `primary` (the Connect button and
+focus ring) and `primaryForeground` (its text) must be hex colours or
+`rgb()`/`hsl()`/`oklch()`/`oklab()`/`lab()`/`lch()` of numbers; one value
+serves light and dark. `authRoutes` throws when it is built with any other
+value. Without `brand` the pages are unchanged.
+
 `resolveCaller(request, loader, { audience, scopes })` verifies token signature,
 issuer, audience and request-bound DPoP through Better Auth, including a durable
 single-use proof reservation. It then checks the live consent and session and

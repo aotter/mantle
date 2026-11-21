@@ -36,6 +36,8 @@ const ALL = STACKS;
 const SEAM = "docs/adr/adr-lite-application-seams.md";
 /** ADR-0029; its #2100 amendment covers ref handler results, `ToolCall.signal` and `ToolCall.progress`. */
 const ADR_0029 = "docs/adr/0029-mcp-apps-interaction-contracts.md";
+/** ADR-lite 1376; its #1943 amendment covers `Brand` outside the console and the consent pages' brand. */
+const ADR_1376 = "docs/adr/adr-lite-1376-admin-extensions.md";
 
 export const SEAMS: readonly Seam[] = [
   {
@@ -232,5 +234,26 @@ export const SEAMS: readonly Seam[] = [
     decided: "docs/adr/adr-lite-2097-hashed-client-entries.md",
     check: "packages/mantle/tests/seams/client-assets.ts",
     run: false, // bundled into a Worker and run in tests/bundle-client.test.ts
+  },
+  {
+    id: "admin-brand-placement",
+    package: "@aotter/mantle-admin",
+    subpath: "./app",
+    exports: ["defineAdmin"],
+    entry: "defineAdmin(meta, { components: { Brand } }): BrandProps.placement, BrandPlacement",
+    stacks: [],
+    decided: ADR_1376,
+    check: "packages/mantle-admin/test/seams/brand-placement.ts",
+  },
+  {
+    id: "consent-page-brand",
+    package: "@aotter/mantle",
+    subpath: "./auth/routes",
+    exports: ["authRoutes"],
+    entry: "authRoutes(loader, { brand: { name, logo, primary, primaryForeground } }), ConsentPageBrand",
+    stacks: [],
+    decided: ADR_1376,
+    check: "packages/mantle/tests/seams/consent-brand.ts",
+    run: false, // the pages it brands need a session: rendered in tests/auth-caller.test.ts
   },
 ];

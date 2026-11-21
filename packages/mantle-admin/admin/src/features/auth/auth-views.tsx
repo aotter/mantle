@@ -67,7 +67,7 @@ export function SignInView(): React.ReactElement {
   const methods = useQuery<SignInMethod[]>(authMethodsQueryOptions());
 
   return (
-    <AdminAuthCard>
+    <AdminAuthCard placement="sign-in">
       <CardHeader>
         <CardDescription>{t(language, "auth.signIn.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -155,7 +155,7 @@ export function OAuthConsentView(): React.ReactElement {
   if (consent.isError) return <GateError error={consent.error} />;
   if (!consent.data) {
     return (
-      <AdminAuthCard wide>
+      <AdminAuthCard wide placement="consent">
         <CardHeader>
           <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
           <CardTitle className="text-xl">
@@ -169,7 +169,7 @@ export function OAuthConsentView(): React.ReactElement {
 
   const destination = new URL(consent.data.redirectUri);
   return (
-    <AdminAuthCard wide>
+    <AdminAuthCard wide placement="consent">
       <CardHeader>
         <CardDescription>{t(language, "oauth.consent.eyebrow")}</CardDescription>
         <CardTitle className="text-xl">
@@ -243,7 +243,7 @@ export function OAuthConsentView(): React.ReactElement {
 /** Members can manage their own grants without access to admin Admin APIs. */
 export function ConnectedAppsPage(): React.ReactElement {
   return (
-    <AdminAuthCard wide>
+    <AdminAuthCard wide placement="connected-apps">
       <CardContent className="pt-6">
         <ConnectedAppsView />
       </CardContent>
