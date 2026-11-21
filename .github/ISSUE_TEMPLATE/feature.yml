@@ -29,7 +29,7 @@ body:
     id: evidence
     attributes:
       label: Evidence from application code
-      description: "A link to (or excerpt of) the application code that works around this today, marked `drop when aotter/mantle#<issue>`, and why the documented patterns do not fit. Write \"none\" only for a defect in an existing contract."
+      description: "A reduced excerpt of the application code that works around this today (only what shows which Core behaviour it depends on), marked `drop when aotter/mantle#<issue>`, and why the documented patterns do not fit. Do not include secrets, customer names or private repository links. Write \"none\" only for a defect in an existing contract."
     validations:
       required: true
   - type: textarea
