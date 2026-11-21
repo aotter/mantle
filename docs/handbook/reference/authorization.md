@@ -30,85 +30,29 @@ Predicate failure is `UNAUTHENTICATED` for a non-user or `AUTH_DENIED` for a use
 ## Caller conditions
 
 "Not while impersonating", "only with a verified email" and "only after a recent sign-in" are facts of the identity
-system, which Core cannot verify for a gateway caller, so `requires` stays closed
-(ADR-0002) and the Caller gains no fields for them
-(ADR-lite #1937). The application states them once, in the
-`authorize(target, caller)` it passes to `rest`, `mcp`, `web` and `admin`:
+system, which Core cannot verify for a gateway caller, so `requires` stays closed (ADR-0002) and the Caller gains no
+fields for them (ADR-lite #1937). The application decides them in the `authorize(target, caller)` it passes to `rest`,
+`mcp`, `web` and `admin` (`Authorize` from `@aotter/mantle/contracts`; `true` allows).
 
-```ts
-// src/authorize.ts
-import { ContractError, type Authorize } from "@aotter/mantle/contracts";
-
-/** The part of Better Auth's `auth.$context` this reads. */
-type AuthRecords = {
-  internalAdapter: { findUserById(id: string): Promise<{ emailVerified: boolean } | null> };
-  adapter: { findOne<T>(query: { model: string; where: { field: string; value: string }[] }): Promise<T | null> };
-};
-const RECENT_SIGN_IN_MS = 10 * 60 * 1000;
-const SENSITIVE = new Set(["delete-workspace"]);
-
-/** Pass `() => auth.$context` of the application's Better Auth instance. */
-export function authorizeWith(context: () => Promise<AuthRecords>): Authorize {
-  return async (target, caller) => {
-    if (target.kind === "view" || target.action === "read") return true;
-    const deny = (message: string) => new ContractError("AUTH_DENIED", message, `${target.kind}/${target.name}`);
-    if ("impersonatedBy" in caller && caller.impersonatedBy) throw deny("Not while impersonating: sign in as yourself.");
-    if (caller.kind !== "user") return true; // a gateway's host checks its callers before forwarding
-    const { internalAdapter, adapter } = await context();
-    if (!(await internalAdapter.findUserById(caller.subject))?.emailVerified)
-      throw deny("Verify your email address first.");
-    if (SENSITIVE.has(target.name)) {
-      const session =
-        caller.credential === "session" && caller.credentialId
-          ? await adapter.findOne<{ createdAt: Date }>({ model: "session", where: [{ field: "id", value: caller.credentialId }] })
-          : null;
-      if (!session || Date.now() - new Date(session.createdAt).getTime() > RECENT_SIGN_IN_MS)
-        throw deny("Sign in again to do this.");
-    }
-    return true;
-  };
-}
-```
-
-- **Impersonation.** `caller.impersonatedBy` is set only on the original Caller of an impersonated Better Auth session.
-  Reads stay open, so an admin can see what the user sees; every write is refused.
-- **Email verified.** The callback reads the current user record, as `resolveCaller` does; `userOf(caller)` is display
-  data, not an authority. To filter rows by it instead, store it as a user field (`input: false`, kept in step by a
-  `databaseHooks.user` hook) and use it in a `scope` or `restrict`.
-- **Recent sign-in.** A session Caller's `credentialId` is the session id, and the session's `createdAt` is when the
-  person signed in. An OAuth or service credential has no sign-in to check, so a sensitive target refuses it. Better
-  Auth's own sensitive endpoints use `session.freshAge` instead.
-- **Gateway callers** (`kind: "host"`) come with no Better Auth record: the host checks these facts before it forwards
-  a request, and the callback lets them through.
-
-`authorize` runs on the selected REST, MCP, web and Admin boundaries, after credentials and `requires`. A generated
-function called directly (`run(db, caller, input)`, `ctx.store.procedures`) does not run it: that is application code,
-trusted like the callback itself. The refusal keeps its message: REST answers 403 with
-`{ "error": { "code": "AUTH_DENIED", "message": "Verify your email address first.", "path": "procedure/add-note" } }`;
-MCP answers a `tools/call` with HTTP 403 and the same `error`, and leaves a refused target out of `tools/list`.
+- **What it receives.** The target's `kind` (`view`, `procedure` or `schema`), its manifest `name` and, on Admin's
+  generic entry routes, `action`. On the Caller: `kind`, `subject`, `impersonatedBy` (the real actor, only on the
+  original Caller of an impersonated session), `credential` and `credentialId` (for a session, the session id).
+- **Where it runs.** On the selected REST, MCP, web and Admin boundaries, after credentials and `requires`, before any
+  database handle. A generated function called directly (`run(db, caller, input)`, or a View or Procedure a handler
+  calls through its `store`) does not run it: that is application code, trusted like the callback.
+- **A refusal.** REST answers 403 `{ "error": { "code": "AUTH_DENIED", "message", "path" } }`; MCP answers the
+  `tools/call` with HTTP 403 and the same `error`. A rejection with an `AUTH_DENIED` `ContractError` keeps its message;
+  any other refusal reads `Target is not authorized.`
+- **Cost.** For `tools/list`, MCP calls it once per tool to leave out what the caller may not call (unless
+  `discovery: "all"`), so keep it cheap.
+- **Gateway callers** carry no identity record, whether `kind: "host"` (admin layer) or `kind: "user"` (member
+  layer): gateway mode never resolves the application's own Caller. The host checks such conditions before it forwards.
 
 ### Limits and authorize
 
-A rejection from `authorize` that is not an `AUTH_DENIED` `ContractError` becomes `AUTH_DENIED` with the message
-`Target is not authorized.`: a `ContractError` with `status: 429` thrown there reaches REST as 403 and MCP as 403, and
-its `retryAfter` is dropped. Check a request-rate limit in the application's route, before the generated surface,
-where the route owns the response: with Cloudflare's Workers Rate Limiting (a `ratelimits` binding), the route returns
-`(await limited(env.LIMITER, key)) ?? api(request, env, ctx)`, keyed by the caller or the client address. A quota that
-counts the caller's rows belongs in the Procedure
-([per-caller quotas](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429)). Answering a 429 from
-`authorize` as 429 would be a small Core change; today it is a 403.
-
-```ts
-// src/rate-limit.ts
-export async function limited(limiter: RateLimit, key: string): Promise<Response | undefined> {
-  const { success } = await limiter.limit({ key });
-  if (success) return undefined;
-  return Response.json(
-    { error: { code: "RATE_LIMITED", message: "Too many requests.", path: "" } },
-    { status: 429, headers: { "retry-after": "60", "cache-control": "private, no-store" } },
-  );
-}
-```
+A `ContractError` with `status: 429` thrown from `authorize` reaches REST and MCP as 403 `AUTH_DENIED` and loses its
+`retryAfter`. Refuse with 429 from a ref handler instead, and limit request rates in the application's route:
+[a handler answers 429](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429).
 
 ## User fields
 
@@ -166,212 +110,19 @@ await store(db, caller).collection("documents").insert({ org, title });
 
 ### Organization members and invitations
 
-View SQL reads declared Schemas only, never an auth plugin's tables: those tables belong to one plugin's schema, and an
-application behind a gateway has none (ADR-0046:
-Mantle enforces rows and does not decide who holds what). To list "members of my organization" with paging, `describe`,
-REST and MCP, mirror the membership into a declared Schema scoped by the same user field that carries the caller's
-organizations, and keep both current from Better Auth's organization hooks.
+View SQL reads declared Schemas only, never an auth plugin's tables: those tables belong to one plugin, and an
+application behind a gateway has none (ADR-0046). Memberships and roles reach row policy as verified user fields the
+application maintains, such as `orgIds`. An application that needs a listing with paging, `describe`, REST and MCP
+keeps its own declared Schema scoped by that field (`scope: "orgId IN auth.user('orgIds')"`). Keeping the field and
+any such Schema current is the application's job, and it must cover every way a membership can end in its identity
+system: not every such change necessarily fires a plugin hook.
 
-```yaml
-apiVersion: cms.mantle.aotter.net/v2
-kind: Schema
-metadata: { name: org_members }
-spec:
-  title: Organization members
-  lifecycle: operational
-  scope: "orgId IN auth.user('orgIds')"
-  uniqueIndexes: [[orgId, entry]]
-  indexes: [[orgId, email, id]]
-  schema:
-    type: object
-    required: [orgId, entry, kind, email, role]
-    properties:
-      orgId: { type: string }
-      entry: { type: string }
-      kind: { type: string, enum: [member, invitation] }
-      email: { type: string }
-      name: { type: string }
-      role: { type: string }
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: View
-metadata: { name: organization-members }
-spec:
-  description: Members and pending invitations of one of your organizations, by email.
-  surface: public
-  requires: { auth: { all: [ctx.user] } }
-  input:
-    type: object
-    additionalProperties: false
-    required: [orgId]
-    properties:
-      orgId: { type: string }
-  sql: |
-    SELECT id, kind, email, name, role FROM org_members WHERE orgId = input.orgId ORDER BY email, id
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: put-org-entry }
-spec:
-  description: Mirror one member or invitation. Called by the organization hooks as the system caller.
-  input:
-    type: object
-    additionalProperties: false
-    required: [orgId, entry, kind, email, role]
-    properties:
-      orgId: { type: string }
-      entry: { type: string }
-      kind: { type: string, enum: [member, invitation] }
-      email: { type: string }
-      name: { type: string }
-      role: { type: string }
-  output: { type: object }
-  handler:
-    sql: |
-      INSERT INTO org_members (orgId, entry, kind, email, name, role)
-        VALUES (input.orgId, input.entry, input.kind, input.email, input.name, input.role)
-        ON CONFLICT (orgId, entry) DO UPDATE SET email = excluded.email, name = excluded.name, role = excluded.role
----
-apiVersion: cms.mantle.aotter.net/v2
-kind: Procedure
-metadata: { name: drop-org-entry }
-spec:
-  description: Remove one mirrored member or invitation. Called by the organization hooks as the system caller.
-  input:
-    type: object
-    additionalProperties: false
-    required: [orgId, entry]
-    properties:
-      orgId: { type: string }
-      entry: { type: string }
-  output: { type: object }
-  handler:
-    sql: DELETE FROM org_members WHERE orgId = input.orgId AND entry = input.entry
-```
+What Core does with the field:
 
-The two Procedures have no `requires` and no Trigger: only application code holding a system Caller calls them. Every
-hook rebuilds the organization's rows from the auth tables and recomputes `orgIds` for the users it touched, so the same
-function is also the repair:
-
-```ts
-// src/org-mirror.ts
-import type { OrganizationOptions } from "better-auth/plugins";
-import { store } from "../generated/generated.js";
-import putEntry from "../generated/procedures/put-org-entry.js";
-import dropEntry from "../generated/procedures/drop-org-entry.js";
-
-type Db = Parameters<typeof putEntry>[0];
-/** The part of Better Auth's `auth.$context` this reads and writes. */
-type AuthTables = {
-  adapter: {
-    findMany<T>(query: { model: string; where: { field: string; value: string | string[]; operator?: "in" }[] }): Promise<T[]>;
-  };
-  internalAdapter: { updateUser(id: string, data: { orgIds: string[] }): Promise<unknown> };
-};
-const system = { kind: "system", reason: "organization mirror" } as const;
-
-export function organizationMirror(db: () => Db, context: () => Promise<AuthTables>) {
-  /** Rebuild one organization's `org_members` rows, then the `orgIds` of the users it touched. */
-  async function syncOrganization(orgId: string, userIds: readonly string[] = []) {
-    const { adapter, internalAdapter } = await context();
-    const members = await adapter.findMany<{ userId: string; role: string }>({
-      model: "member",
-      where: [{ field: "organizationId", value: orgId }],
-    });
-    const users = members.length
-      ? await adapter.findMany<{ id: string; email: string; name: string }>({
-          model: "user",
-          where: [{ field: "id", operator: "in", value: members.map(member => member.userId) }],
-        })
-      : [];
-    const invitations = await adapter.findMany<{ id: string; email: string; role: string }>({
-      model: "invitation",
-      where: [
-        { field: "organizationId", value: orgId },
-        { field: "status", value: "pending" },
-      ],
-    });
-    const entries = [
-      ...members.flatMap(member => {
-        const user = users.find(user => user.id === member.userId);
-        return user ? [{ entry: `member:${user.id}`, kind: "member" as const, email: user.email, name: user.name, role: member.role }] : [];
-      }),
-      ...invitations.map(invitation => ({
-        entry: `invitation:${invitation.id}`, kind: "invitation" as const, email: invitation.email, name: "", role: invitation.role,
-      })),
-    ];
-    for (const entry of entries) await putEntry(db(), system, { orgId, ...entry });
-    const { rows } = await store(db(), system).collection("org_members").find({ where: { orgid: orgId }, limit: 500 });
-    for (const row of rows)
-      if (!entries.some(entry => entry.entry === row.entry)) await dropEntry(db(), system, { orgId, entry: row.entry });
-    for (const userId of userIds) {
-      const memberships = await adapter.findMany<{ organizationId: string }>({
-        model: "member",
-        where: [{ field: "userId", value: userId }],
-      });
-      await internalAdapter.updateUser(userId, { orgIds: memberships.map(member => member.organizationId) });
-    }
-  }
-  const leaving = new Map<string, string[]>();
-  const hooks: OrganizationOptions["organizationHooks"] = {
-    afterAddMember: ({ organization, user }) => syncOrganization(organization.id, [user.id]),
-    afterRemoveMember: ({ organization, user }) => syncOrganization(organization.id, [user.id]),
-    afterUpdateMemberRole: ({ organization }) => syncOrganization(organization.id),
-    afterCreateInvitation: ({ organization }) => syncOrganization(organization.id),
-    afterAcceptInvitation: ({ organization, user }) => syncOrganization(organization.id, [user.id]),
-    afterRejectInvitation: ({ organization }) => syncOrganization(organization.id),
-    afterCancelInvitation: ({ organization }) => syncOrganization(organization.id),
-    beforeDeleteOrganization: async ({ organization }) => {
-      const { adapter } = await context();
-      const members = await adapter.findMany<{ userId: string }>({
-        model: "member",
-        where: [{ field: "organizationId", value: organization.id }],
-      });
-      leaving.set(organization.id, members.map(member => member.userId));
-    },
-    afterDeleteOrganization: async ({ organization }) => {
-      await syncOrganization(organization.id, leaving.get(organization.id));
-      leaving.delete(organization.id);
-    },
-  };
-  return { hooks, syncOrganization };
-}
-```
-
-```ts
-// src/auth.ts (the parts this adds)
-import { betterAuth } from "better-auth/minimal";
-import { organization } from "better-auth/plugins";
-import { d1Adapter } from "@aotter/mantle/auth/adapter";
-import { organizationMirror } from "./org-mirror.js";
-
-export function createAuth(env: { DB: D1Database }) {
-  const mirror = organizationMirror(() => env.DB, () => auth.$context);
-  const auth = betterAuth({
-    database: d1Adapter(env.DB),
-    user: { additionalFields: { orgIds: { type: "string[]", required: false, input: false } } },
-    plugins: [organization({ organizationHooks: mirror.hooks })],
-  });
-  return auth;
-}
-```
-
-`orgIds` is a stored user field (`input: false`), so `resolveCaller(request, auth, { fields: userFields })` reads it from
-the current user record on every request, for sessions and OAuth alike: a member removed from an organization stops
-seeing its rows on their next request. A user in no organization has an empty `orgIds`, which is refused
-(`AUTH_DENIED`) before SQL runs. `GET /api/views/organization-members?orgId=…` pages by `(email, id)`; an `orgId` the
-caller does not belong to returns no rows.
-
-**Consistency.** Better Auth writes its tables first and calls the hook after; the two are not one transaction. When the
-mirror write fails, the hook rejects, the auth endpoint answers 500, and the membership change stays committed while the
-mirror and `orgIds` keep their previous state. The next hook for that organization rebuilds it; to repair without
-waiting, run `syncOrganization(orgId, userIds)` from a scheduled job or an admin action. Email and name are copies,
-current as of the last sync. Each sync costs one write per member and invitation, bounded by the plugin's
-`membershipLimit` and `invitationLimit` (and the single page of 500 above).
-
-For one or two listings, a ref Procedure with `spec.db: native` can read the plugin's tables with the native handle
-instead, filtering by `caller.subject` itself: no mirror and no lag, but no row policy either, and it works only where
-those tables exist (not behind a gateway).
+- `resolveCaller(request, auth, { fields: userFields })` reads it from the current user record on every request, for
+  session, OAuth and the application's own credentials alike, so a changed value applies from the next request.
+- A missing or empty value is refused before SQL runs: `AUTH_DENIED` (403), `UNAUTHENTICATED` for an anonymous caller.
+- A multi-valued field accepts at most 64 values; more fail building the Caller with `USER_FIELD_INVALID` (400).
 
 ## Gateway mode
 

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
 import { verifyOnLocalD1 } from "./apps/local-d1.js";
@@ -15,8 +15,9 @@ const api=rest({db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCal
 export const app=(request:Request,env:{DB:any})=>api(request,env);`;
 
 async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") {
-  const files = await generateOrThrow(target, await loadFixtureSources("global-unique.yaml")),
-    dir = await mkdtemp(join(base, "tests/apps/.global-unique-"));
+  const files = await generateOrThrow(target, await loadFixtureSources("global-unique.yaml"));
+  await mkdir(join(base, "tests/apps/.generated"), { recursive: true });
+  const dir = await mkdtemp(join(base, "tests/apps/.generated/global-unique-"));
   await writeGenerated(dir, files);
   await writeFile(join(dir, "app.ts"), composition);
   return { dir, files };

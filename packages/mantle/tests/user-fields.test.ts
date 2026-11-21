@@ -66,6 +66,13 @@ test("verified identities freeze values, discard unknown fields and lose authori
   ])
     expect(() => userCaller({ id: "ok", region: value }, { fields })).not.toThrow();
   expect(() => userCaller({ id: "bad", region: "界".repeat(86) }, { fields })).toThrow();
+  expect(() => userCaller({ id: "bad", region: Array.from({ length: 65 }, (_, i) => String(i)) }, { fields })).toThrow(
+    expect.objectContaining({
+      code: "USER_FIELD_INVALID",
+      status: 400,
+      message: "User field 'region' accepts at most 64 values.",
+    }),
+  );
   expect(() => userCaller({ id: "host:bad" })).toThrow();
   expect(() => userRefs(true, 3)).toThrow("version");
   expect(() => binds({ userRefs: userRefs(true, 1) }, [{ k: "future" }] as never, caller)).toThrow(

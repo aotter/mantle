@@ -18,7 +18,7 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
         ...(path.startsWith("/api/views/") ? {} : { body: JSON.stringify(body) }),
       }),
     ))!;
-    return { status: response.status, headers: response.headers, body: (await response.json()) as any };
+    return { status: response.status, body: (await response.json()) as any };
   };
   const product = async (id: string) => {
     const [row] = await query(`SELECT name, note, stock, reserved, active, version FROM products WHERE id = '${id}'`);
@@ -213,14 +213,9 @@ export async function verifySqlPatterns(app: App, query: Query, pg: boolean) {
   await verifyRetries(app, send, query);
 }
 
-type Send = (
-  path: string,
-  body: unknown,
-  role?: string,
-  user?: string,
-) => Promise<{ status: number; headers: Headers; body: any }>;
+type Send = (path: string, body: unknown, role?: string, user?: string) => Promise<{ status: number; body: any }>;
 
-/** The two retry sections: an idempotent SQL insert (`create-invoice`) and a handler with a request hash and a 429 quota (`send-transfer`). */
+/** Retry safely: an idempotent SQL insert (`create-invoice`). */
 async function verifyRetries(app: App, send: Send, query: Query) {
   const count = async (table: string, where: string) =>
     Number((await query(`SELECT count(*) AS n FROM ${table} WHERE ${where}`))[0]!.n);
@@ -258,71 +253,5 @@ async function verifyRetries(app: App, send: Send, query: Query) {
     [together.map(r => r.status), together[0]!.body.results[0][0].id, await count("invoices", "operationid = 'op-2'")],
     [[200, 200], together[1]!.body.results[0][0].id, 1],
     "two first requests at once: one row, both get it",
-  );
-
-  // The handler: a request hash for replays, and a 429 once the caller has 20 transfers in the hour.
-  const transfer = (operationId: string, amount = 10, user = "u") =>
-    send("/api/transfers", { operationId, toAccount: "acct-1", amount }, "user", user);
-  const sent = await transfer("t-0");
-  equal([sent.status, (await transfer("t-0")).body.id], [200, sent.body.id], "a transfer replay returns the same row");
-  const changed = await transfer("t-0", 11);
-  equal([changed.status, changed.body.error?.code], [409, "CONFLICT"], "the same operationId for another amount");
-  const racing = await Promise.all([1, 2].map(() => transfer("t-race")));
-  equal(
-    [racing.map(r => r.status), racing[0]!.body.id, await count("transfers", "operationid = 't-race'")],
-    [[200, 200], racing[1]!.body.id, 1],
-    "two first transfers at once: one row, both get it",
-  );
-  for (let i = 1; i <= 18; i++) equal((await transfer(`t-${i}`)).status, 200, `transfer ${i} within the quota`);
-  const limited = await transfer("t-over");
-  equal(
-    [limited.status, limited.headers.get("retry-after"), limited.body.error?.code, limited.body.error?.retryAfter],
-    [429, "3600", "RATE_LIMITED", 3600],
-    "the 21st transfer in the hour is 429 with Retry-After",
-  );
-  equal((await transfer("t-3")).status, 200, "a replay still answers at the limit");
-  equal((await transfer("t-0", 10, "v")).status, 200, "another caller has its own quota");
-  equal(await count("transfers", "owner = 'u'"), 20, "the refused transfer wrote nothing");
-  const tool = (await app(
-    new Request("http://local/mcp", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        "x-role": "user",
-        "x-user": "u",
-        "mcp-protocol-version": "2026-07-28",
-        "mcp-method": "tools/call",
-        "mcp-name": "send_transfer",
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/call",
-        params: {
-          name: "send_transfer",
-          arguments: { operationId: "t-mcp", toAccount: "acct-1", amount: 1 },
-          _meta: {
-            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-            "io.modelcontextprotocol/clientCapabilities": {},
-          },
-        },
-      }),
-    }),
-  ))!;
-  const text = await tool.text(),
-    result = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
-  equal(
-    [result.isError, JSON.parse(result.content[0].text).diagnostics[0]],
-    [
-      true,
-      {
-        code: "RATE_LIMITED",
-        message: "At most 20 transfers an hour.",
-        path: "procedures/send-transfer",
-        retryAfter: 3600,
-      },
-    ],
-    "MCP answers the 429 as an error result with the same fields",
   );
 }
