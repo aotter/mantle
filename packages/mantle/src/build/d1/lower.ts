@@ -12,10 +12,9 @@ import {
 import { S, num, ref as col, target as res } from "../core/sql/ast.js";
 import type { PolicyLowering, LoweringScope } from "../core/sql/policy.js";
 import { encodeDate, encodeNumeric, encodeTimestamptz, sqliteType } from "./codec.js";
-import type { RawExpr } from "./print.js";
+import { sql, strConst, argOf, haversine, type Arg } from "../core/sql/lowering.js";
 import { searchLike } from "../../kernel/search.js";
 
-type Arg = { input: string; type: string } | { const: number };
 /** The one bind the D1 dialect adds: a corner of the R*Tree box a near() query reads. */
 type BoxBind = { k: "dialect"; box: "minLat" | "maxLat" | "minLng" | "maxLng"; lat: Arg; lng: Arg; meters: number };
 
@@ -29,22 +28,6 @@ const clone = <T>(x: T): T => structuredClone(x);
  * A lowering written as SQLite text. `__name` splices a (cloned) sub-AST, in parentheses; everything else is
  * emitted as written. The printer prints a `Raw` node as a parenthesized expression, so the runtime parses nothing.
  */
-const TOKEN = /"(?:[^"]|"")*"|'(?:[^']|'')*'|__\w+/g;
-function sql(text: string, subst: Record<string, N> = {}): N {
-  const parts: (string | N)[] = [];
-  let last = 0;
-  // a placeholder is only ever unquoted: a quoted identifier or string is text, so a user's alias `n__q` cannot be spliced into
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[0].startsWith("__")) continue;
-    const node = subst[m[0]];
-    if (!node) throw new Error(`lowering template names ${m[0]} but was not given it`);
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push("(", clone(node), ")");
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return { Raw: { parts } satisfies RawExpr };
-}
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 
 const OFF = (x: string) =>
@@ -60,15 +43,8 @@ const TRUNC: Record<string, string> = {
   year: `(unixepoch(strftime('%Y-01-01 00:00:00', ${FD(LOCAL, 1_000_000)}, 'unixepoch')) * 1000000)`,
 };
 const EXTRACT: Record<string, string> = { year: "%Y", month: "%m", day: "%d", hour: "%H", dow: "%w" };
-const HAV = (lat1: string, lng1: string) =>
-  `(2 * 6371008.8 * asin(min(1.0, sqrt(sin(radians(__lat - ${lat1}) / 2) * sin(radians(__lat - ${lat1}) / 2) + cos(radians(${lat1})) * cos(radians(__lat)) * sin(radians(__lng - ${lng1}) / 2) * sin(radians(__lng - ${lng1}) / 2)))))`;
 
-const strConst = (n: N) => n?.A_Const?.sval?.sval as string | undefined;
-const argOf = (n: N, scope: LoweringScope): Arg => {
-  const k = n.ColumnRef?.fields?.length === 2 ? n.ColumnRef.fields[1].String.sval : undefined;
-  if (k) return { input: k, type: scope.inputs[k]! };
-  return { const: Number(n.A_Const?.ival?.ival ?? n.A_Const?.fval?.fval) };
-};
+
 
 function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
   const args: N[] = n.args ?? [];
@@ -128,7 +104,7 @@ function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
       const { schema, def } = scope.alias(alias);
       if (def.fields[fld] !== "geo") throw new Refused("SQL_FUNCTION", `${schema}.${fld} is not a geo field`);
       const a = q(alias);
-      const dist = HAV(`${a}.${q(fld + "_lat")}`, `${a}.${q(fld + "_lng")}`);
+      const dist = haversine("min", `${a}.${q(fld + "_lat")}`, `${a}.${q(fld + "_lng")}`);
       const sub = { __lat: scope.tx(latN), __lng: scope.tx(lngN) };
       if (f === "mantle.distance") return sql(dist, sub);
       scope.seen("near");
