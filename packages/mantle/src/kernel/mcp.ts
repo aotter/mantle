@@ -97,7 +97,7 @@ export type McpObservation =
           readonly code?: string;
         }
     ));
-type LocalizedText = string | Readonly<Record<string, string>>;
+import type { LocalizedText } from "./localized-schema.js";
 type Paging = { limit?: number; cursor?: string };
 /** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
 export interface Tool<Database, Handlers = never> {
