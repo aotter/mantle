@@ -1,5 +1,6 @@
 /** /llms.txt and /sitemap.xml bodies; loaded only when an index is requested, so page Workers do not pay for it at startup. */
 import { escape } from "./web-escape.js";
+import type { PageEntry, WebOptions } from "./web.js";
 const label = (v: unknown) =>
   String(v)
     .replace(/[\r\n]/g, " ")
@@ -16,21 +17,8 @@ const datetime = (v: unknown) =>
 
 export async function webIndex(
   sitemap: boolean,
-  options: {
-    readonly origin: string;
-    readonly title: string;
-    readonly description: string;
-    readonly sitemap?: readonly string[];
-  },
-  pages: readonly {
-    readonly path: string;
-    readonly page: {
-      readonly view: string;
-      readonly list?: string;
-      readonly markdown?: string;
-      readonly lastmod?: string;
-    };
-  }[],
+  options: Pick<WebOptions<unknown, unknown>, "origin" | "title" | "description" | "sitemap">,
+  pages: readonly Pick<PageEntry, "path" | "page">[],
   list: (view: string, cursor?: string) => Promise<{ rows: Record<string, unknown>[]; nextCursor?: string }>,
   validUrl: (path: string, row: Record<string, unknown>, view: string) => string | undefined,
 ): Promise<string> {
