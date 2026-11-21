@@ -122,10 +122,26 @@ outside `matchTarget`.
 
 Diff records contain `id`, `field`, `direction` and optional `before`/`after`.
 Removing a scope or restrict term widens access; adding one narrows it. A restrict is an AND of
-OR-clauses (a single term is a clause of one): adding a disjunct to a clause widens, dropping one
-narrows, also when the clause is left with one term and moves from `or` to the single terms. A
-change that both widens one clause and narrows another, such as swapping a term, is reported as
-widened; a change that admits and removes no row (a clause another already implies) is `changed`.
+OR-clauses; a single term is a clause of one, so a clause left with one term, which moves from `or`
+to the single terms, is compared as the same rule. Each Schema's direction is decided in two steps:
+
+1. Rows. If a clause of the old policy follows from no clause of the new one (a clause follows from
+   another whose disjuncts are a subset of its own), rows may be added: `widened`, whatever else
+   changed. Adding a disjunct, removing a clause and swapping a term are widenings. Otherwise, if a
+   new clause follows from no old one, rows are removed; otherwise the rows are the same.
+2. Callers refused before SQL. A user-field term (`IN auth.user(...)`) refuses a caller holding
+   `{ all: true }` for its field (`AUTH_DENIED`) and, under gateway mode, a host that did not
+   forward the field (`HOST_CONTRACT`), also inside an OR-clause (where an application caller's
+   missing or empty field only makes the term false). When rows are removed, the direction is
+   `narrowed`, unless a user-field term of the old policy appears nowhere in the new one: those
+   callers are now admitted, so it is `changed`. When the rows are the same, a user-field term that
+   disappears makes it `widened`, one that appears `narrowed`, both or neither `changed`.
+
+So dropping the `= auth.uid()` disjunct of `author_id = auth.uid() OR org IN auth.user('ownerOrgIds')`
+narrows, and dropping the `org` one is `changed`. A target's restrict, scope or variants are
+`narrowed` only when every Schema's direction is, and `widened` when any is. `changed` does not mean
+"no effect": it means neither direction can be stated, and some callers may now reach rows they could
+not; review it as you would a widening.
 Reading another Schema, dropping requirements, adding surfaces or Triggers,
 removing `readOnly` or `trustedOnly`, or enabling `opaque` or `unscopedReads`
 widens access. Variants are compared separately. Adding a target widens;
