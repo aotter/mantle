@@ -72,7 +72,6 @@ function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string)
   });
 }
 
-
 type Columns = Record<string, { schema: string; field: string }>;
 
 /**

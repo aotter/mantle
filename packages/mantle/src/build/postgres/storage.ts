@@ -1,3 +1,4 @@
+import { indexDefinitions } from "../core/sql/storage.js";
 import { q } from "../core/sql/ast.js";
 /** Build-time initial PostgreSQL DDL; applications own migrations. */
 import { checkShapeProblem, notNullColumns, storageColumns, type SqlNode } from "../spec/domain/index.js";
@@ -37,18 +38,7 @@ function columns(s: StorageSchema): Column[] {
 }
 
 function indexes(name: string, s: StorageSchema) {
-  return [
-    ...(s.unique ?? []).map((u, i) => ({
-      name: `_mantle_uq_${name}_${i}`,
-      unique: true,
-      columns: s.userScopes?.length
-        ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])]
-        : s.scope && u[0] !== s.scope
-          ? [s.scope, ...u]
-          : [...u],
-    })),
-    ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: [...cols] })),
-  ].map(i => ({
+  return indexDefinitions(name, s).map(i => ({
     ...i,
     name: ident(i.name),
     sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(ident(i.name))} ON ${q(name)} (${i.columns.map(q).join(", ")})`,

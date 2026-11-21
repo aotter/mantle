@@ -210,16 +210,12 @@ export function sqlLogic(node: SqlNode): SqlLogicNode {
   }
   if (node.WindowDef) {
     const w = node.WindowDef;
-    return branch(
-      "window",
-      `Window · ${w.frameOptions & 4 ? "ROWS" : "RANGE"} frame (see authored SQL)`,
-      [
-        ...group("PARTITION BY", w.partitionClause),
-        ...group("ORDER BY", w.orderClause),
-        ...clause("Frame start", w.startOffset),
-        ...clause("Frame end", w.endOffset),
-      ],
-    );
+    return branch("window", `Window · ${w.frameOptions & 4 ? "ROWS" : "RANGE"} frame (see authored SQL)`, [
+      ...group("PARTITION BY", w.partitionClause),
+      ...group("ORDER BY", w.orderClause),
+      ...clause("Frame start", w.startOffset),
+      ...clause("Frame end", w.endOffset),
+    ]);
   }
   if (node.CommonTableExpr)
     return branch("cte", node.CommonTableExpr.ctename, [sqlLogic(node.CommonTableExpr.ctequery)]);

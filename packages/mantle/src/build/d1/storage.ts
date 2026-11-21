@@ -1,3 +1,4 @@
+import { indexDefinitions } from "../core/sql/storage.js";
 import { q, lit } from "../core/sql/ast.js";
 /** Build-time initial SQLite DDL; applications own migrations. */
 import {
@@ -68,18 +69,7 @@ function desired(name: string, s: StorageSchema) {
           : [{ name: f, type: sqliteType(ty).toUpperCase(), native: false }],
       ),
   ];
-  const indexes = [
-    ...(s.unique ?? []).map((u, i) => ({
-      name: `_mantle_uq_${name}_${i}`,
-      unique: true,
-      columns: s.userScopes?.length
-        ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])]
-        : s.scope && u[0] !== s.scope
-          ? [s.scope, ...u]
-          : [...u],
-    })), // the grammar already starts a scoped unique index with the scope
-    ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
-  ].map(i => ({
+  const indexes = indexDefinitions(name, s).map(i => ({
     sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})`,
   }));
 
