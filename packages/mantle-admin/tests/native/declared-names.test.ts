@@ -163,7 +163,8 @@ for (const [target, url] of Object.entries(urls) as [keyof typeof urls, string |
         // the scoped reference check reads the declared field's own value: a dangling one writes nothing
         const dangling = await ask("/entries", "POST", { collection: "tasks", data: { ...a, orgId: "missing" } });
         expect([dangling.status, dangling.body.error.code]).toEqual([409, "CONFLICT"]);
-        expect(await titles("sort=updatedAt")).toEqual(["a", "b"]);
+        // `updatedAt` is a sort name; two writes may share a timestamp, so compare the set: only a and b were written
+        expect((await titles("sort=updatedAt&direction=asc")).sort()).toEqual(["a", "b"]);
 
         // Filters: declared names; a date-time matches the same instant in any offset, a date only as a date.
         expect(await titles(`filter_field=orgId&filter_value=${org.id}&sort=startOn&direction=asc`)).toEqual([
