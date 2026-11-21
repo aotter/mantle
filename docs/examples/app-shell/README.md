@@ -82,6 +82,8 @@ HTTP-only Procedures will keep generating with a warning. `fetchService` gives a
 `Cache-Control` `private, no-store`, so a cache in front of the Worker never keeps it by default; the smoke kit fails a
 response without one ([caching](../../handbook/guides/caching.md)). The SDK reads the local issuer's keys in process
 ([Verifying access tokens on Workers](../../handbook/cloudflare/authentication.md#verifying-access-tokens-on-workers)).
+The Worker opts in to `enable_request_signal` so MCP tools can stop cancellable work when the client disconnects.
+See [progress and cancellation](../../handbook/guides/mcp-apps.md#progress-and-cancellation) for deployed behavior.
 
 Search for `AGENT:` to find what an app must fill in.
 

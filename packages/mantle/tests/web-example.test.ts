@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
@@ -11,22 +11,27 @@ const sources = async () => [{ sourceId: "posts.yaml", text: await readFile(join
 async function writeWorker(dir: string) {
   await mkdir(join(dir, "src"));
   const entry = join(dir, "src/worker.ts");
-  // Before package assembly, resolve the public alpha.7 import to its existing kernel.
-  const code = (await readFile(join(example, "src/worker.ts"), "utf8")).replace(
+  await cp(join(example, "src/worker.ts"), entry);
+  // Before package assembly, resolve the public import to its existing kernel.
+  const code = (await readFile(join(example, "src/app.ts"), "utf8")).replace(
     '"@aotter/mantle/contracts"',
     JSON.stringify(resolve(import.meta.dir, "../src/kernel/contracts.js")),
   );
-  await writeFile(entry, code);
+  await writeFile(join(dir, "src/app.ts"), code);
   return entry;
 }
 
-test("documented web Worker serves SQL-visible HTML, REST, indexes and alternates", async () => {
+test("documented Bun server serves SQL-visible HTML, REST, indexes and alternates", async () => {
   const dir = await mkdtemp(join(tmpdir(), "mantle-web-example-")),
     db = new Database(":memory:");
+  const servers: { stop(closeActiveConnections?: boolean): void }[] = [];
   try {
     const files = await generateOrThrow("bun-sqlite", await sources());
     await writeGenerated(join(dir, "generated"), files);
-    const worker = (await import(await writeWorker(dir))).default;
+    await writeWorker(dir);
+    await cp(join(example, "bun"), join(dir, "bun"), { recursive: true });
+    await cp(join(example, "public"), join(dir, "public"), { recursive: true });
+    const { startBun } = await import(join(dir, "bun/server.ts"));
     db.exec(files["schema.sql"]!);
     db.exec(await readFile(join(example, "seed.sql"), "utf8"));
     let queries = 0;
@@ -41,8 +46,27 @@ test("documented web Worker serves SQL-visible HTML, REST, indexes and alternate
       },
       PUBLIC_ORIGIN: "https://public.test",
     };
-    const get = (path: string, method = "GET") =>
-      worker.fetch(new Request("https://other.test" + path, { method }), env);
+    const native = startBun(env, { port: 0 });
+    servers.push(native);
+    const fallback = startBun(env, { port: 0, fetchOnly: true });
+    servers.push(fallback);
+    for (const server of [native, fallback]) {
+      for (const method of ["GET", "HEAD"]) {
+        const health = await fetch(new URL("/health", server.url), { method });
+        expect(health.status).toBe(200);
+        expect(health.headers.get("cache-control")).toBe("no-store");
+        expect(await health.text()).toBe(method === "GET" ? "ok\n" : "");
+        const asset = await fetch(new URL("/assets/posts.svg", server.url), { method });
+        expect(asset.status).toBe(200);
+        expect(asset.headers.get("content-type")).toBe("image/svg+xml");
+        expect(asset.headers.get("cache-control")).toBe("no-cache");
+        expect(await asset.text()).toBe(
+          method === "GET" ? await readFile(join(example, "public/assets/posts.svg"), "utf8") : "",
+        );
+      }
+    }
+    expect(queries).toBe(0);
+    const get = (path: string, method = "GET") => fetch(new URL(path, native.url), { method });
     const index = await (await get("/")).text();
     expect(queries).toBe(2);
     expect(index).toContain('href="/posts/hello"');
@@ -61,11 +85,11 @@ test("documented web Worker serves SQL-visible HTML, REST, indexes and alternate
     const ids: string[] = [];
     let cursor: string | undefined;
     do {
-      const result = await (
+      const result = (await (
         await get("/api/views/posts?limit=1" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""))
-      ).json();
-      ids.push(...result.rows.map((row: { id: string }) => row.id));
-      cursor = result.nextCursor;
+      ).json()) as { rows: { id: string }[]; nextCursor: string | null };
+      ids.push(...result.rows.map(row => row.id));
+      cursor = result.nextCursor ?? undefined;
     } while (cursor);
     expect(ids).toEqual(["hello", "second"]);
     const llms = await (await get("/llms.txt")).text(),
@@ -88,7 +112,7 @@ test("documented web Worker serves SQL-visible HTML, REST, indexes and alternate
       const response = await get("/?cursor=" + encodeURIComponent(cursor));
       expect(response.status).toBe(400);
       expect(response.headers.get("cache-control")).toContain("no-store");
-      expect((await response.json()).error.code).toBe("INPUT_VALIDATION_FAILED");
+      expect(await response.json()).toMatchObject({ error: { code: "INPUT_VALIDATION_FAILED" } });
     }
     for (const [path, status] of [
       ["/posts/%xx", 400],
@@ -103,6 +127,7 @@ test("documented web Worker serves SQL-visible HTML, REST, indexes and alternate
     expect((await get("/posts/%xx")).status).toBe(400);
     expect((await get("/", "POST")).headers.get("allow")).toBe("GET, HEAD");
   } finally {
+    for (const server of servers) server.stop(true);
     db.close();
     await rm(dir, { recursive: true, force: true });
   }
