@@ -364,7 +364,11 @@ export function admin<Env, Database, Handlers = never>(
           site(c),
           list
             ? Promise.resolve(runRoute(list, c)).catch(error => {
-                if (options.authorize && (!(error instanceof ContractError) || error.code !== "AUTH_DENIED"))
+                // a refused or rate-limited list leaves the first page to the client's own read
+                if (
+                  options.authorize &&
+                  (!(error instanceof ContractError) || (error.code !== "AUTH_DENIED" && error.status !== 429))
+                )
                   throw error;
                 return undefined;
               })

@@ -17,7 +17,7 @@ requires:
 | `ctx.admin` | Caller is in the admin layer |
 | `{ ctx.auth.scope: "scope" }` | User scopes include that scope |
 
-Selected REST, MCP and Admin boundaries accept an optional `authorize(target, caller)` callback. `Target`, exported by `@aotter/mantle/contracts`, contains `kind` (`view`, `procedure` or `schema`) and the manifest `name`; Admin generic entry routes also supply `action` (`read`, `create`, `update` or `delete`). The callback runs after credentials and `requires` pass, before execution and row policy. A false result or rejected promise returns `AUTH_DENIED` (HTTP 403); a rejection with an `AUTH_DENIED` `ContractError` keeps its message (for example the role that may call the target), and a synchronous exception is an internal error. MCP tool lists and Admin navigation metadata hide denied targets. Omitting the callback preserves existing behavior; direct generated typed functions do not invoke it.
+Selected REST, MCP and Admin boundaries accept an optional `authorize(target, caller)` callback. `Target`, exported by `@aotter/mantle/contracts`, contains `kind` (`view`, `procedure` or `schema`) and the manifest `name`; Admin generic entry routes also supply `action` (`read`, `create`, `update` or `delete`). The callback runs after credentials and `requires` pass, before execution and row policy. A false result or rejected promise returns `AUTH_DENIED` (HTTP 403); a rejection with an `AUTH_DENIED` `ContractError` keeps its message (for example the role that may call the target), one with `status: 429` keeps its status and `retryAfter` ([limits and authorize](#limits-and-authorize)), and a synchronous exception is an internal error. MCP tool lists and Admin navigation metadata hide denied targets. Omitting the callback preserves existing behavior; direct generated typed functions do not invoke it.
 
 An impersonated session exposes `caller.impersonatedBy`, the real actor’s subject, only on the original branded Caller; applications decide impersonation policy in `authorize(target, caller)` ([caller conditions](#caller-conditions)).
 
@@ -41,8 +41,9 @@ fields for them (ADR-lite #1937). The application decides them in the `authorize
   database handle. A generated function called directly (`run(db, caller, input)`, or a View or Procedure a handler
   calls through its `store`) does not run it: that is application code, trusted like the callback.
 - **A refusal.** REST answers 403 `{ "error": { "code": "AUTH_DENIED", "message", "path" } }`; MCP answers the
-  `tools/call` with HTTP 403 and the same `error`. A rejection with an `AUTH_DENIED` `ContractError` keeps its message;
-  any other refusal reads `Target is not authorized.`
+  `tools/call` with HTTP 403 and the same `error`. A rejection with an `AUTH_DENIED` `ContractError` keeps its message,
+  one with status 429 is answered 429 ([limits and authorize](#limits-and-authorize)); any other refusal reads
+  `Target is not authorized.`
 - **Cost.** For `tools/list`, MCP calls it once per tool to leave out what the caller may not call (unless
   `discovery: "all"`), so keep it cheap.
 - **Gateway callers** carry no identity record, whether `kind: "host"` (admin layer) or `kind: "user"` (member
@@ -50,9 +51,38 @@ fields for them (ADR-lite #1937). The application decides them in the `authorize
 
 ### Limits and authorize
 
-A `ContractError` with `status: 429` thrown from `authorize` reaches REST and MCP as 403 `AUTH_DENIED` and loses its
-`retryAfter`. Refuse with 429 from a ref handler instead, and limit request rates in the application's route:
-[a handler answers 429](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429).
+`authorize` may refuse a call with a limit: a rejection with a `ContractError` whose `status` is 429 keeps its code,
+message, status and fields such as `retryAfter`, on REST, MCP, web and the Admin routes, exactly as the same error
+thrown from a ref handler ([a handler answers 429](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429)):
+
+```ts
+import { ContractError, type Authorize } from "@aotter/mantle/contracts";
+
+const authorize: Authorize = async (target, caller) => {
+  if (await overQuota(caller)) // the application's own counter
+    throw new ContractError("RATE_LIMITED", "Too many requests.", target.kind + "/" + target.name, {
+      status: 429,
+      fields: { retryAfter: 60 },
+    });
+  return true;
+};
+```
+
+- REST and web answer HTTP 429 with `{ "error": { "code", "message", "path", "retryAfter" } }`; MCP answers the
+  `tools/call` with HTTP 429 and the same `error`, before the tool runs. No surface sets a `Retry-After` header.
+- Lists never fail for it: MCP `tools/list` and Admin navigation metadata leave the target out, as for any refusal;
+  Admin's bootstrap omits its first page of entries, and a View batch marks the View `{ "error": true }`. Admin's check
+  of a translation's parent Schema is a yes or no, so a 429 there answers 403.
+- Under [gateway mode](#gateway-mode) the host gets 429 with `{ "error": { "code", "message", "target" } }`, as for a
+  handler's 429, and the access event records `outcome: "error"` with the code as `reason`. MCP `onObservation` gets no
+  `request-refused` event for it.
+- Only status 429 passes. A `ContractError` with another status (or none), or any other rejection, is still 403
+  `AUTH_DENIED` "Target is not authorized.", and a synchronous throw is an internal error. Throw from an `async`
+  callback, or return a rejected promise.
+
+The callback also runs once per target when MCP lists tools or Admin builds its navigation, and cannot tell those from
+a call: read the count there, and count requests (per client address or credential) in the application's route before
+the generated surface.
 
 ## User fields
 

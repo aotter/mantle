@@ -427,7 +427,8 @@ throw new ContractError("RATE_LIMITED", "At most 20 transfers an hour.", "proced
   `{ "diagnostics": [{ "code", "message", "path", "retryAfter" }] }`.
 
 A handler cannot set response headers: an application that sends `Retry-After` adds it in its route, from the error
-body. The same error thrown from `authorize` becomes 403 `AUTH_DENIED` and loses `retryAfter`
+body. The same error rejected from `authorize` keeps its status and `retryAfter` too, and is answered before any
+database work; a list such as `tools/list` hides the target instead of failing
 ([limits and authorize](../reference/authorization.md#limits-and-authorize)). Limits on the request rate itself (per
-client address or credential, before any database work) belong to the platform, in the application's route before the
-generated surface.
+client address or credential, before any database work) are counted in the application's route before the generated
+surface; `authorize` may refuse from that count.

@@ -728,6 +728,81 @@ test("entry editor and translation badges do not query denied related collection
   expect(reads).toBe(2);
 });
 
+test("a 429 from authorize keeps its status and retryAfter on Admin routes; lists hide the target and never fail (#2126)", async () => {
+  let reads = 0;
+  const row = { id: "a", version: 1, title: "A", created_at: 0, updated_at: 0 };
+  const schema = (name: string): EntrySchema => ({
+    binding: compiled,
+    name,
+    descriptor: { name },
+    publishing: false,
+    readOnly: false,
+    fields: { title: "title" },
+    defaults: {},
+    query: () => ({ input: {}, order: "id:asc" }),
+    validate: d => d,
+    values: d => d,
+    row: r => r,
+  });
+  const view = (name: string): any => ({
+    name,
+    allows: () => true,
+    query: () => ({ input: {} }),
+    page: async () => {
+      reads++;
+      return { rows: [{ n: 1 }] };
+    },
+  });
+  const error = { code: "RATE_LIMITED", message: "Slow down.", path: "admin", retryAfter: 9 };
+  const fetch = adminFunction(
+    {
+      ...metadata,
+      collections: [{ name: "posts" }, { name: "notes" }],
+      views: [{ name: "busy" }, { name: "calm" }],
+    },
+    [view("busy"), view("calm")],
+    [],
+    {
+      db: () => ({}),
+      caller: () => admin,
+      routes: entries([schema("posts"), schema("notes")], {
+        ...unused,
+        read: () => {
+          reads++;
+          return [row];
+        },
+      }),
+      authorize: async target =>
+        target.name === "posts" || target.name === "busy"
+          ? Promise.reject(
+              new ContractError(error.code, error.message, error.path, { status: 429, fields: { retryAfter: 9 } }),
+            )
+          : true,
+    },
+  );
+  const ask = async (path: string) => {
+    const response = (await fetch(new Request("https://app.test/admin/api" + path), {}))!;
+    return [response.status, await response.json()];
+  };
+  // The route's own target: 429 and the error as thrown, before any read.
+  for (const path of ["/entries?collection=posts", "/entries/a?collection=posts", "/views/busy"])
+    expect(await ask(path)).toEqual([429, { error }]);
+  expect(reads).toBe(0);
+  // Lists and aggregates leave it out: navigation metadata, bootstrap's first page, a View batch.
+  const [status, bootstrap] = await ask("/bootstrap?collection=posts");
+  expect([status, bootstrap.collections, bootstrap.views, "entries" in bootstrap]).toEqual([
+    200,
+    [{ name: "notes" }],
+    [{ name: "calm" }],
+    false,
+  ]);
+  expect(await ask("/view-batch?names=busy,calm")).toEqual([
+    200,
+    { views: { busy: { error: true }, calm: { rows: [{ n: 1 }] } } },
+  ]);
+  expect((await ask("/entries?collection=notes"))[0]).toBe(200);
+});
+
 test("view-batch runs each View as the caller; a refused, missing or authorize-denied View is the same unavailable and cannot fail the batch", async () => {
   const seen: string[] = [];
   const view = (

@@ -325,10 +325,11 @@ test("generated MCP authorizes calls and filters lists using requires and manife
     });
   }));
 
-test("a handler's 429 keeps its status and retryAfter; from authorize it is 403 AUTH_DENIED; handlers' own calls skip authorize", async () =>
+test("a 429 keeps its status and retryAfter from a handler and from authorize; handlers' own calls skip authorize", async () =>
   fixture(async (dir, db) => {
     const { rest } = await import(join(dir, "rest.ts"));
     const { mcp } = await import(join(dir, "mcp.ts"));
+    const { web } = await import(join(dir, "web.ts"));
     const limited = () =>
       new ContractError("RATE_LIMITED", "Too many notes.", "procedures/echo-notes", {
         status: 429,
@@ -380,15 +381,62 @@ test("a handler's 429 keeps its status and retryAfter; from authorize it is 403 
       { diagnostics: [error] },
     ]);
 
-    // From authorize: 403 AUTH_DENIED with the generic message, retryAfter dropped, on REST and MCP.
-    const refusing = {
-      handlers: { "echo-notes": () => ({ ok: true }) },
+    // From authorize (#2126): the same 429 and body on REST, and on MCP as the tools/call's HTTP answer, before any
+    // handler or database handle. MCP observes no `request-refused` for it: that event is a 401/403 refusal.
+    let handled = 0,
+      acquired = 0;
+    const observed: unknown[] = [];
+    const limiting = {
+      db: () => {
+        acquired++;
+        return db;
+      },
+      handlers: { "echo-notes": () => ({ ok: ++handled }) },
       authorize: async () => Promise.reject(limited()),
+      onObservation: (event: unknown) => {
+        observed.push(event);
+      },
     };
+    expect(await viaRest(limiting)).toEqual({ status: 429, retryAfter: null, body: { error } });
+    const limitedTool = await viaMcp(limiting);
+    expect([limitedTool.status, limitedTool.data.error]).toEqual([429, error]);
+    expect([handled, acquired, observed]).toEqual([0, 0, []]);
+    // A list never fails for it: tools/list leaves the target out, as for any refusal.
+    const listed = await viaMcp(limiting, "tools/list");
+    expect([listed.status, listed.data.result.tools]).toEqual([200, []]);
+    // web: a page's View read answers the same 429.
+    const site = web({
+      db,
+      caller: () => admin,
+      authorize: limiting.authorize,
+      origin: "https://app.test",
+      title: "Notes",
+      description: "",
+      pages: { "/notes/{id}": { view: "open-notes", list: "open-notes" } },
+    });
+    const sitemap = await site.fetch(new Request("https://app.test/sitemap.xml"));
+    expect([sitemap.status, await sitemap.json()]).toEqual([429, { error }]);
+
+    // Every other rejection is still 403 AUTH_DENIED with the generic message: a 429 without its status, another
+    // status, an Error with a status property; a synchronous throw of the same 429 is an internal error.
     const denied = { code: "AUTH_DENIED", message: "Target is not authorized.", path: "procedure/echo-notes" };
-    expect(await viaRest(refusing)).toEqual({ status: 403, retryAfter: null, body: { error: denied } });
-    const refused = await viaMcp(refusing);
-    expect([refused.status, refused.data.error]).toEqual([403, denied]);
+    for (const rejection of [
+      new ContractError("RATE_LIMITED", "Too many notes.", "procedures/echo-notes", { fields: { retryAfter: 60 } }),
+      new ContractError("BUSY", "Busy.", "procedures/echo-notes", { status: 503, fields: { retryAfter: 60 } }),
+      Object.assign(Error("internal detail"), { status: 429, fields: { retryAfter: 60 } }),
+    ]) {
+      const refusing = { handlers: { "echo-notes": () => ({ ok: true }) }, authorize: () => Promise.reject(rejection) };
+      expect(await viaRest(refusing)).toEqual({ status: 403, retryAfter: null, body: { error: denied } });
+      const refused = await viaMcp(refusing);
+      expect([refused.status, refused.data.error]).toEqual([403, denied]);
+    }
+    const sync = await viaRest({
+      handlers: {},
+      authorize: () => {
+        throw limited();
+      },
+    });
+    expect([sync.status, sync.body.error.code]).toEqual([500, "INTERNAL_ERROR"]);
 
     // An AUTH_DENIED ContractError keeps its message on REST too.
     const reason = new ContractError("AUTH_DENIED", "Only a manager may call echo-notes.", "procedure/echo-notes");
