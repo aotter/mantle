@@ -135,7 +135,9 @@ The metafile startup guard rejects static Better Auth imports; keep auth behind
 
 `mantle generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
 (the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
-are yours (#1463).
+are yours (#1463). Under Node the CLI imports a TypeScript module as Node runs it (type stripping), except that a
+relative `./db.js` it imports resolves to `./db.ts` when no `db.js` exists, as TypeScript and Bun resolve it; the
+module's other imports must load at generation time too.
 
 For programmatic auth generation, import `generateFromSources` from
 `@aotter/mantle/generate/auth`, not the bare `/generate` entry. Both use the

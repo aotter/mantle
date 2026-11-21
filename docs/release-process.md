@@ -28,6 +28,22 @@ installs the exact candidate, then runs its `pnpm check`: `mantle generate`,
 The same reference is gated against exact tarballs before Core tagging. It is
 a test/example, not a scaffold product or another repository release.
 
+The packed-consumer checks (`scripts/check-packed-consumer.mjs`, behind
+`pnpm check:worker-consumer`, `scripts/check-examples.mjs` including `--fresh`,
+and `scripts/check-admin-build.mjs`) install without a lockfile, as a user
+copying an example would, so a dependency published minutes earlier could
+otherwise fail them. npm resolves only versions published at least
+`MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS` ago (`--before`, default 14). pnpm 10.16
+and newer resolve only versions published at least 120 minutes ago
+(`minimumReleaseAge`, through `npm_config_minimum_release_age`, which overrides
+it). The Mantle tarballs are local files with no publish time, so neither
+cutoff applies to them. The repository's pnpm 9 has no such setting: there a
+failed install is retried, three times 60 s apart, and six times 90 s apart
+when a registry tarball answers 404 (`ERR_PNPM_FETCH_404` on a `.tgz`, a
+version whose tarball has not reached every registry edge yet). The
+public-registry gate installs the just-published candidate and keeps its own
+three attempts 60 s apart.
+
 ## Changing release automation
 
 Before editing a release workflow, put a finite state table plus its

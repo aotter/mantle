@@ -48,18 +48,19 @@ export default {
 } satisfies ExportedHandler<Bindings>;
 `,
 );
-// Better Auth is built once per isolate from the env it is given: service.ts gives it `requestDb`. auth.ts itself imports
-// nothing new, as `mantle generate --auth` loads it with Node, which does not map `./db.js` to db.ts.
+// Better Auth is built once per isolate, on `requestDb` imported from ./db.js as the handbook's src/auth.ts does
+// (`mantle generate --auth` loads it under Node). Its sign-up gate reads `env.DB`, so service.ts gives the isolate's
+// instance `requestDb` there too.
 edit(
   "src/auth.ts",
   "import { d1Adapter } from",
   "import { postgresAdapter } from",
   "import { d1BootstrapAdmin } from",
-  "import { postgresBootstrapAdmin } from",
+  'import { requestDb } from "./db.js";\nimport { postgresBootstrapAdmin } from',
   "d1BootstrapAdmin(env.DB,",
-  "postgresBootstrapAdmin(env.DB,",
+  "postgresBootstrapAdmin(requestDb,",
   "d1Adapter(env.DB)",
-  "postgresAdapter(env.DB)",
+  "postgresAdapter(requestDb)",
 );
 edit(
   "src/service.ts",

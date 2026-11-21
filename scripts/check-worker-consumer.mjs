@@ -12,7 +12,8 @@ if (process.argv.length !== 2 && !(registry && process.argv.length === 4)) {
   throw new Error("Usage: check-worker-consumer.mjs [--registry <exact Core version>]");
 }
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
-const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, env, stdio: "inherit", timeout: 300_000 });
+// The packed consumer may wait out a registry tarball that has not propagated yet (check-packed-consumer.mjs retryWait).
+const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, env, stdio: "inherit", timeout: 900_000 });
 if (!registry) {
   run(
     process.execPath,

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -33,6 +33,8 @@ const pm = pmAt < 0 ? null : args.splice(pmAt, 2)[1];
 if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? ""))
   throw new Error("--pm takes npm or pnpm@<exact version>");
 const npm = pm === "npm";
+// pnpm's `minimumReleaseAge` for the consumer install, in minutes (see `before`).
+const MIN_RELEASE_AGE_MINUTES = "120";
 const command = separator < 0 ? [] : process.argv.slice(separator + 1);
 const help = args.some(arg => arg === "-h" || arg === "--help");
 
@@ -46,6 +48,17 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   if (!rejected) throw new Error("packed-consumer provenance self-test accepted a registry install");
   if (before(0).length !== 0 || before(14, Date.UTC(2026, 0, 15))[0] !== "--before=2026-01-01T00:00:00.000Z") {
     throw new Error("packed-consumer release-age self-test failed");
+  }
+  const tarball404 =
+    " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@tiptap/core/-/core-3.35.0.tgz: Not Found - 404";
+  const metadata404 = " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@tiptap%2Fcore: Not Found - 404";
+  const waits = output => [1, 2, 3, 4, 5, 6].map(attempt => retryWait(output, attempt));
+  if (
+    waits(tarball404).join() !== "90000,90000,90000,90000,90000," ||
+    waits(metadata404).join() !== "60000,60000,,,," ||
+    waits("ERR_PNPM_PEER_DEP_ISSUES").join() !== "60000,60000,,,,"
+  ) {
+    throw new Error("packed-consumer install retry self-test failed");
   }
   const source = join(tmpdir(), "source");
   if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
@@ -147,7 +160,11 @@ try {
     }
   } else {
     addOverrides(join(consumer, "package.json"), tarballs);
-    install("pnpm", ["install", "--no-frozen-lockfile"], consumer, env);
+    // pnpm 10.16+ resolves only versions published MIN_RELEASE_AGE_MINUTES ago; pnpm 9 ignores the setting.
+    install("pnpm", ["install", "--no-frozen-lockfile"], consumer, {
+      npm_config_minimum_release_age: process.env.npm_config_minimum_release_age ?? MIN_RELEASE_AGE_MINUTES,
+      ...env,
+    });
     const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
     assertExactTarballResolutions(lockfile, tarballs);
   }
@@ -281,13 +298,16 @@ function addIfDirectory(found, name, path) {
 
 /**
  * The consumer installs without a lockfile, as a user copying the example would, so it resolves whatever the registry
- * serves at that minute. Two guards keep a release from depending on that minute:
+ * serves at that minute. Three guards keep a check or a release from depending on that minute:
  * - npm resolves only versions published at least MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ago (default 14, the Dependabot
  *   cooldown; 0 turns it off). The Mantle tarballs are files, so the cutoff never applies to them.
- * - an install that fails is tried again, since a dependency published a moment ago may name a peer that is not
- *   on the registry yet.
- * ponytail: pnpm 9 has no release-age setting, so the pnpm path only retries; set `minimumReleaseAge` there once the
- * repository's pnpm supports it.
+ * - pnpm 10.16 and newer (`--pm pnpm@10…`) resolve only versions published at least MIN_RELEASE_AGE_MINUTES ago
+ *   (`minimumReleaseAge`; `npm_config_minimum_release_age` in the environment overrides it, 0 turns it off). File
+ *   tarballs have no publish time, so the Mantle packages install whatever their age; their dependencies do not.
+ * - an install that fails is tried again (retryWait), since a dependency published a moment ago may name a peer that
+ *   is not on the registry yet, or a tarball that has not reached every registry edge.
+ * ponytail: the repository's pnpm 9 has no release-age setting, so on that path only the retry guards; the setting
+ * takes effect there by itself once the repository's pnpm is 10.16 or newer.
  */
 function before(days = Number(process.env.MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ?? 14), now = Date.now()) {
   if (!Number.isFinite(days) || days < 0)
@@ -295,18 +315,33 @@ function before(days = Number(process.env.MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ?
   return days === 0 ? [] : [`--before=${new Date(now - days * 86_400_000).toISOString()}`];
 }
 
-function install(command, args, cwd, env, attempts = 3, waitMs = 60_000) {
+function install(command, args, cwd, env) {
   for (let attempt = 1; ; attempt++) {
-    try {
-      return run(command, args, cwd, false, env);
-    } catch (error) {
-      if (attempt === attempts) throw error;
-      console.error(
-        `[packed-consumer] ${command} install failed (attempt ${attempt} of ${attempts}); retrying in ${waitMs / 1000}s`,
-      );
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
-    }
+    // The output is kept to tell a registry tarball that is not there yet from any other failure.
+    const { status, stdout, stderr, error } = spawnSync(command, args, {
+      cwd,
+      env: { ...process.env, CI: "1", ...env },
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+    });
+    process.stdout.write(stdout ?? "");
+    process.stderr.write(stderr ?? "");
+    if (status === 0) return;
+    const waitMs = retryWait(`${stdout}${stderr}`, attempt);
+    if (error || waitMs === undefined) throw error ?? new Error(`${command} install failed (exit ${status})`);
+    console.error(`[packed-consumer] ${command} install failed (attempt ${attempt}); retrying in ${waitMs / 1000}s`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
   }
+}
+
+/**
+ * How long to wait after failed install `attempt` before the next, or undefined to give up. A registry tarball that
+ * answers 404 (pnpm 9's ERR_PNPM_FETCH_404 on a `.tgz`) was published minutes ago and has not reached every registry
+ * edge yet: it gets six attempts 90 s apart. Anything else, a missing package's metadata included, gets three 60 s apart.
+ */
+function retryWait(output, attempt) {
+  const tarball = /ERR_PNPM_FETCH_404\s+GET \S+\.tgz\b/.test(output);
+  if (attempt < (tarball ? 6 : 3)) return tarball ? 90_000 : 60_000;
 }
 
 function run(command, args, cwd, quiet = false, extraEnv = {}) {

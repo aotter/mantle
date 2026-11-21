@@ -229,7 +229,8 @@ Full checks (`.github/workflows/full-checks.yml`) also runs by hand
 (Actions → Full checks → Run workflow on the branch). Do that before every release, alpha included (an alpha releases
 from `develop` and never passes the `main` gate), before merging a change to the PostgreSQL driver/dialect, auth, the
 kernel request pipeline or generator output, or when an Admin UI change may behave differently on Linux. It runs native
-four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
+four-target and Wrangler/D1 integrations, packed-consumer checks (lockfile-free installs that skip versions published
+minutes ago; [release process](docs/release-process.md)), doc examples,
 OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
 and MCP App host bridge), and size reports. Run the boundaries locally with
 `pnpm --filter @aotter/mantle-admin test:browser` and Chrome installed. The

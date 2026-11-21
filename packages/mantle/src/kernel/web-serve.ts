@@ -109,11 +109,11 @@ export function serve<Database, E>(
   };
   const row = async (entry: NonNullable<ReturnType<typeof match>>, reader: Visit) =>
     (await reader.read(entry.page.view, entry.params)).rows[0];
-  const respond = async (request: Request, body: string, type: string, caller: Caller) => {
+  const respond = async (request: Request, body: string, type: string, caller: Caller, canonical?: string) => {
     const { webResponse } = await import("./web-response.js");
     const cacheControl =
       caller.kind === "anonymous" ? (options.cacheControl ?? "public, max-age=60") : "private, no-store";
-    return webResponse(request, body, type, cacheControl);
+    return webResponse(request, body, type, cacheControl, canonical);
   };
 
   const render = async (request: Request, openVisit: () => Promise<Visit>): Promise<Response | undefined> => {
@@ -146,7 +146,8 @@ export function serve<Database, E>(
       const body = found[markdown!];
       if (body == null) return notFound();
       if (typeof body !== "string") throw new TypeError("Markdown field must return text.");
-      return respond(request, body, "text/markdown", caller);
+      // The Markdown names its HTML page: the canonical URL `head()` emits for the same row.
+      return respond(request, body, "text/markdown", caller, validUrl(entry!.path, found, entry!.page.view));
     } catch (error) {
       return hostFailure(error, caller);
     }
