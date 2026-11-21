@@ -1,10 +1,17 @@
 name: Full checks
 
-# The gate on `main`: every PR into `main` (promotion, hotfix) runs the whole suite, whoever opened it. Drafts run too.
-# Manual as well: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it
-# before an alpha, which releases from `develop` and never passes this gate, or on a branch before merging a change to
-# the PostgreSQL driver/dialect, auth, the kernel request pipeline or generator output. PRs into `develop` run the
-# lighter ci.yml (typecheck, package tests and test:native against PostgreSQL) plus local `pnpm check:pg`.
+# What only this workflow tests, in two parallel jobs: the four packed example runs (recipes on cloudflare-d1 and on
+# cloudflare-postgres, club-events, purchasing), and the Wrangler/D1 integrations plus the Admin browser tests (Chrome).
+# - The gate on `main`: every PR into `main` (promotion, hotfix) runs it, whoever opened it. Drafts run too. There it also
+#   calls ci.yml (job `PR CI`: typecheck and gates, package tests against PostgreSQL, test:native), which otherwise runs
+#   only for PRs into `develop`, and `Typecheck + tests` needs all three.
+# - Manual: Actions → Full checks → Run workflow (on any branch; the dispatch entry comes from main). Run it before an
+#   alpha, which releases from `develop` and never passes this gate, or on a branch before merging a change to the
+#   PostgreSQL driver/dialect, auth, the kernel request pipeline or generator output. ci.yml already ran on that PR, so a
+#   manual run does not repeat it, and its gate reports `Full checks`, not the required `Typecheck + tests`.
+# Not here: the fresh-install matrix (`check-examples.mjs --fresh`) and the Admin build under `npm ci` run only in
+# release.yml, so a failure there shows first at release; worker-consumer, doc examples, OSS plugin and the size reports
+# run in `pnpm check` (local and release.yml).
 on:
   pull_request:
     branches: [main]
@@ -20,24 +27,78 @@ permissions:
 
 jobs:
   # The ruleset shared by `main` and `develop` requires the status `Typecheck + tests`. ci.yml reports it for PRs into
-  # `develop`; this job reports it for PRs into `main`, where it means the whole suite passed.
+  # `develop`; this job reports it for PRs into `main`, where it means ci.yml's jobs and both jobs below passed. A manual
+  # run names it `Full checks`, so it never adds a second `Typecheck + tests` to a `develop` PR's head commit.
   gate:
-    name: Typecheck + tests
-    needs: [full-checks]
+    name: ${{ github.event_name == 'pull_request' && 'Typecheck + tests' || 'Full checks' }}
+    needs: [pr-ci, examples, integrations]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
-      - name: Require full checks
+      - name: Require every job (PR CI only on a PR)
         env:
-          FULL_CHECKS: ${{ needs.full-checks.result }}
-        run: test "$FULL_CHECKS" = success
+          EVENT: ${{ github.event_name }}
+          PR_CI: ${{ needs.pr-ci.result }}
+          EXAMPLES: ${{ needs.examples.result }}
+          INTEGRATIONS: ${{ needs.integrations.result }}
+        run: |
+          test "$EXAMPLES" = success && test "$INTEGRATIONS" = success
+          test "$EVENT" != pull_request || test "$PR_CI" = success
 
-  full-checks:
+  # ci.yml's jobs; their checks read `PR CI / ...`, never the bare required name.
+  pr-ci:
+    name: PR CI
+    if: ${{ github.event_name == 'pull_request' }}
+    uses: ./.github/workflows/ci.yml
+    with:
+      drafts: true
+
+  examples:
+    name: Examples
     runs-on: ubuntu-latest
-    # One packed-consumer install that waits out a registry tarball not yet on every edge (check-packed-consumer.mjs
-    # retryWait) takes up to 330 s more waiting and three more failed attempts than before, about 9 minutes; later
-    # installs in the same run then find the tarball.
-    timeout-minutes: 40
+    # About 7 minutes: setup and build, Chrome, then four packed-consumer runs (about 4 minutes). One install that waits
+    # out a registry tarball not yet on every edge (check-packed-consumer.mjs retryWait) takes up to 330 s more waiting
+    # and three more failed attempts, about 9 minutes; later installs in the same run then find the tarball.
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: mantle, POSTGRES_PASSWORD: mantle, POSTGRES_DB: mantle }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    # recipes on cloudflare-postgres needs MANTLE_NEXT_WORKER_PG_URL; the examples' smoke and MCP App tests need Chrome.
+    env:
+      MANTLE_NEXT_WORKER_PG_URL: postgres://mantle:mantle@localhost:5432/mantle
+      MANTLE_TEST_CHROMIUM: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Chrome
+        run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
+      # Naming the examples skips the fresh-install matrix, which release.yml runs (--fresh).
+      - name: Examples from packed packages (recipes on cloudflare-d1 and cloudflare-postgres, club-events, purchasing)
+        run: node scripts/check-examples.mjs recipes club-events purchasing
+
+  integrations:
+    name: Integrations + browser
+    runs-on: ubuntu-latest
+    # About 8 minutes: setup and build, Chrome, the two integration steps (about 1 minute) and the browser tests (about
+    # 3.5 minutes). No registry install, so no back-off to allow for.
+    timeout-minutes: 20
+    # The integration steps also run their bun-postgres and cloudflare-postgres cases when these are set.
     services:
       postgres:
         image: postgres:16
@@ -64,18 +125,7 @@ jobs:
           bun-version: 1.3.14
 
       - run: pnpm install --frozen-lockfile
-
-      - run: pnpm run check:format
       - run: pnpm build
-      - run: pnpm run check:boundaries
-      - run: pnpm run check:skills
-      - run: pnpm run check:plugin-manifests
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm check:startup
-      - run: pnpm check:release
-      - name: Native four-target conformance
-        run: pnpm --filter @aotter/mantle test:native
       - name: Native Wrangler/D1 integrations
         working-directory: packages/mantle
         env:
@@ -95,23 +145,7 @@ jobs:
         run: |
           pnpm --filter @aotter/mantle exec bun test tests/cli.test.ts tests/web-example.test.ts
           pnpm --filter @aotter/mantle-admin test:native-server
-      - name: Packed-consumer provenance self-test
-        run: node scripts/check-packed-consumer.mjs --self-test
-      - run: pnpm check:worker-consumer
       - name: Install Chrome
         run: pnpm --filter @aotter/mantle-admin exec playwright install --with-deps chrome
-      - run: pnpm check:examples
-      - name: Admin build under npm ci --ignore-scripts, served without node_modules
-        run: node scripts/check-admin-build.mjs
-      - run: pnpm check:doc-examples
-      - run: pnpm check:oss-plugin
       - name: Admin sandbox boundaries (Chrome)
         run: pnpm --filter @aotter/mantle-admin test:browser
-      - name: SDK bundle size report
-        working-directory: packages/mantle
-        run: bun scripts/check-size.ts
-      - name: SDK package size report
-        working-directory: packages/mantle
-        run: bun scripts/check-package.ts
-      - name: UI and Admin size report
-        run: pnpm check:ui-size

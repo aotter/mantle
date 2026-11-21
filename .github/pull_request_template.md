@@ -33,7 +33,7 @@ None.
 
 - [ ] `pnpm check:pg` (PostgreSQL included)
 - [ ] Only `pnpm check`, PostgreSQL tests skipped, because:
-- [ ] Linux Full checks run on this branch (link; needed for PostgreSQL driver/dialect, auth, kernel request pipeline or generator output changes):
+- [ ] Linux Full checks run on this branch (link; examples, Wrangler/D1 integrations and Admin browser tests; needed for PostgreSQL driver/dialect, auth, kernel request pipeline or generator output changes):
 - [ ] Not run / not applicable:
 - [ ] Other:
 

@@ -2,7 +2,7 @@
 // A host pipeline that installs with `npm ci --ignore-scripts`, runs `npm run build`, deletes node_modules and uploads
 // only the Worker and assets directories. The reference service, from packed packages, builds its Worker and Admin that
 // way; then, with node_modules gone, a Wrangler outside the project serves dist/worker and dist/client.
-// It runs on Linux in Full checks and release, so Linux's native build binaries install without scripts. The lockfile is
+// It runs on Linux in release (release.yml), so Linux's native build binaries install without scripts. The lockfile is
 // made on the same machine, so this does not cover a lockfile made on another platform (see the README).
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

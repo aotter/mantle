@@ -37,6 +37,11 @@ export interface CheckMcpAppOptions {
    * and console errors it causes are collected as before.
    */
   readonly inspect?: (app: McpAppScenario) => void | Promise<void>;
+  /**
+   * @internal Shorter waits for this package's own failure-path tests, which would otherwise wait each one out; not part
+   * of the published types (`stripInternal`), and applications get the defaults.
+   */
+  readonly waits?: { readonly renderMs?: number; readonly settleMs?: number; readonly inspectMs?: number };
 }
 
 /** One scenario's opened App, for `inspect`. */
@@ -54,11 +59,8 @@ interface Manifest {
   readonly pages: readonly string[];
 }
 
-/** After the last request or console message, how long the App is left quiet before the run is judged, and the longest it waits. */
-const QUIET_MS = 400,
-  SETTLE_CAP_MS = 5_000;
-/** The longest `inspect` may take for one scenario. */
-const INSPECT_MS = 10_000;
+/** After the last request or console message, how long the App is left quiet before the run is judged. */
+const QUIET_MS = 400;
 
 /** The spec's default CSP for an App that declares none, with what the App declared added as a host adds it. */
 function policy(csp: McpCsp): string {
@@ -143,11 +145,15 @@ const kindOf = (type: string): Kind =>
  * Chromium: set `MANTLE_TEST_CHROMIUM` to its executable, or install one for `playwright-core` (`npx playwright-core install chromium`).
  * Each run waits until the App has been quiet (no request, no console message) for 400 ms, at most 5 s.
  */
-export async function checkMcpApp({
-  catalogue,
-  html: file = "dist/client/admin/mcp-app.html",
-  inspect,
-}: CheckMcpAppOptions): Promise<void> {
+export async function checkMcpApp(options: CheckMcpAppOptions): Promise<void> {
+  // destructured here, not in the signature, so the published declaration does not name the internal `waits`
+  const {
+    catalogue,
+    html: file = "dist/client/admin/mcp-app.html",
+    inspect,
+    // the longest the App may take to render, the longest it is left to settle, and the longest `inspect` may take, per scenario
+    waits: { renderMs = 10_000, settleMs = 5_000, inspectMs = 10_000 } = {},
+  } = options;
   const html = readFileSync(file, "utf8");
   const manifest = declaredMeta<Manifest>(html, "mantle-mcp-app");
   const csp = declaredMeta<McpCsp>(html, "mantle-mcp-csp") ?? {};
@@ -277,7 +283,7 @@ export async function checkMcpApp({
               .catch(() => undefined);
           if (seen) shown = seen;
           if (host?.state.done && !shown.waiting && shown[shows]) break;
-          if (Date.now() - started > 10_000) {
+          if (Date.now() - started > renderMs) {
             note(
               `the App did not render the ${shows === "page" ? "page" : "View's rows"} (${shown.waiting ? "it still shows its waiting text" : shows === "page" ? "the page is empty or missing" : "no rows table"})`,
             );
@@ -290,7 +296,7 @@ export async function checkMcpApp({
         const settle = async () => {
           last = Date.now();
           const quiet = Date.now();
-          while (Date.now() - last < QUIET_MS && Date.now() - quiet < SETTLE_CAP_MS) await page.waitForTimeout(50);
+          while (Date.now() - last < QUIET_MS && Date.now() - quiet < settleMs) await page.waitForTimeout(50);
         };
         await settle();
         const host = await state();
@@ -303,10 +309,7 @@ export async function checkMcpApp({
             await Promise.race([
               inspect({ tool, theme, frame: opened }),
               new Promise((_, reject) => {
-                timer = setTimeout(
-                  () => reject(new Error(`inspect did not settle within ${INSPECT_MS} ms`)),
-                  INSPECT_MS,
-                );
+                timer = setTimeout(() => reject(new Error(`inspect did not settle within ${inspectMs} ms`)), inspectMs);
               }),
             ]);
           } catch (error) {

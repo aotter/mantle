@@ -97,10 +97,13 @@ dist-tag DELETE only added failure and re-run state.
   changes only through promotion PRs and hotfix PRs (below); it is never pushed
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
-  On a PR into `main` that check is the whole Full checks suite, for every
-  author. On a ready PR into `develop` it is the PR CI (`ci.yml`: typecheck,
-  package tests against a PostgreSQL service and `test:native`), for every
-  author; on a draft it is skipped, which counts as passing.
+  On a PR into `main` that check is the Full checks workflow, for every
+  author: the PR CI's jobs, which it calls, plus its own examples and
+  integrations + browser jobs. On a ready PR into `develop` it is the PR CI
+  (`ci.yml`: typecheck, package tests against a PostgreSQL service and
+  `test:native`), for every author; on a draft it is skipped, which counts as
+  passing. A manual Full checks run reports `Full checks`, never
+  `Typecheck + tests`.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
 - Publish uses `--tag mantle-release`. `mantle-release` is an internal
@@ -184,8 +187,13 @@ dist-tag DELETE only added failure and re-run state.
 5. Freeze the PR head for self review; that Full checks run must pass before
    merge, besides the PR's own `develop` CI, which runs `test:native` but not
    Full checks' Wrangler/D1 integration step, the CLI and Admin native-server
-   tests, worker-consumer, examples, doc examples, OSS plugin, Chrome or size
-   checks. Merge into
+   tests, the four example runs or the Admin browser tests. A manual Full
+   checks run does not repeat the PR CI. What neither runs is checked here,
+   by the controller: the fresh-install matrix (`check-examples.mjs --fresh`,
+   npm and pnpm 10) and the Admin build under `npm ci --ignore-scripts`
+   (`check-admin-build.mjs`) run only in `release.yml`, so a failure there
+   first shows at release; worker-consumer, doc examples, OSS plugin and size
+   reports run in `pnpm check` (step 4 and the controller). Merge into
    `develop` by rebase or with a merge commit: the controller needs the tip to
    be the commit GitHub records as that PR's merge, which both produce. A
    promotion into `main` is different and always takes a merge commit (below).

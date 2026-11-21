@@ -223,7 +223,8 @@ ready. It builds once in each of two parallel jobs: typecheck plus boundaries, s
 graphs/budgets and release/packed-consumer self-tests; and the three packages’ tests, including every PostgreSQL test,
 against a PostgreSQL 16 service, then `test:native`. Both must pass the required `Typecheck + tests` status. Dependabot
 patch and digest bumps merge automatically once it is green. A PR into `main` (promotion or hotfix) runs the
-**Full checks** workflow instead, and there `Typecheck + tests` passes only when the whole suite does.
+**Full checks** workflow instead, which calls the PR CI's two jobs (as `PR CI / …`) beside its own two, and there
+`Typecheck + tests` passes only when all of them do.
 Build typechecks library sources; `pnpm typecheck` checks the remaining test,
 app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
@@ -232,11 +233,17 @@ Package and upload bytes are reports; cold-start checks remain gates.
 Full checks (`.github/workflows/full-checks.yml`) also runs by hand
 (Actions → Full checks → Run workflow on the branch). Do that before every release, alpha included (an alpha releases
 from `develop` and never passes the `main` gate), before merging a change to the PostgreSQL driver/dialect, auth, the
-kernel request pipeline or generator output, or when an Admin UI change may behave differently on Linux. It runs native
-four-target and Wrangler/D1 integrations, packed-consumer checks (lockfile-free installs that skip versions published
-minutes ago; [release process](docs/release-process.md)), doc examples,
-OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
-and MCP App host bridge), and size reports. Run the boundaries locally with
+kernel request pipeline or generator output, or when an Admin UI change may behave differently on Linux. It runs only
+what neither the PR CI nor local `pnpm check` runs, in two parallel jobs: the four example runs from packed packages
+(`node scripts/check-examples.mjs recipes club-events purchasing`: recipes on `cloudflare-d1` and on
+`cloudflare-postgres`, club-events, purchasing; lockfile-free installs that skip versions published minutes ago,
+[release process](docs/release-process.md)); and the Wrangler/D1 integrations, the Wrangler CLI and Admin D1
+integrations and the Admin browser tests, including the two Chrome sandbox boundaries (design preview and MCP App host
+bridge). A manual run does not repeat the PR CI, which already ran on the PR, and reports `Full checks` rather than
+`Typecheck + tests`. The fresh-install matrix (`check-examples.mjs --fresh`, npm and pnpm 10) and the Admin build under
+`npm ci --ignore-scripts` (`check-admin-build.mjs`) run only in the release workflow, so a failure there shows first at
+release; the packed worker-consumer smoke, doc examples, OSS plugin validation and size reports run in `pnpm check`,
+locally and in the release workflow. Run the browser tests locally with
 `pnpm --filter @aotter/mantle-admin test:browser` and Chrome installed. The
 Admin sign-in/list/edit/publish/translation browser flow is covered by maintainer
 manual acceptance; the packed worker-consumer smoke checks the service and Admin
