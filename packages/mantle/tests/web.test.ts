@@ -43,6 +43,18 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
+metadata: {name: body-by-slug}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, minLength: 2}}
+  sql: SELECT id, body FROM posts WHERE slug = input.slug AND visible = true ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
 metadata: {name: by-visible}
 spec:
   surface: public
@@ -121,6 +133,11 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(await md.text()).toBe("# body 1");
     expect(md.headers.get("cache-control")).toBe("public, max-age=60");
     for (const response of [llms, sitemap, md]) expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    // The Markdown names its HTML page on the configured origin, never the request host; the indexes name none.
+    const link = '<https://site.test/posts/a%26b%29>; rel="canonical"';
+    expect(md.headers.get("link")).toBe(link);
+    for (const response of [llms, sitemap]) expect(response.headers.get("link")).toBeNull();
+    expect((await site.fetch(request("/posts/a%26b).md", { method: "HEAD" }))).headers.get("link")).toBe(link);
     expect((await site.fetch(request("/posts/post0.md"))).status).toBe(404);
     expect(await site.head(request("/posts/post0"))).toBe("");
     const tags = await site.head(request("/posts/a%26b)"));
@@ -128,9 +145,9 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(tags).toContain('type="text/markdown"');
     expect(tags).toContain('hreflang="en"');
     const etag = md.headers.get("etag");
-    expect((await site.fetch(request("/posts/a%26b).md", { headers: { "if-none-match": "W/" + etag } }))).status).toBe(
-      304,
-    );
+    const notModified = await site.fetch(request("/posts/a%26b).md", { headers: { "if-none-match": "W/" + etag } }));
+    expect(notModified.status).toBe(304);
+    expect(notModified.headers.get("link")).toBe(link);
     db.query("UPDATE posts SET body='changed' WHERE id='1'").run();
     const changed = await site.fetch(request("/posts/a%26b).md", { headers: { "if-none-match": etag } }));
     expect(changed.status).toBe(200);
@@ -161,9 +178,9 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
       description: "x",
       pages: { "/posts/{slug}": { view: "post-by-slug", markdown: "body" } },
     });
-    expect((await dynamic.fetch(request("/posts/a%26b).md"), { admin: true })).headers.get("cache-control")).toBe(
-      "private, no-store",
-    );
+    const signedIn = await dynamic.fetch(request("/posts/a%26b).md"), { admin: true });
+    expect(signedIn.headers.get("cache-control")).toBe("private, no-store");
+    expect(signedIn.headers.get("link")).toBe(link);
     expect(resolved).toBe(1);
     db.query(
       "INSERT INTO posts(id,version,created_at,updated_at,slug,title,body,visible) VALUES ('md',1,0,0,'readme.md','Readme','# Readme',1)",
@@ -201,6 +218,48 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     });
     // One locale's hreflang on every translation would mislabel them, so several locales emit none.
     expect(await multilingual.head(request("/posts/a%26b)"))).not.toContain("hreflang");
+    // Each locale's Markdown names that locale's page. A template literal the URL parser leaves raw in a path (`|`)
+    // is not a URI character: the Link percent-encodes it, while the head tag keeps the template as written.
+    const zh = "/zh-TW/" + encodeURIComponent("文章");
+    const localized = web({
+      db,
+      caller: { kind: "anonymous" },
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      locales: ["en", "zh-TW"],
+      pages: {
+        "/en/posts/{slug}": { view: "post-by-slug", markdown: "body" },
+        [zh + "/{slug}"]: { view: "post-by-slug", markdown: "body" },
+        "/en/a|b/{slug}": { view: "post-by-slug", markdown: "body" },
+      },
+    });
+    for (const [path, canonical] of [
+      ["/en/posts/a%26b).md", "/en/posts/a%26b%29"],
+      [zh + "/a%26b).md", zh + "/a%26b%29"],
+      ["/en/a|b/a%26b).md", "/en/a%7Cb/a%26b%29"],
+    ])
+      expect((await localized.fetch(request(path!)))!.headers.get("link")).toBe(
+        `<https://site.test${canonical}>; rel="canonical"`,
+      );
+    expect(await localized.head(request("/en/a|b/a%26b)"))).toContain(
+      'rel="canonical" href="https://site.test/en/a|b/a%26b%29"',
+    );
+    // A row without its page's path parameter has no canonical URL: the Markdown still answers, with no Link, as head
+    // gives no tags for it.
+    const unlinked = web({
+      db,
+      caller: { kind: "anonymous" },
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      pages: { "/notes/{slug}": { view: "body-by-slug", markdown: "body" } },
+    });
+    const note = await unlinked.fetch(request("/notes/a%26b).md"));
+    expect(note.status).toBe(200);
+    expect(await note.text()).toBe("changed");
+    expect(note.headers.get("link")).toBeNull();
+    expect(await unlinked.head(request("/notes/a%26b)"))).toBe("");
     // Given the row the application already read, head reads no View: post0 is hidden from the View.
     const hidden = { id: "0", slug: "post0", body: "# body 0" };
     expect(await site.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(

@@ -120,7 +120,12 @@ function consumer(project, command, pm) {
       "--",
       ...command,
     ],
-    { cwd: root, stdio: "inherit", timeout: 900_000 },
+    // The consumer's install may wait out a registry tarball that has not reached every edge yet (check-packed-consumer
+    // retryWait): six attempts with five 90 s waits (450 s), where 900 s held three attempts with two 60 s waits (120 s).
+    // The 330 s more waiting and three more failed attempts (about a minute each) fit in 1,500 s (900 + 330 + 180 =
+    // 1,410), so an install that succeeds on its last attempt still leaves this run its 900 s for packing, installing
+    // and the example's own build and tests.
+    { cwd: root, stdio: "inherit", timeout: 1_500_000 },
   );
 }
 

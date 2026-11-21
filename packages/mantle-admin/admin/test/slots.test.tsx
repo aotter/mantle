@@ -44,6 +44,16 @@ describe("slots", () => {
     expect(show(composed.layers, "Home")).toBe("app(second(first(<p data-default=\"true\">built-in</p>)))");
   });
 
+  it("keeps Brand's placement for the layer below when the props passed to renderDefault leave it out", () => {
+    const composed = defineAdmin(admin, {
+      components: { Brand: props => props.renderDefault({ title: "Acme", href: "/" }) },
+      plugins: [{ components: { Brand: props => <i data-placement={props.placement}>{props.title}</i> } }],
+    });
+    expect(show(composed.layers, "Brand", { title: "x", href: "/admin", placement: "sign-in" })).toBe(
+      '<i data-placement="sign-in">Acme</i>',
+    );
+  });
+
   it("keeps record/collection slots browser-only and passes the host surface to View cells", () => {
     const seen: unknown[] = [];
     const probe = (props: object) => { seen.push("surface" in props ? (props as { surface: string }).surface : "none"); return null; };

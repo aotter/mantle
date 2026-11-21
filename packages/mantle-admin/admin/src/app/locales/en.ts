@@ -291,7 +291,8 @@ export default {
   "settings.brandSection": "Site identity",
   "settings.brandSectionBody": "These defaults identify the site in Admin and generated public pages.",
   "settings.siteBrand": "Admin name",
-  "settings.siteBrandHelp": "Shown in the Admin sidebar and sign-in screen. It does not replace the public page title.",
+  "settings.siteBrandHelp":
+    "Shown in the Admin sidebar and on its home page, after sign-in. It does not replace the public page title.",
   "settings.siteTitle": "Default page title",
   "settings.siteTitleHelp": "Used when a page has no title of its own and as the default SEO site name.",
   "settings.siteDescription": "Default site description",

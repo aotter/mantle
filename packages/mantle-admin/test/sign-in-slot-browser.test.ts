@@ -7,7 +7,9 @@ import { createServer } from "node:http";
 
 // The `SignIn` slot (#1936): an application changes the email input's autocomplete, adds its own element, and runs its
 // own step after an in-page sign-in before continuing to the same URL. A `passkey` method is listed for the slot to use;
-// the default renders nothing for it and makes no WebAuthn request.
+// the default renders nothing for it and makes no WebAuthn request. The application's `Brand` shows on the sign-in card
+// and in the sidebar after it (#1943); one that throws outside the sidebar renders nothing, leaves no empty box and
+// leaves the page working.
 it("the SignIn slot sets the email autocomplete, adds the app's element and runs the app's step", async () => {
   const root = await mkdtemp(join(tmpdir(), "mantle-sign-in-slot-"));
   const { buildAdmin } = await import("../dist/build/index.js");
@@ -25,6 +27,10 @@ export default defineAdmin({}, {
       {props.renderDefault({ ...props, emailAutoComplete: "username webauthn",
         onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/after"); } })}
     </>,
+    Brand: (props) => {
+      if (props.placement === "consent") throw new Error("written for the sidebar only");
+      return <span>app-brand {props.placement}</span>;
+    },
   },
   pages: [{ path: "after", title: "After", element: <p>after-step</p> }],
 });
@@ -46,6 +52,7 @@ export default defineAdmin({}, {
       posts.push({ path: url.pathname, body: JSON.parse(raw || "{}") });
     }
     if (url.pathname === "/api/auth/methods") return json(200, { methods });
+    if (url.pathname === "/oauth/consent/data") return json(400, { consent: null });
     if (url.pathname === "/api/auth/email-otp/send-verification-otp") return json(200, { success: true });
     if (url.pathname === "/api/auth/sign-in/email-otp") {
       signedIn = true;
@@ -97,6 +104,7 @@ export default defineAdmin({}, {
     // the slot sees every method, the app's autocomplete reaches the input, and the default offers no passkey UI
     await page.goto(origin + "/admin/sign-in");
     await page.getByText("app-sign-in-note email-otp,passkey").waitFor();
+    await page.getByText("app-brand sign-in").waitFor();
     expect(await page.getByRole("textbox").first().getAttribute("autocomplete")).toBe("username webauthn");
     expect(await page.getByRole("button", { name: /passkey/i }).count()).toBe(0);
     await page.waitForTimeout(300);
@@ -115,6 +123,16 @@ export default defineAdmin({}, {
     await page.locator('input[autocomplete="one-time-code"]').fill("123456");
     await page.getByText("after-step").waitFor();
     expect(await page.evaluate(() => sessionStorage.getItem("after-sign-in"))).toBe("/admin/from-otp");
+    await page.getByText("app-brand sidebar").waitFor();
+
+    // a Brand that throws on a page outside the console renders nothing there and leaves no box above the card's
+    // header; the page still works
+    await page.goto(origin + "/admin/oauth/consent");
+    await page.getByRole("heading", { name: "Invalid authorization request" }).waitFor();
+    expect(await page.getByText("app-brand").count()).toBe(0);
+    const box = page.locator('[data-slot="card"] > .peer');
+    expect(await box.count()).toBe(1);
+    expect(await box.evaluate(element => getComputedStyle(element).display)).toBe("none");
 
     // no server methods: the slot still mounts, so what the application adds still shows
     signedIn = false;

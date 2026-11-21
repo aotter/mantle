@@ -65,7 +65,8 @@ export function Slot<P extends object>({
       const Layer = layers[index] as unknown as React.ComponentType<
         P & { renderDefault: (props: P) => React.ReactNode }
       >;
-      return <Layer {...next} {...extra} renderDefault={at(index - 1)} />;
+      // like `Default`, a layer keeps the props the layer above left out (`Brand`'s `placement`)
+      return <Layer {...props} {...next} {...extra} renderDefault={at(index - 1)} />;
     };
   return <>{at(layers.length - 1)(props)}</>;
 }
@@ -73,6 +74,11 @@ export function Slot<P extends object>({
 /** The built-in component of a slot that has none: it renders nothing, so an application's component adds to the page. */
 export function Empty(): null {
   return null;
+}
+
+/** Internal: whether the application supplies a component for the slot. */
+export function useHasSlot(name: string): boolean {
+  return !!React.useContext(SurfaceContext)?.layers[name]?.length;
 }
 
 /** The admin MCP tool of a View or Procedure: its name lowercased, kebab to snake (`mcpToolNameSegment` in @aotter/mantle's compiler). */

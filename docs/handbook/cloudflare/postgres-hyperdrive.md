@@ -222,7 +222,8 @@ export default {
 `tests/auth-postgres-worker.test.ts` runs `src/db.ts` and `src/auth.ts` from this page unchanged in workerd under local
 Wrangler, through a Hyperdrive binding, with a generated Procedure in place of the `SELECT`: email-OTP sign-in (which
 makes the first user admin through `postgresBootstrapAdmin`, a transaction), three cookie-authenticated requests in the
-same isolate and an authenticated write.
+same isolate and an authenticated write. `tests/cli.test.ts` runs `mantle generate --auth src/auth.ts` on the same two
+files under Node, where the CLI resolves `./db.js` to `src/db.ts`.
 
 ### When the connection is lost
 

@@ -40,7 +40,7 @@ export function AppSidebar({ brand, groups, footer }: SidebarProps): React.React
           {brand.href === "/admin/dev" ? (
             <AppTitle {...brand} />
           ) : (
-            <Slot name="Brand" Default={AppTitle} props={brand} />
+            <Slot name="Brand" Default={AppTitle} props={{ ...brand, placement: "sidebar" }} />
           )}
           <SidebarTrigger
             className="shrink-0 group-data-[collapsible=icon]:mx-auto"

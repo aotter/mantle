@@ -73,8 +73,30 @@ export interface HeaderProps {
   readonly actions?: React.ReactNode;
 }
 
-/** `Brand`: the console's name and image at the top of the sidebar. Surface: browser. */
-export type BrandProps = AdminBrand;
+/**
+ * Where `Brand` renders: `sidebar` at the top of the console's sidebar; the others above the card of a page shown before
+ * or without the console (`sign-in`, `consent`, `connected-apps`, `access-denied`, `error`), or in the header bar of the
+ * frame shown while the session loads (`loading`).
+ */
+export type BrandPlacement =
+  | "sidebar"
+  | "sign-in"
+  | "consent"
+  | "connected-apps"
+  | "access-denied"
+  | "error"
+  | "loading";
+
+/**
+ * `Brand`: the console's name and image. Surface: browser. Outside the sidebar it renders only when an application
+ * supplies it, in a box at most 40px high; there the site settings are not read yet, so `title` is the generic console
+ * title, `image` is absent and `renderDefault` renders nothing. A component that renders nothing for a placement leaves
+ * that page as it is without a Brand. Props passed to `renderDefault` may leave `placement` out to keep this one.
+ */
+export interface BrandProps extends AdminBrand {
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  readonly placement: BrandPlacement;
+}
 
 /** `Home`: the page at `/admin`. Surface: browser. */
 export interface HomeProps {

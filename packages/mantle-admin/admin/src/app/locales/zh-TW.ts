@@ -258,7 +258,7 @@ export default {
   "settings.brandSection": "網站識別",
   "settings.brandSectionBody": "這些預設值會用於管理後台與 Mantle 產生的前台頁面。",
   "settings.siteBrand": "後台名稱",
-  "settings.siteBrandHelp": "顯示在管理後台側欄與登入畫面，不會取代公開頁面的標題。",
+  "settings.siteBrandHelp": "登入後顯示在管理後台側欄與首頁，不會取代公開頁面的標題。",
   "settings.siteTitle": "預設頁面標題",
   "settings.siteTitleHelp": "頁面沒有自己的標題時使用，也是預設的 SEO 網站名稱。",
   "settings.siteDescription": "預設網站描述",

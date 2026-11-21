@@ -34,7 +34,10 @@ jobs:
 
   full-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # One packed-consumer install that waits out a registry tarball not yet on every edge (check-packed-consumer.mjs
+    # retryWait) takes up to 330 s more waiting and three more failed attempts than before, about 9 minutes; later
+    # installs in the same run then find the tarball.
+    timeout-minutes: 40
     services:
       postgres:
         image: postgres:16

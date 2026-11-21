@@ -237,7 +237,7 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Shell` | browser | `children`, `nav` (sidebar groups), `brand` |
 | `Sidebar` | browser | `groups`, `brand`, `footer?` (above the signed-in user) |
 | `Header` | browser | `title?`, `actions?` (before the built-in controls) |
-| `Brand` | browser | `title`, `image?`, `href?` |
+| `Brand` | browser | `title`, `image?`, `href?`, `placement` (also outside the console, [below](#brand)) |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
 | `SignIn` | browser | `methods`, `returnTo`, `oauthQuery`, `emailAutoComplete`, `onSignedIn(next)` ([below](#sign-in)) |
@@ -446,6 +446,42 @@ Keep `next` out of the step page's URL: read it back from where your wrapper sto
 A page that follows a `?next=` from its own address is an open redirect, and `next` may be Better Auth's absolute OAuth
 continuation, so a "same-origin only" check would also break connector sign-in. The signed-in method stays locked once
 `onSignedIn` runs, so navigate away (or replace the page) rather than leaving the card in place.
+
+### Brand
+
+`Brand` renders at the top of the sidebar and, when the application supplies one, on the pages shown before or without
+the console: above the card of the sign-in page, the OAuth consent page, connected apps (for a signed-in user who is not
+an admin), the access-denied and error pages, and in the bar of the frame shown while the session loads (the loading
+states inside the console keep their placeholder: the sidebar already shows the brand). `placement` says which:
+`sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`, `error` or `loading`. Props you pass to
+`renderDefault` may leave `placement` out to keep the one received. Outside the sidebar:
+
+- the box is at most 40px high and as wide as the card, and clips what overflows, so size a logo for it;
+- the site settings are read only after sign-in, so `title` is the generic console title ("Admin console", localized),
+  `image` is absent, and `renderDefault` renders nothing: render your own logo and name;
+- a component that returns `null` for a placement leaves that page as it is without a `Brand`, and so does one that
+  throws there, such as one that needs the sidebar's context; the page still works.
+
+Without a `Brand` component these pages are unchanged. The loading frame never shows the sign-in card.
+
+```tsx
+const Logo = ({ size }: { size: number }) => <img src="/brand/logo.svg" alt="" width={size} height={size} />;
+
+export default defineAdmin(admin, {
+  components: {
+    Brand: (props) =>
+      props.placement === "sidebar" ? (
+        <a href={props.href} className="flex items-center gap-2 p-1"><Logo size={28} /><span>{props.title}</span></a>
+      ) : (
+        <span className="flex items-center gap-2 font-semibold"><Logo size={32} />Acme</span>
+      ),
+  },
+});
+```
+
+Your colours reach these pages the same way as the console's: they use the [public tokens](admin-ui.md) your stylesheet
+overrides. Core's own consent and connected-apps pages, for a service without Admin, run no React; give them the same
+name, logo and primary colour through [`authRoutes`' `brand`](oauth.md#brand).
 
 ### Components that also render in an MCP host
 

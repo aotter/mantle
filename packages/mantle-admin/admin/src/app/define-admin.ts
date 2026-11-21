@@ -55,6 +55,14 @@ type Browser<P> = SlotComponent<P>;
 type Both<P> = SlotComponent<P, SurfaceProp>;
 /** A record/collection slot keeps its explicit surface, but is mounted only in browser Admin. */
 type BrowserRecord<P> = SlotComponent<P, { readonly surface: "browser" }>;
+/** `Brand` always receives `placement`; props passed to `renderDefault` may leave it out to keep the one received. */
+type BrandComponent = (
+  props: BrandProps & {
+    readonly renderDefault: (
+      props: Omit<BrandProps, "placement"> & Partial<Pick<BrandProps, "placement">>,
+    ) => React.ReactNode;
+  },
+) => React.ReactNode;
 
 type Name<K> = K & string;
 type Collections<T extends AdminTypes> = Name<keyof T["collections"]>;
@@ -103,7 +111,7 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Shell?: Browser<ShellProps>;
   readonly Sidebar?: Browser<SidebarProps>;
   readonly Header?: Browser<HeaderProps>;
-  readonly Brand?: Browser<BrandProps>;
+  readonly Brand?: BrandComponent;
   readonly Home?: Browser<HomeProps>;
   readonly SignIn?: Browser<SignInProps>;
   readonly CollectionList?: Browser<CollectionListProps>;

@@ -17,5 +17,7 @@
   "client-entries",
   "ref-handler-result",
   "tool-call-signal-progress",
-  "client-assets"
+  "client-assets",
+  "admin-brand-placement",
+  "consent-page-brand"
 ]

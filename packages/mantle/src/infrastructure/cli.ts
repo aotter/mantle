@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import * as nodeModule from "node:module";
 import { join, resolve, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -9,8 +10,30 @@ import { writeArtifacts } from "./artifacts.js";
 import { INPUTS_FILE, inputsFingerprint } from "./inputs.js";
 import type { Target } from "../domain/model.js";
 
+/**
+ * A TypeScript option module imports its siblings as `./db.js`, which TypeScript and Bun resolve to `./db.ts` and
+ * Node's type stripping does not: an unresolved relative `.js`/`.mjs` from a `.ts`/`.mts` module tries `.ts`/`.mts`.
+ * Bun has no `registerHooks`, and needs none.
+ */
+let typescriptSiblings = false;
+const tsSibling: import("node:module").ResolveHookSync = (specifier, context, next) => {
+  try {
+    return next(specifier, context);
+  } catch (error) {
+    const missing = (error as { code?: string }).code === "ERR_MODULE_NOT_FOUND";
+    if (!missing || !/^\.\.?\/.*\.m?js$/.test(specifier) || !/\.m?ts$/.test(context.parentURL ?? "")) throw error;
+    try {
+      return next(specifier.slice(0, -2) + "ts", context);
+    } catch {
+      throw error;
+    }
+  }
+};
+
 /** Option modules are often .ts, which older Node rejects with a bare "Unknown file extension". */
 async function load(path: string) {
+  if (!typescriptSiblings) nodeModule.registerHooks?.({ resolve: tsSibling });
+  typescriptSiblings = true;
   try {
     return await import(pathToFileURL(resolve(path)).href);
   } catch (error) {

@@ -16,7 +16,36 @@ export interface AuthRoutesOptions {
     | { readonly kind: "email-otp" | "magic-link" | "passkey" }
   )[];
   readonly connectedAppsPage?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /** The application's name, logo and accent on Core's built-in consent and connected-apps pages; checked here. */
+  readonly brand?: ConsentPageBrand;
 }
+
+/** Plain values only: the pages escape the name and take no markup. */
+export interface ConsentPageBrand {
+  readonly name?: string;
+  /** An https URL or a same-origin path (`/logo.svg`). */
+  readonly logo?: string;
+  /**
+   * A CSS colour for the primary button and focus ring: hex (3, 4, 6 or 8 digits), or rgb(), rgba(), hsl(), hsla(),
+   * lab(), lch(), oklab() or oklch() of three numbers, percentages, angles or `none` (space-separated with an optional
+   * `/ alpha`, or comma-separated with an optional fourth).
+   */
+  readonly primary?: string;
+  /** The text on `primary`, in the same forms. */
+  readonly primaryForeground?: string;
+}
+
+// The value is written into a <style> block, so only these tokens pass: a number with an optional percent or angle
+// unit, or `none`; three separated by spaces with an optional `/ alpha`, or three or four separated by commas.
+const PART = String.raw`(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?(?:%|deg|g?rad|turn)?|none)`;
+const COLOR = new RegExp(
+  String.raw`^(?:#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|(?:rgba?|hsla?|oklch|oklab|lab|lch)\(\s*(?:${PART}(?:\s*,\s*${PART}){2,3}|${PART}(?:\s+${PART}){2}(?:\s*/\s*${PART})?)\s*\))$`,
+  "i",
+);
+const COLOR_FORMS =
+  "a hex colour (3, 4, 6 or 8 digits) or rgb(), rgba(), hsl(), hsla(), lab(), lch(), oklab() or oklch() of three numbers, percentages, angles (deg, rad, grad, turn) or none, separated by spaces with an optional / alpha, or by commas with an optional fourth";
+const sameOriginPath = (path: string) => path.startsWith("/") && !path.startsWith("//") && !/[\\\s]/.test(path);
 
 const basePathOf = (options: { basePath?: string }) => (options.basePath ?? "/api/auth").replace(/\/+$/, "");
 const WELL_KNOWN = /^\/\.well-known\/(oauth-authorization-server|oauth-protected-resource)(\/|$)/;
@@ -34,6 +63,11 @@ export function authRoutes(
       /[\\\r\n]/.test(options.connectedAppsPage))
   )
     throw new Error("connectedAppsPage must be a same-origin absolute path.");
+  const { logo, primary, primaryForeground } = options.brand ?? {};
+  if (logo !== undefined && !sameOriginPath(logo) && !(URL.canParse(logo) && new URL(logo).protocol === "https:"))
+    throw new Error("brand.logo must be an https URL or a same-origin path.");
+  for (const [key, color] of Object.entries({ primary, primaryForeground }))
+    if (color !== undefined && !COLOR.test(color)) throw new Error(`brand.${key} must be ${COLOR_FORMS}.`);
   const resolve = options.resolver ?? ((request: Request) => resolveCaller(request, loader));
   return draining(async request => {
     const { pathname } = new URL(request.url);

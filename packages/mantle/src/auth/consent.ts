@@ -1,7 +1,7 @@
 /** OAuth consent and connected-app routes with their pages, loaded with ./oauth.js on the first consent request. */
 import type { Caller } from "../kernel/contracts.js";
 import type { oauthConsents, OAuthConsentRequest, OAuthConsentInfo } from "./oauth.js";
-import type { AuthRoutesOptions } from "./routes.js";
+import type { AuthRoutesOptions, ConsentPageBrand } from "./routes.js";
 import { PRIVATE, json, readBody, redirect, text } from "./route-http.js";
 import { messages as T, systemDark, tokens } from "./consent-presentation-generated.js";
 
@@ -21,9 +21,9 @@ export function consentSurface(
       return json({ consent: model }, model ? 200 : 400);
     }
     if (route === "GET /oauth/consent") {
-      const view = pagePreferences(request);
+      const view = pagePreferences(request, options.brand);
       const model = await auth.getOAuthConsentRequest(new Request(view.url.href, request)).catch(() => null);
-      return html(consentHtml(view, model), model ? 200 : 400);
+      return html(consentHtml(view, model), model ? 200 : 400, view.brand);
     }
     if (route === "POST /oauth/consent") {
       if (!person) return text("sign in to answer this request", 401);
@@ -44,7 +44,7 @@ export function consentSurface(
     if (route === "GET /oauth/consents") {
       if (options.connectedAppsPage) return redirect(options.connectedAppsPage);
       if (!person) return text("sign in to see your connected apps", 401);
-      return html(connectedAppsHtml(pagePreferences(request), await list(person)), 200);
+      return html(connectedAppsHtml(pagePreferences(request, options.brand), await list(person)), 200, options.brand);
     }
     if (route === "GET /oauth/consents/data") {
       if (!person) return json({ consents: [] }, 401);
@@ -68,7 +68,9 @@ export function consentSurface(
  * No `form-action`: browsers check it against every redirect of a form's navigation, so a callback that redirects again
  * (www.cursor.com answers 308 to cursor.com) would hang the approval. The page runs no script and escapes every value.
  */
-function html(body: string, status: number): Response {
+function html(body: string, status: number, brand: ConsentPageBrand | undefined): Response {
+  // the logo, checked by authRoutes, is the one image the page may load
+  const logo = brand?.logo && (brand.logo.startsWith("/") ? "'self'" : new URL(brand.logo).origin);
   return new Response(body, {
     status,
     headers: {
@@ -77,8 +79,7 @@ function html(body: string, status: number): Response {
       "referrer-policy": "same-origin",
       "x-content-type-options": "nosniff",
       "x-frame-options": "DENY",
-      "content-security-policy":
-        "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+      "content-security-policy": `default-src 'none'; script-src 'none'; style-src 'unsafe-inline';${logo ? ` img-src ${logo};` : ""} frame-ancestors 'none'; base-uri 'none'`,
     },
   });
 }
@@ -88,7 +89,7 @@ const languages = Object.keys(T) as Locale[];
 const themes = ["system", "light", "dark"] as const;
 type Theme = (typeof themes)[number];
 
-function pagePreferences(request: Request) {
+function pagePreferences(request: Request, brand: ConsentPageBrand | undefined) {
   const url = new URL(request.url);
   // Strip only the UI prefix. URLSearchParams would reserialize the signed query, including its escaping.
   const match = /^\?mantle_ui=([a-zA-Z-]+)\.(system|light|dark)(&|$)/.exec(url.search);
@@ -97,7 +98,7 @@ function pagePreferences(request: Request) {
   const locale = chosen ?? browserLanguage(request.headers.get("accept-language") ?? "");
   const theme = (prefix?.[2] as Theme | undefined) ?? "system";
   if (prefix) url.search = url.search.slice(prefix[0].length);
-  return { url, locale, theme };
+  return { url, locale, theme, brand };
 }
 
 function browserLanguage(header: string): Locale {
@@ -120,15 +121,24 @@ function browserLanguage(header: string): Locale {
 type PagePreferences = ReturnType<typeof pagePreferences>;
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
-function page({ url, locale: l, theme }: PagePreferences, title: string, main: string) {
+function page({ url, locale: l, theme, brand }: PagePreferences, title: string, main: string) {
   const t = T[l];
+  const name = brand?.name ? esc(brand.name) : "";
+  const mark =
+    brand?.logo || name
+      ? `<div class="b">${brand?.logo ? `<img src="${esc(brand.logo)}" alt=""/>` : ""}${name ? `<span>${name}</span>` : ""}</div>`
+      : "";
+  // the colours were checked by authRoutes; one value serves light and dark
+  const accent =
+    (brand?.primary ? `--primary:${brand.primary};--ring:${brand.primary};` : "") +
+    (brand?.primaryForeground ? `--primary-foreground:${brand.primaryForeground};` : "");
   const link = (nextLocale: Locale, nextTheme: Theme, label: string, current: boolean) =>
     `<a href="${esc(`?mantle_ui=${nextLocale}.${nextTheme}${url.search ? "&" + url.search.slice(1) : ""}`)}"${current ? ' aria-current="true"' : ""}>${label}</a>`;
   const prefs =
     `<nav aria-label="${t.language} / ${t.appearance}"><details name="preferences"><summary>${t.language}</summary><div>${languages.map(locale => link(locale, theme, T[locale].nativeLabel, locale === l)).join("")}</div></details>` +
     `<details name="preferences"><summary>${t.appearance}</summary><div>${themes.map(next => link(l, next, t[next], next === theme)).join("")}</div></details></nav>`;
   return (
-    `<!doctype html><html lang="${t.lang}" dir="${t.dir}" data-theme="${theme}"${theme === "dark" ? ' class="dark"' : ""}><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}</title>` +
+    `<!doctype html><html lang="${t.lang}" dir="${t.dir}" data-theme="${theme}"${theme === "dark" ? ' class="dark"' : ""}><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title}${name ? ` · ${name}` : ""}</title>` +
     `<style>${tokens}${systemDark}:root{font:.875rem/1.5 system-ui,sans-serif}` +
     "body{margin:0;min-height:100svh;display:grid;place-items:center;padding:1.5rem 1rem;box-sizing:border-box;background:var(--app-background);color:var(--foreground)}" +
     "main{width:100%;max-width:28rem;box-sizing:border-box;padding:1.5rem;background:var(--card);border:1px solid var(--border);border-radius:calc(var(--radius) + .25rem);box-shadow:0 12px 36px rgb(26 48 98/6%)}" +
@@ -140,7 +150,11 @@ function page({ url, locale: l, theme }: PagePreferences, title: string, main: s
     "main>form{display:flex;gap:.5rem;margin-top:1.5rem}main>form button{flex:1}@media(max-width:40rem){main>form{flex-direction:column}}" +
     "section{display:grid;grid-template-columns:1fr auto;gap:.25rem 1rem;align-items:center;padding:1rem 0;border-top:1px solid var(--border)}section:last-child{padding-bottom:0}section>*{min-width:0;justify-self:start}section form{grid-area:1/2/3}section code{color:var(--muted-foreground);background:none;border:0;padding:0}" +
     "nav{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5rem;margin-bottom:1rem}details{position:relative}summary{cursor:pointer;padding:.375rem .625rem;border:1px solid var(--border);border-radius:var(--radius)}details div{position:absolute;z-index:1;inset-inline-end:0;min-width:8rem;max-height:min(60vh,22rem);overflow:auto;padding:.25rem;background:var(--popover);border:1px solid var(--border);border-radius:var(--radius)}details a{display:block;padding:.375rem .625rem;color:var(--foreground);text-decoration:none;white-space:nowrap}details a:hover,details a[aria-current=true]{background:var(--secondary);border-radius:.375rem}a:focus-visible,summary:focus-visible{outline:2px solid var(--ring);outline-offset:2px}" +
-    `</style></head><body><main>${prefs}${main}</main></body></html>`
+    (mark
+      ? "header{display:flex;align-items:center;gap:.5rem;margin-bottom:1rem}header nav{margin:0;margin-inline-start:auto}.b{display:flex;align-items:center;gap:.5rem;min-width:0;font-weight:600}.b img{display:block;max-height:2rem;max-width:10rem;object-fit:contain}.b span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+      : "") +
+    (accent ? `html:root[data-theme]{${accent}}` : "") +
+    `</style></head><body><main>${mark ? `<header>${mark}${prefs}</header>` : prefs}${main}</main></body></html>`
   );
 }
 
