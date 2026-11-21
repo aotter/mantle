@@ -1,7 +1,7 @@
 /**
- * The SDK side of an MCP request (protocol revision 2026-07-28): one server per request, its tool and App registrations, and the callback
- * that runs a `tools/call`. The caller is already admitted; each call still passes the pipeline's Origin rule and
- * generated guard before it reaches a database.
+ * The SDK side of an MCP request, on either protocol era (2025 revisions, stateless; 2026-07-28): one server per
+ * request, its tool and App registrations, and the callback that runs a `tools/call`. The caller is already admitted;
+ * each call still passes the pipeline's Origin rule and generated guard before it reaches a database.
  */
 import { ContractError, type Caller } from "./contracts.js";
 import { callToolLazy as callTool } from "./mcp-call.js";
@@ -37,7 +37,7 @@ export interface Serving<Env, Database, Handlers> {
   /** The catalogue version, hashed before per-caller filtering. */
   readonly version: string;
   readonly links: Links | undefined;
-  /** The parsed JSON-RPC body: one message (2026-07-28 has no batches; the SDK refuses one). */
+  /** The parsed JSON-RPC body: one message, or a batch (2025-03-26 and earlier). */
   readonly message: unknown;
   /** The tools this caller may list and call, each with the call the pipeline decides on. */
   readonly tools: readonly { readonly tool: Tool<Database, Handlers>; readonly call: Call }[];
@@ -80,11 +80,12 @@ const listedInput = (tool: Pick<Tool<never>, "page" | "inputSchema">, locale: st
   localizedSchema(tool.page ? paging(tool.inputSchema as object) : tool.inputSchema, locale);
 
 /**
- * Answer the request with a per-request SDK server over the caller's tools. Only protocol revision 2026-07-28 is served:
- * the SDK answers a 2025-era request (an `initialize`, or a message without the `_meta` envelope) with HTTP 400 and
- * JSON-RPC -32022 naming the supported revision, which is observed. Every transport refusal the SDK answers with a 4xx
- * (that one, a batch, an invalid envelope, headers that contradict the body, 405, 415) is the client's, so what
- * the SDK reported for it is not logged; a 5xx or an error during a served exchange is.
+ * Answer the request with a per-request SDK server over the caller's tools. The SDK classifies the request: a 2025-era
+ * one (an `initialize`, a message without the `_meta` envelope, a batch) is served statelessly, a 2026-07-28 one on the
+ * modern path, and the factory learns which. A request that names a revision neither era serves (an envelope claiming
+ * another revision: JSON-RPC -32022; a 2025-era `MCP-Protocol-Version` header the SDK does not support) is observed.
+ * Every transport refusal the SDK answers with a 4xx (that one, an invalid envelope, headers that contradict the body,
+ * 405, 415) is the client's, so what the SDK reported for it is not logged; a 5xx or an error during a served exchange is.
  */
 export async function serveTools<Env, Database, Handlers>(
   sdk: Sdk,
@@ -92,8 +93,8 @@ export async function serveTools<Env, Database, Handlers>(
 ): Promise<Response> {
   const pending: unknown[] = [];
   let settled = false;
-  const handler = sdk.createMcpHandler(() => buildServer(sdk, serving), {
-    legacy: "reject",
+  const handler = sdk.createMcpHandler(({ era }) => buildServer(sdk, serving, era === "legacy"), {
+    legacy: "stateless",
     maxRequestBodySize: 1024 * 1024,
     onerror: error => (settled ? log(error) : void pending.push(error)),
   });
@@ -103,10 +104,16 @@ export async function serveTools<Env, Database, Handlers>(
       ? ((await response
           .clone()
           .json()
-          .catch(() => undefined)) as { error?: { code?: unknown } } | undefined)
+          .catch(() => undefined)) as { error?: { code?: unknown; message?: unknown } } | undefined)
       : undefined;
   settled = true;
-  if (answer?.error?.code === sdk.ProtocolErrorCode.UnsupportedProtocolVersion)
+  // -32022 from the modern path; the 2025-era transport answers an unsupported header with -32000 and this message
+  // (`validateProtocolVersion`, @modelcontextprotocol/server 2.4.0 dist/index.mjs:689-694).
+  const { code, message } = answer?.error ?? {};
+  if (
+    code === sdk.ProtocolErrorCode.UnsupportedProtocolVersion ||
+    (code === -32000 && String(message).startsWith("Bad Request: Unsupported protocol version"))
+  )
     observe(serving.options.onObservation, {
       kind: "request-refused",
       at: Date.now(),
@@ -122,7 +129,12 @@ const log = (error: unknown) => console.error("[mantle mcp] request failed", err
 const cancelled = (cause?: unknown) =>
   new ContractError("REQUEST_CANCELLED", "The client cancelled the request.", "mcp", { status: 499, cause });
 
-function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Database, Handlers>): McpServer {
+/** `legacy`: the SDK serves this request on a 2025 revision (its own classification, handed to the factory). */
+function buildServer<Env, Database, Handlers>(
+  sdk: Sdk,
+  serving: Serving<Env, Database, Handlers>,
+  legacy: boolean,
+): McpServer {
   const { options, pipeline, message, links, version } = serving;
   const serverInfo = {
     name: "aotter.mantle",
@@ -136,22 +148,27 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
   });
   server.server.registerCapabilities({ tools: { listChanged: false } });
   // A request the transport refuses never reaches a tool: the access event says so. A call that started records its own
-  // outcome, also when the client goes away before it ends; `server/discover` names no tool and succeeds. A request the
-  // client left before it was served (the SDK answers 499 and runs nothing) is recorded as cancelled.
-  const discover = isRecord(message) && message.method === "server/discover";
+  // outcome, also when the client goes away before it ends; the connect step (`initialize` on a 2025 revision,
+  // `server/discover` on 2026-07-28) names no tool and succeeds. A request the client left before it was served (the SDK
+  // answers 499 and runs nothing) is recorded as cancelled.
+  const handshake = isRecord(message) && message.method === (legacy ? "initialize" : "server/discover");
   let calling = false;
   server.server.onclose = () => {
     if (!calling)
       pipeline.finish(
         serving.request.signal.aborted
           ? cancelled()
-          : discover
+          : // An `initialize` the SDK refused (invalid params) never reached its handler, which records the client.
+            handshake && (!legacy || server.server.getClientVersion() !== undefined)
             ? undefined
             : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
       );
   };
 
-  const appsEnabled = declaresApps(message);
+  // A 2026-07-28 request always declares its capabilities, so only a stateless 2025-era one can leave support unknown.
+  const declared = clientUiSupport(message),
+    support = declared === "unknown" && !legacy ? "unsupported" : declared,
+    appsEnabled = support !== "unsupported";
   // A stateless server never sends list changes; the SDK would advertise them for resources once one registers.
   if (appsEnabled && links?.resources.length) server.server.registerCapabilities({ resources: { listChanged: false } });
   const names = new Set(serving.tools.map(({ tool }) => tool.name));
@@ -171,8 +188,10 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
   const locale = options.locale ?? "en";
   // App-only visibility hides a tool from the list a client without MCP Apps shows its model. A `tools/call` that names
   // one (an App's own call a host forwards, or any client) runs it like any other tool: visibility grants no authority
-  // and withholds none.
-  const calls = isRecord(message) && message.method === "tools/call";
+  // and withholds none. A 2025-era batch that also lists tools registers only what that list may show.
+  const messages = Array.isArray(message) ? message : [message],
+    method = (name: string) => messages.some(entry => isRecord(entry) && entry.method === name),
+    calls = method("tools/call") && !method("tools/list");
   for (const { tool, call } of serving.tools) {
     // `false`: an `appOnly` View of a request without MCP Apps
     const link = linkedMeta?.(tool.name),
@@ -184,7 +203,7 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
     const meta = linked && own ? { ...linked, ...own, ui: { ...linked.ui, ...(own.ui as object) } } : (linked ?? own);
     registered.add(tool.name);
     // an App renders this result only when the client declared support and a resource renders this tool
-    const rendersInApp = appsEnabled && !!linked;
+    const rendersInApp = support === "supported" && !!linked;
     const listed: RegisteredTool = server.registerTool(
       tool.name,
       {
@@ -210,9 +229,22 @@ function buildServer<Env, Database, Handlers>(sdk: Sdk, serving: Serving<Env, Da
           context,
           listed.outputSchemaJson,
           server.server.getClientVersion(),
+          legacy
+            ? (serving.request.headers.get("mcp-protocol-version") ?? sdk.DEFAULT_NEGOTIATED_PROTOCOL_VERSION)
+            : server.server.getNegotiatedProtocolVersion(),
+          legacy,
         );
       },
     );
+    // A 2025 revision's structured content is a JSON object. Its SDK codec would list any other root wrapped as
+    // `{ result }` and wrap the value to match (`projectCallToolResult`), so one tool would answer two shapes: on that
+    // era, a schema whose root the SDK does not list as an object is not listed, and its non-object data is sent as text
+    // only. The SDK's own conversion decides, so a typeless root it proves object-shaped stays listed. A root that also
+    // admits another value (`nullable`, a type list) is not listed either: that value is sent as text, and the SDK would
+    // refuse a listed schema without structured content after the call was recorded.
+    const json = listed.outputSchemaJson;
+    if (legacy && !(json?.type === "object" && objectOnly(json)))
+      listed.outputSchema = listed.outputSchemaJson = undefined;
   }
   // An empty catalogue still answers tools/list and refuses calls the same way.
   if (registered.size === 0) {
@@ -277,6 +309,9 @@ function rootAllows(schema: Record<string, unknown>, value: unknown): boolean {
     kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
   return types.includes(kind) || (kind === "number" && types.includes(Number.isInteger(value) ? "integer" : ""));
 }
+/** `rootAllows` admits an object and no other JSON kind under this root. */
+const objectOnly = (schema: Record<string, unknown>) =>
+  [null, [], "", 1, 0.5, true].every(value => !rootAllows(schema, value));
 /** One `tools/call`: the pipeline's per-call steps, the tool, and the result or diagnostic the model reads. */
 async function invoke<Env, Database, Handlers>(
   serving: Serving<Env, Database, Handlers>,
@@ -290,8 +325,12 @@ async function invoke<Env, Database, Handlers>(
   { mcpReq }: RequestContext,
   /** The outputSchema as listed (the SDK's own conversion): a success carries structuredContent its root admits. */
   listed: Record<string, unknown> | undefined,
-  /** The client's `clientInfo`, from the request's `_meta`. */
+  /** The client's `clientInfo`, from the request's `_meta` (2026-07-28 only: a stateless 2025-era call carries none). */
   client: { readonly name: string; readonly version: string } | undefined,
+  /** The revision the call is served on. */
+  protocolVersion: string | undefined,
+  /** Served on a 2025 revision, whose structured content is an object. */
+  legacy: boolean,
 ) {
   const { options, pipeline, caller, request } = serving;
   // Progress only for a request that carries a token; the SDK sends it on this request's stream. One the client can no
@@ -329,6 +368,7 @@ async function invoke<Env, Database, Handlers>(
         invocationId: crypto.randomUUID(),
         tool: tool.name,
         ...(client ? { client: Object.freeze({ name: client.name, version: client.version }) } : {}),
+        ...(protocolVersion ? { protocolVersion } : {}),
         caller: Object.freeze(
           caller.kind === "user" ? { ...caller, scopes: Object.freeze([...caller.scopes]) } : { ...caller },
         ),
@@ -366,7 +406,8 @@ async function invoke<Env, Database, Handlers>(
     complete();
     cancel.abort(mcpReq.signal.reason);
   };
-  if (mcpReq.signal.aborted) follow();
+  // The 2025-era stateless transport does not abort its signal for a request that arrived already aborted.
+  if (mcpReq.signal.aborted || request.signal.aborted) follow();
   else mcpReq.signal.addEventListener("abort", follow);
   try {
     // A request already aborted when its call starts runs no step of it.
@@ -405,9 +446,10 @@ async function invoke<Env, Database, Handlers>(
           : `content[${bad}] (type ${JSON.stringify((list[bad] as { type?: unknown } | null)?.type)})`;
       throw new Error(`MCP tool ${tool.name} returned ${where}, which the SDK refuses.`);
     }
-    // structuredContent is any JSON value (SEP-2106). A listed outputSchema requires one of its root type on success:
-    // data that does not fit fails here, before it is recorded, instead of reaching the client as a result its schema
-    // refuses. A dry run answers the decision (`{ dryRun, event }`) instead of the tool's output, whatever its schema.
+    // On 2026-07-28 structuredContent is any JSON value (SEP-2106); on a 2025 revision only an object, so other data is
+    // sent as its text block alone (the schema of such a tool is not listed there). A listed outputSchema requires one
+    // of its root type on success: data that does not fit fails here, before it is recorded, instead of reaching the
+    // client as a result its schema refuses. A dry run answers the decision (`{ dryRun, event }`) instead of the tool's output, whatever its schema.
     if (listed && !pipeline.dryRun && !rootAllows(listed, data))
       throw new Error(
         `MCP tool ${tool.name} returned ${data === undefined ? "no value" : JSON.stringify(data === null ? "null" : Array.isArray(data) ? "array" : typeof data)}, which the root of its listed outputSchema (type ${JSON.stringify(listed.type)}) does not allow.`,
@@ -427,7 +469,9 @@ async function invoke<Env, Database, Handlers>(
         ...(oversized ? [{ type: "text" as const, text: notice }] : []),
         ...((blocks ?? []) as import("@modelcontextprotocol/server").ContentBlock[]),
       ],
-      ...(data === undefined ? {} : { structuredContent: data as Record<string, unknown> }),
+      ...(data === undefined || (legacy && !isRecord(data))
+        ? {}
+        : { structuredContent: data as Record<string, unknown> }),
     };
   } catch (thrown) {
     settled = true;
@@ -490,13 +534,29 @@ async function fitPage(
   return data;
 }
 
-/** The request's `_meta` client capabilities declare MCP Apps support (the SDK requires that envelope on every request). */
-function declaresApps(message: unknown): boolean {
-  const meta = isRecord(message) && isRecord(message.params) ? message.params._meta : undefined,
-    declared = isRecord(meta) ? meta[CLIENT_CAPABILITIES_META_KEY] : undefined,
-    extensions = isRecord(declared) ? declared.extensions : undefined,
-    ui = isRecord(extensions) ? extensions["io.modelcontextprotocol/ui"] : undefined;
-  return isRecord(ui) && Array.isArray(ui.mimeTypes) && ui.mimeTypes.includes(RESOURCE_MIME_TYPE);
+/**
+ * MCP Apps support as the request declares it: in its `_meta` client capabilities (every 2026-07-28 request), or in a
+ * 2025-era `initialize`. `unknown`: a stateless 2025-era request after `initialize` carries no capabilities, so only an
+ * explicit refusal hides Apps.
+ */
+function clientUiSupport(message: unknown): "supported" | "unsupported" | "unknown" {
+  for (const entry of Array.isArray(message) ? message : [message]) {
+    if (!isRecord(entry) || !isRecord(entry.params)) continue;
+    const meta = entry.params._meta;
+    const declared =
+      isRecord(meta) && isRecord(meta[CLIENT_CAPABILITIES_META_KEY])
+        ? meta[CLIENT_CAPABILITIES_META_KEY]
+        : entry.method === "initialize" && isRecord(entry.params.capabilities)
+          ? entry.params.capabilities
+          : undefined;
+    if (!declared) continue;
+    const extensions = declared.extensions,
+      ui = isRecord(extensions) ? extensions["io.modelcontextprotocol/ui"] : undefined;
+    return isRecord(ui) && Array.isArray(ui.mimeTypes) && ui.mimeTypes.includes(RESOURCE_MIME_TYPE)
+      ? "supported"
+      : "unsupported";
+  }
+  return "unknown";
 }
 
 function appMeta(

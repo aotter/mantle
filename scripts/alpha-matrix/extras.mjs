@@ -14,7 +14,7 @@ await rm(`evidence/${name}/extras.json`, { force: true });
 const checks = [];
 let buyer;
 async function rpc(method, params = {}) {
-  // MCP protocol revision 2026-07-28, the one Mantle serves: the `_meta` envelope and the headers that state it.
+  // MCP protocol revision 2026-07-28 (Mantle also serves the 2025 revisions): the `_meta` envelope and its headers.
   const name = method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;
   const r = await api.post(origin + "/mcp/admin", {
     headers: {

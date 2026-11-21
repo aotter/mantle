@@ -331,28 +331,39 @@ as an explicit option.
 `mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
 resourceMetadata?, allowedOrigins?, onObservation? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
-English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by `server/discover`.
+English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by
+the connect step (`initialize` or `server/discover`).
 `serverInfo` takes `name`, `title`, `version`, `description`, `websiteUrl` and
-`icons`, returned as given in every result's `_meta["io.modelcontextprotocol/serverInfo"]`; `name` defaults to `aotter.mantle` and
-`version` to the catalogue version. `server/discover` advertises
+`icons`, returned as given by `initialize` and, on 2026-07-28, in every result's
+`_meta["io.modelcontextprotocol/serverInfo"]`; `name` defaults to `aotter.mantle` and
+`version` to the catalogue version. The connect step advertises
 `tools: { listChanged: false }`, and `resources: { listChanged: false }` when the
 endpoint registers App resources for the request: a stateless server sends no
 list-change notifications.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
 `requiredScopes: []` disables that floor. An anonymous closed surface challenges
-from `server/discover`, and a called tool's credential rules are checked before it runs.
+from the connect step of either era, and every call in a batch is checked before any call runs.
 
-**Protocol revision:** both endpoints serve MCP protocol revision 2026-07-28 only. Every
-request is one JSON-RPC message (no batches) whose `params._meta` carries
-`io.modelcontextprotocol/protocolVersion` (`2026-07-28`) and
-`io.modelcontextprotocol/clientCapabilities`, with the `MCP-Protocol-Version`, `Mcp-Method` and, for
-`tools/call` and `resources/read`, `Mcp-Name` headers stating the same; there is no `initialize` handshake
-(`server/discover` describes the server) and no session. A 2025-era request, an `initialize` or a
-message without the `_meta` envelope, is answered with HTTP 400 and JSON-RPC error `-32022`
-("Unsupported protocol version"), whose `data.supported` is `["2026-07-28"]`; a notification is
-accepted with 202, and `GET` and `DELETE` are 405 with `Allow: POST`. Clients that still open with a
-2025-era `initialize` cannot connect; the official TypeScript client connects with
-`versionNegotiation: { mode: { pin: "2026-07-28" } }`.
+**Protocol revisions:** both endpoints serve both MCP protocol eras with the official SDK 2.4.0, which
+classifies each request.
+
+- **2026-07-28.** Every request is one JSON-RPC message (no batches) whose `params._meta` carries
+  `io.modelcontextprotocol/protocolVersion` (`2026-07-28`) and
+  `io.modelcontextprotocol/clientCapabilities`, with the `MCP-Protocol-Version`, `Mcp-Method` and, for
+  `tools/call` and `resources/read`, `Mcp-Name` headers stating the same. There is no handshake:
+  `server/discover` describes the server. The official TypeScript client connects in this mode with
+  `versionNegotiation: { mode: { pin: "2026-07-28" } }` (or `"auto"`).
+- **2025 revisions** (2025-11-25 and earlier), served statelessly: `initialize` negotiates the revision,
+  `notifications/initialized` is accepted with 202, and every later request stands alone (no session; the
+  `MCP-Protocol-Version` header names the revision). 2025-03-26 and earlier allow JSON-RPC batches. The official
+  TypeScript client's default mode, and clients that open with `initialize`, connect this way.
+
+In both eras `GET` and `DELETE` are 405 with `Allow: POST`. A request that names a revision neither era serves is
+refused with HTTP 400 (an envelope that claims another revision gets JSON-RPC `-32022`, "Unsupported protocol
+version", whose `data.supported` is `["2026-07-28"]`), as are a batch with a 2026-07-28 message and an `initialize`
+sent with a 2026-07-28 header. Per-era differences: non-object structured content (**Tool results** below), batches
+(each call is authorized before any runs), [MCP Apps support](../guides/mcp-apps.md#mcp-apps-support-per-protocol-era) and
+[cancellation](../guides/mcp-apps.md#progress-and-cancellation).
 `resourceMetadata` overrides the challenge URL for reverse proxies.
 
 Both endpoints answer a request without `Origin`, which is what server-side MCP
@@ -361,7 +372,7 @@ clients send; a bearer credential needs none. A cookie session is ambient author
 `Origin` and `Sec-Fetch-Site` must be present and every present one must agree (`Origin` equal
 to the request's own origin; `Sec-Fetch-Site` `same-origin` or `none`), else `AUTH_DENIED` at
 `request:origin`. On MCP it runs only for a tool call that executes (not a read-only call from an
-App host), not for `server/discover` or `tools/list`; `allowedOrigins` does not lift it. A present `Origin` marks a browser: it must name a loopback host
+App host), not for the connect step or `tools/list`; `allowedOrigins` does not lift it. A present `Origin` marks a browser: it must name a loopback host
 (`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
 403 before authentication on every credential; `Origin: null` is refused. The
 site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
@@ -387,16 +398,19 @@ the route and `dev.host` hosts out of `allowedOrigins` in local development.
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.
 A `request-refused` event carries its `status` and `reason`: `credential`, or
 `origin` for a browser Origin refused by the endpoint or, on a tool call, by the
-session Origin rule, or status 400 and reason `protocol-version` for a request in a
-protocol revision other than 2026-07-28 (a 2025-era client), which is not logged as a failure. An
-`invocation` event carries `client`, the `clientInfo` `{ name, version }` the request's `_meta`
-declares, when it declares one. Each invocation has one `attempt` and one
+session Origin rule, or status 400 and reason `protocol-version` for a request that names a
+protocol revision neither era serves, which is not logged as a failure. An
+`invocation` event carries `protocolVersion`, the revision the call was served on (`2026-07-28`, or
+the 2025-era `MCP-Protocol-Version` header, `2025-03-26` when the client sent none), from which an
+operator measures how much traffic still uses the 2025 revisions, and `client`, the `clientInfo`
+`{ name, version }` the request's `_meta` declares (2026-07-28; a stateless 2025-era call carries
+none). Each invocation has one `attempt` and one
 `completion`. A call whose client goes away before the tool settles is observed as
 `code: "REQUEST_CANCELLED"` in the abort event itself, so a Worker records it too; a tool that
 ignores the signal and finishes later does not change it (see
 [Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation)). Other refusals the
-client causes (a batch, an invalid `_meta` envelope, headers that contradict the body, 405, 415) are
-neither observed nor logged as failures. The callback
+client causes (a batch with a 2026-07-28 message, an invalid `_meta` envelope, headers that contradict
+the body, 405, 415) are neither observed nor logged as failures. The callback
 receives no request headers, bodies or tokens;
 delivery failures never change the business response and promises are not
 awaited. The application owns callback delivery.
@@ -405,7 +419,10 @@ awaited. The application owns callback delivery.
 JSON text of the data (always `content[0]`), the `tool version` line, the page
 notice of an oversized View page, then the blocks a `withResult` return adds
 (from a hand-written tool's `run` or `page`, or from a ref Procedure's handler).
-`structuredContent` is the data, any JSON value but `undefined`. Core owns the first
+`structuredContent` is the data: on 2026-07-28 any JSON value but `undefined`; on a 2025 revision,
+whose structured content is an object, only an object (other data is its JSON text block alone, and
+a tool whose `outputSchema` root is not an object, or also admits `null` or another type, lists none there, so the SDK never wraps either as
+`{ result }`). The tool version is the same in both eras. Core owns the first
 three, `structuredContent`, `isError` and the error envelope; the application's
 blocks are checked by the installed SDK, and one it refuses fails the call as
 `INTERNAL_ERROR`. A failure, a thrown error and a dry run carry Core's blocks only.
@@ -433,8 +450,8 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | Field | Who sets it |
 |---|---|
 | `CallToolResult.content` | Core's blocks first (data JSON, version line, page notice); App appends any block the installed SDK accepts (`image`, `audio`, `resource_link`, `resource`, `text`, each with its own `annotations` and `_meta`) with `withResult`, from a hand-written tool or a ref Procedure handler |
-| `CallToolResult.structuredContent` | Core: the data, any JSON value but `undefined` (SEP-2106), beside its JSON text block. A success whose data the listed `outputSchema`'s root `type` does not admit (`undefined` included) fails as `INTERNAL_ERROR` before it is recorded |
-| non-object `outputSchema` (SEP-2106) | App: a ref Procedure's output schema, or `Tool.outputSchema`, with any root `type`; listed as given |
+| `CallToolResult.structuredContent` | Core: the data beside its JSON text block; on 2026-07-28 any JSON value but `undefined` (SEP-2106), on a 2025 revision an object only. A success whose data the listed `outputSchema`'s root `type` does not admit (`undefined` included) fails as `INTERNAL_ERROR` before it is recorded |
+| non-object `outputSchema` (SEP-2106) | App: a ref Procedure's output schema, or `Tool.outputSchema`, with any root `type`; listed as given on 2026-07-28, not listed on a 2025 revision |
 | `CallToolResult.isError` | Core: the diagnostic envelope of a refusal or failure |
 | `CallToolResult._meta` | App: `withResult`/`withResultMeta`; Core sets `net.aotter.mantle/tool`, which wins |
 | `Tool.name`, `title`, `description` | App: `Tool` fields, or the manifest for generated tools; Core appends a generated tool's version |
@@ -456,9 +473,9 @@ The official SDK does all wire handling (ADR-0029). "App" is the application;
 | Server capabilities | Core: decided by what the endpoint serves |
 | Prompts, completions | Not exposed yet; completions need prompts or templates |
 | Progress | App: `ToolCall.progress(progress, total?, message?)`, present when the request carries a `progressToken`; the call's result then streams as SSE |
-| Cancellation | Core: `ToolCall.signal` aborts while the tool runs if the client closes the request (how it cancels) or the connection drops: on Bun.serve, and on Workers from compatibility date 2026-11-17 or with `enable_request_signal` (before that, only while the result streams as SSE). Observed as `code: "REQUEST_CANCELLED"`. Hand-written tools only: a ref handler gets neither. See [Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation) |
+| Cancellation | Core: `ToolCall.signal` aborts while the tool runs if the client closes the request (how a 2026-07-28 client cancels) or the connection drops: on Bun.serve, and on Workers from compatibility date 2026-11-17 or with `enable_request_signal` (before that, only while the result streams as SSE). A 2025-era `notifications/cancelled` arrives as its own request, which a stateless server cannot relate to the call. Observed as `code: "REQUEST_CANCELLED"`. Hand-written tools only: a ref handler gets neither. See [Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation) |
 | Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
-| Elicitation | Not exposed: `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
+| Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
 | Tasks | Not exposed: SDK 2.4.0 has no task runtime |
 
 ### Tool versions

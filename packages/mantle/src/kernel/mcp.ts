@@ -69,8 +69,8 @@ export type McpObservation =
       readonly status: 400 | 401 | 403;
       /**
        * `origin`: a browser Origin the endpoint or the session Origin rule refused; `credential`: the caller's credential;
-       * `protocol-version` (status 400): a request for a protocol revision other than 2026-07-28, such as a 2025-era
-       * `initialize`, refused by the SDK with JSON-RPC -32022.
+       * `protocol-version` (status 400): a request that names a protocol revision neither era serves (a `_meta` envelope
+       * claiming another revision, refused with JSON-RPC -32022, or an unsupported `MCP-Protocol-Version` header).
        */
       readonly reason: "origin" | "credential" | "protocol-version";
     }
@@ -81,8 +81,13 @@ export type McpObservation =
       readonly invocationId: string;
       readonly tool: string;
       readonly caller: Caller;
-      /** The `clientInfo` name and version the request's `_meta` declares, when it declares one. */
+      /** The `clientInfo` name and version the request's `_meta` declares (2026-07-28; a stateless 2025-era call carries none). */
       readonly client?: { readonly name: string; readonly version: string };
+      /**
+       * The protocol revision the call is served on: `2026-07-28`, or a 2025-era revision (the `MCP-Protocol-Version`
+       * header, `2025-03-26` when the client sent none, as the SDK assumes).
+       */
+      readonly protocolVersion?: string;
     } & (
       | { readonly phase: "attempt" }
       | {
@@ -130,7 +135,8 @@ export interface Tool<Database, Handlers = never> {
   /**
    * Merged into this tool's `_meta` in `tools/list` (top level shallow, `ui` one level deep) with what its App links produce;
    * a contradicting value fails at `mcp(...)`. `ui.visibility: ["app"]` hides the tool from the `tools/list` of
-   * clients without MCP Apps; a `tools/call` that names it still runs it. It is a listing hint and grants or removes no
+   * clients that declare no MCP Apps support (a stateless 2025-era request that declares nothing still lists it); a
+   * `tools/call` that names it still runs it. It is a listing hint and grants or removes no
    * execution authority.
    */
   readonly meta?: Readonly<Record<string, unknown>>;
@@ -160,7 +166,9 @@ export interface ToolCall {
    * nothing after the tool's next `await` runs: pass the signal to `fetch()` and other cancellable APIs, and stop work
    * kept alive with `waitUntil` when it aborts. The call is recorded as cancelled (`REQUEST_CANCELLED`) when the signal
    * aborts, and its result is not delivered; a tool that ignores the signal may still complete its writes afterwards,
-   * where the runtime keeps running it. Set on every MCP call; `callTool` passes the one it is given.
+   * where the runtime keeps running it. A 2025-era `notifications/cancelled` arrives as its own request, which a
+   * stateless server cannot relate to this one: on that era the signal aborts only when the client closes the request.
+   * Set on every MCP call; `callTool` passes the one it is given.
    */
   readonly signal?: AbortSignal;
   /**

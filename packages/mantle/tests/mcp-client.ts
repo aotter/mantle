@@ -1,8 +1,11 @@
-/** The official MCP client in protocol revision 2026-07-28 mode, the one revision Core serves. */
+/** The official MCP client, connected in either era Core serves. */
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
-import { MCP_REVISION } from "./mcp-wire.js";
+import { MCP_REVISION, type Era } from "./mcp-wire.js";
 
-/** The official client in 2026-07-28 mode, connected through `handle`. */
+/**
+ * The official client connected through `handle`: in 2026-07-28 mode by default, or with `era` a 2025 revision in its
+ * default legacy mode (`initialize`, then stateless requests).
+ */
 export async function mcpClient(
   handle: (request: Request, env: unknown) => Promise<Response | undefined | null> | Response | undefined | null,
   url = "https://app.test/mcp",
@@ -11,11 +14,15 @@ export async function mcpClient(
     version = "1",
     capabilities,
     headers = {},
-  }: { name?: string; version?: string; capabilities?: object; headers?: Record<string, string> } = {},
+    era = MCP_REVISION,
+  }: { name?: string; version?: string; capabilities?: object; headers?: Record<string, string>; era?: Era } = {},
 ): Promise<Client> {
   const client = new Client(
     { name, version },
-    { versionNegotiation: { mode: { pin: MCP_REVISION } }, ...(capabilities ? { capabilities } : {}) },
+    {
+      ...(era === MCP_REVISION ? { versionNegotiation: { mode: { pin: MCP_REVISION } } } : {}),
+      ...(capabilities ? { capabilities } : {}),
+    },
   );
   await client.connect(
     new StreamableHTTPClientTransport(new URL(url), {

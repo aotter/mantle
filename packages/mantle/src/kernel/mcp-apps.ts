@@ -59,7 +59,7 @@ export interface McpAppResource {
   readonly meta?: Readonly<Record<string, unknown>>;
   /** Tool names whose results this resource renders. */
   readonly renders?: readonly string[];
-  /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not list them, though a call that names one runs it. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
+  /** Views only this App may call (`visibility: ["app"]`); a client that declares no MCP Apps support does not list them (a stateless 2025-era request that declares nothing does), though a call that names one runs it. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
   readonly appOnly?: readonly string[];
 }
 

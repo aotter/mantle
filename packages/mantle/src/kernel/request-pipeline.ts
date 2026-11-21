@@ -16,7 +16,7 @@
  * the `finish` steps do nothing.
  *
  * What stays with a surface: REST's route matching and body decoding; MCP's transport Origin check, endpoint and
- * credential-scope rules, the called tool's pre-authorization and SDK plumbing (`mcp-handler.ts`); web's rendering, and its
+ * credential-scope rules, batch pre-authorization and SDK plumbing (`mcp-handler.ts`); web's rendering, and its
  * decoding of a page's path fields before `admit` (`web-serve.ts`).
  */
 import { authorizeTarget } from "./authorization.js";

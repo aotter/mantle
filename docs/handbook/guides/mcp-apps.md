@@ -134,10 +134,13 @@ take it as an optional last argument (default `{ apps: false }`).
 
 The same argument carries `signal` and, when the client asked for progress with
 a `progressToken`, `progress(progress, total?, message?)`. Progress
-notifications go out on the call's SSE stream before its result. `signal`
-aborts while the tool runs if the request ends before its result: a client
-cancels by closing the request, and a dropped connection does the same. It
-never aborts after the call finished. Only hand-written tools receive them; a
+notifications go out on the call's SSE stream before its result, on 2025-era and
+2026-07-28 requests alike. `signal` aborts while the tool runs if the request
+ends before its result: a 2026-07-28 client cancels by closing the request, and
+a dropped connection does the same. It never aborts after the call finished. A
+2025-era client's `notifications/cancelled` arrives as a separate request that a
+stateless server cannot relate to the call, so for that client the signal aborts
+only when its connection closes. Only hand-written tools receive them; a
 generated Procedure tool's handler is shared with Store and REST callers and
 gets neither.
 
@@ -176,8 +179,10 @@ that first outcome: the result is not delivered, so a tool that ignores the
 signal and goes on to finish (on Bun, which keeps running it) is still recorded
 as cancelled, although its writes may have been committed. Stop at the signal
 before a write the client should be able to rely on. A request the client left
-before the call started runs no step of it (the SDK answers 499): no invocation
-is observed, and its access event records the cancellation.
+before the call started runs no step of it: on 2026-07-28 the SDK answers 499
+and no invocation is observed; on a 2025 revision the stateless transport still
+starts the invocation, which is recorded as cancelled. Its access event records
+the cancellation in both.
 
 ```ts
 import type { Tool } from '@aotter/mantle/mcp';
@@ -276,10 +281,14 @@ export const handlers = {
 ### Results that are not objects
 
 A tool may return any JSON value: an array, a string, a number, a boolean or
-`null` (SEP-2106). Its `outputSchema` (a ref Procedure's output, or
-`Tool.outputSchema`) is listed with whatever root `type` it declares, and a
-success sends the value as `structuredContent` beside its JSON text block, so a
-client validates it against that schema. Data the listed schema's root `type`
+`null` (SEP-2106). On a 2026-07-28 request its `outputSchema` (a ref Procedure's
+output, or `Tool.outputSchema`) is listed with whatever root `type` it declares,
+and a success sends the value as `structuredContent` beside its JSON text block,
+so a client validates it against that schema. On a 2025-era request, whose
+structured content is an object, such a tool lists no `outputSchema` and its
+result is the JSON text block alone (the SDK's `{ result }` wrapping never
+reaches the client); an object output is the same in both eras, and so is the
+tool version. Data the listed schema's root `type`
 does not admit, `undefined` included, fails the call as `INTERNAL_ERROR`: the
 server does not send a result its own schema refuses. A failure omits
 `structuredContent` when the tool lists a schema. An App reads either an object
@@ -569,15 +578,27 @@ are never retained in that cache. The low-level SDK also accepts an async
 catalogue. If its tool names change, those links are checked again, and a call
 always uses the current request's tool table.
 
+### MCP Apps support per protocol era
+
 Clients advertise `io.modelcontextprotocol/ui` and MIME type
-`text/html;profile=mcp-app` on every request, in
-`params._meta["io.modelcontextprotocol/clientCapabilities"]` (MCP protocol revision
-2026-07-28 requires that envelope on every request). A request whose capabilities do
-not declare UI support receives no UI resources or UI tool metadata, and its
-`tools/list` shows no App-only tool. A `tools/call` that names an App-only tool runs
-it whatever the request declares, so a host that forwards an App's own calls need
-not declare the extension for them; the result then carries no UI metadata. Every
-tool retains its validation, authorization, caller, origin and database behavior.
+`text/html;profile=mcp-app` in `params._meta["io.modelcontextprotocol/clientCapabilities"]`
+(on every 2026-07-28 request, which requires that envelope) or, on a 2025 revision, in
+the `initialize` capabilities. A stateless 2025-era request after `initialize` carries
+no capabilities: its support is unknown, and it keeps App support.
+
+| Era | Request declares | App-only tool in `tools/list` | `tools/call` of an App-only tool | `ToolCall.apps` (result rendered in an App) | App resources |
+|---|---|---|---|---|---|
+| 2025 | UI support | listed | runs | `true` for a linked tool | listed |
+| 2025 | capabilities without UI support | not listed | runs | `false` | none |
+| 2025 | nothing (unknown) | listed | runs | `false` | listed |
+| 2026-07-28 | UI support | listed | runs | `true` for a linked tool | listed |
+| 2026-07-28 | capabilities without UI support | not listed | runs | `false` | none |
+
+A request without UI support receives no UI resources or UI tool metadata. A
+`tools/call` that names an App-only tool runs it whatever the request declares, so a
+host that forwards an App's own calls need not declare the extension for them; the
+result then carries no UI metadata. Every tool retains its validation,
+authorization, caller, origin and database behavior.
 
 ## The Admin App in a host
 

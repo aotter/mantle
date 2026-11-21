@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-/** The one MCP protocol revision Mantle serves. */
+/** The MCP protocol revision this kit speaks. Mantle also serves the 2025 revisions older clients open with. */
 export const MCP_REVISION = "2026-07-28";
 /** Client capabilities of an MCP Apps host: App resources, `_meta.ui` and App-only tools are listed to it. */
 export const APPS_CAPABILITIES = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
@@ -25,13 +25,20 @@ export function mcpRequest(method, params = {}, { id = 1, capabilities = {}, hea
   return { method: "POST", headers: { ...headers, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": MCP_REVISION, "mcp-method": method, ...(name === undefined ? {} : { "mcp-name": name }) }, body: JSON.stringify(message) };
 }
 
-/** Read-only remote acceptance. Pass generated tools filtered for this surface and the supplied test identity. */
+/**
+ * Read-only remote acceptance. Pass generated tools filtered for this surface and the supplied test identity. Checks
+ * both protocol eras Mantle serves: `server/discover` and every tools/list page on 2026-07-28, then a 2025-era
+ * `initialize` (stateless, no envelope), as a client that has not moved to 2026-07-28 opens.
+ */
 export async function assertMcpDiscovery(endpoint, { tools, headers = {}, capabilities = APPS_CAPABILITIES }) {
   const expected = tools.map(tool => tool.name).sort();
   assert.equal(new Set(expected).size, expected.length, "expected tools contain duplicate names");
   let id = 0;
-  const rpc = async (method, params) => {
-    const request = mcpRequest(method, params, { id: ++id, capabilities, headers }), sent = id;
+  const rpc = async (method, params, legacy = false) => {
+    const sent = ++id;
+    const request = legacy
+      ? { method: "POST", headers: { ...headers, "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: sent, method, params }) }
+      : mcpRequest(method, params, { id: sent, capabilities, headers });
     const response = await fetch(endpoint, { ...request, redirect: "error", signal: AbortSignal.timeout(10_000) });
     assert.equal(response.status, 200, `MCP ${method}: HTTP ${response.status}`);
     const text = await response.text(), type = response.headers.get("content-type") ?? "";
@@ -69,6 +76,9 @@ export async function assertMcpDiscovery(endpoint, { tools, headers = {}, capabi
     }
   } while (cursor !== undefined);
   assert.deepEqual(names.sort(), expected, "MCP tools/list: discovered tools differ from the expected permitted tools");
+  const initialized = await rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "mantle-smoke", version: "1" } }, true);
+  assert.equal(initialized.protocolVersion, "2025-11-25", "MCP initialize: 2025-11-25 not served");
+  assert.ok(initialized.capabilities?.tools && typeof initialized.capabilities.tools === "object" && !Array.isArray(initialized.capabilities.tools), "MCP initialize: no tools capability");
   return names;
 }
 

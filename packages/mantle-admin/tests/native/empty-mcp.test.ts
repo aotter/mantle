@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { mcp } from "@aotter/mantle/mcp";
 import { sdkFixtureCaller as fixtureCaller } from "../../../mantle/tests/apps/fixtures.js";
 import { adminMcpApps } from "../../src/server/mcp.js";
-import { mcpInit } from "../../test/mcp-wire.js";
+import { ERAS, mcpInit } from "../../test/mcp-wire.js";
 import { generateAdmin, writeAdminFixture } from "./generated-fixture.js";
 
 const schema = `apiVersion: cms.mantle.aotter.net/v2
@@ -67,18 +67,27 @@ for (const [name, text] of [
         generated({ db: () => null, caller: () => admin }),
       ];
       for (const api of handlers)
-        for (const path of ["/mcp", "/mcp/admin"]) {
-          const rpc = async (method: string, params: Record<string, unknown> = {}) => {
-            const response = await api(new Request(`https://app.test${path}`, mcpInit(method, params)), env);
-            const body = await response!.text();
-            expect(response!.status).toBe(200);
-            return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body);
-          };
-          const discovered = await rpc("server/discover");
-          expect(discovered.result.capabilities.tools).toBeDefined();
-          expect((await rpc("tools/list")).result.tools).toEqual([]);
-          if (path === "/mcp/admin" && api === handlers[0])
-            expect((await rpc("resources/list")).result.resources).toBeArray();
-        }
+        for (const path of ["/mcp", "/mcp/admin"])
+          for (const era of ERAS) {
+            const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+              const response = await api(new Request(`https://app.test${path}`, mcpInit(method, params, { era })), env);
+              const body = await response!.text();
+              expect(response!.status).toBe(200);
+              return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body);
+            };
+            // The connect step of each era: `initialize` (2025) or `server/discover` (2026-07-28).
+            const discovered =
+              era === "2026-07-28"
+                ? await rpc("server/discover")
+                : await rpc("initialize", {
+                    protocolVersion: era,
+                    capabilities: {},
+                    clientInfo: { name: "test", version: "1" },
+                  });
+            expect(discovered.result.capabilities.tools).toBeDefined();
+            expect((await rpc("tools/list")).result.tools).toEqual([]);
+            if (path === "/mcp/admin" && api === handlers[0])
+              expect((await rpc("resources/list")).result.resources).toBeArray();
+          }
     }
   });
