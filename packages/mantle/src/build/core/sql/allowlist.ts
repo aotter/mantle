@@ -275,9 +275,8 @@ const BASE_PROFILE: Profile = {
 
 // ---- ADR-0037 decision 2: the reference profile's additions --------------------------------------------------------------
 const MORE_KEYS: Record<string, string> = {
-  SelectStmt: "withClause larg rarg all",
+  SelectStmt: "larg rarg all",
   WithClause: "ctes recursive",
-  CommonTableExpr: "ctename ctequery aliascolnames ctematerialized",
   RangeSubselect: "lateral",
   RangeFunction: "ordinality",
   Alias: "colnames",
@@ -372,7 +371,6 @@ function no(code: Code, message: string, offset?: number, keyword?: RegExp): nev
 
 /** structural refusals name a key or an enum value; these find the keyword in the source text (the AST carries no location for them) */
 const KEYWORD: Record<string, RegExp> = {
-  "SelectStmt.withClause": /\bWITH\b/i,
   "InsertStmt.withClause": /\bWITH\b/i,
   "UpdateStmt.withClause": /\bWITH\b/i,
   "DeleteStmt.withClause": /\bWITH\b/i,
