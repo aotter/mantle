@@ -539,6 +539,11 @@ storage-only fields are absent from entry data and generated CSV export fields.
 Geo remains experimental: existing native outputs are readable, not generically
 editable. Metadata derives child relationships from `allCollections`.
 
+Entry `data`, `filter_field`, `scope_field` and `sort` name fields in their declared spelling (`orgId`), the keys entry
+`data` returns, on every target; unlike the [Store](../reference/manifest.md), Admin does not fold a storage spelling
+(`orgid`) or another casing to it but refuses it with 400, so a body that names one column twice is refused too. A create,
+filter or sort is refused before any SQL; a patch after reading the row, before any write. A date-time filter matches the
+stored instant in any offset.
 Entry queries validate indexed sort fields, directions, filters and limits
 1–500. `filter_field` and JSON `filter_values` are paired; each batch has at most
 50 scalar values. Search reuses native SQLite/D1 FTS and PostgreSQL behavior.
