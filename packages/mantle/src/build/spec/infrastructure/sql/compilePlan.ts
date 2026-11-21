@@ -284,9 +284,7 @@ export function tableOutputs(
         };
     } else if (node.RangeSubselect && !node.RangeSubselect.lateral && !node.RangeSubselect.alias?.colnames?.length) {
       const inner = node.RangeSubselect.subquery?.SelectStmt;
-      const outs = (inner?.targetList ?? []).filter(
-        (t: SqlNode) => outName(t) === name,
-      );
+      const outs = (inner?.targetList ?? []).filter((t: SqlNode) => outName(t) === name);
       found = outs.length === 1 ? typed(inner, outs[0].ResTarget.val) : undefined;
     }
     return found && { type: found.type, notNull: found.notNull && !nullable };
