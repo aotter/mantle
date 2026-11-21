@@ -200,7 +200,7 @@ cost bytes.
 self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
 package filters while iterating. Native four-target conformance is separate
-(`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
+(`pnpm --filter @aotter/mantle test:native`, Bun 1.4.5).
 
 Mantle commits to four stacks, its four targets: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually
 through Hyperdrive), `bun-postgres` (Bun.SQL) and `bun-sqlite` (bun:sqlite). A change that touches what applications
