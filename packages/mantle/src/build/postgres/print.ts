@@ -3,29 +3,20 @@
  * gives a write the column's type (`typed`): a value written to a column is cast to the column's type (`j.value ->> 'reps'` is
  * text; the column is int8). Everything else prints as written: `||`, `->>` and CAST mean what PostgreSQL says (ADR-0039).
  */
-import { Deparser } from "pgsql-deparser";
+import { NativeDeparser } from "../core/sql/print.js";
+export type { RawExpr } from "../core/sql/print.js";
 import type { SqlNode as N } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { S, paren, parenthesized } from "../core/sql/ast.js";
 import { cast } from "./lower.js";
 
-export interface RawExpr {
-  readonly parts: readonly (string | N)[];
-}
 
-class PgDeparser extends Deparser {
+
+class PgDeparser extends NativeDeparser {
   override A_Expr(n: N, ctx: any) {
     return super.A_Expr(parenthesized("A_Expr", n) as never, ctx);
   }
-  override NullTest(n: N, ctx: any) {
-    return super.NullTest(parenthesized("NullTest", n) as never, ctx);
-  }
-  override BooleanTest(n: N, ctx: any) {
-    return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx);
-  }
-  override SubLink(n: N, ctx: any) {
-    return super.SubLink(parenthesized("SubLink", n) as never, ctx);
-  }
+
   /** The parser's `pg_catalog.*` calls print as SQL syntax (`ts AT TIME ZONE zone`, `OVERLAPS`), not a call: operands and all in parentheses. */
   override FuncCall(n: N, ctx: any) {
     // like_escape is the ESCAPE of a LIKE, printed there with its operands already parenthesized
@@ -37,10 +28,7 @@ class PgDeparser extends Deparser {
       return super.FuncCall(n, ctx);
     return `(${super.FuncCall({ ...n, args: n.args?.map(paren) } as never, ctx)})`;
   }
-  /** Mantle's own lowerings are written as PostgreSQL text with sub-ASTs spliced in (see `sql` in lower.ts). */
-  Raw(n: RawExpr, ctx: any) {
-    return `(${n.parts.map(p => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;
-  }
+
 }
 
 export function print(ast: N): string {
