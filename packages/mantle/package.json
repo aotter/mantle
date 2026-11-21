@@ -27,7 +27,6 @@
     ".": "./dist/infrastructure/generate.js",
     "./generate": "./dist/infrastructure/generate.js",
     "./contracts": "./dist/kernel/contracts.js",
-    "./internal/authorization": "./dist/kernel/authorization.js",
     "./internal/translations": "./dist/kernel/translations.js",
     "./internal/driver/transaction-context": "./dist/kernel/driver/transaction-context.js",
     "./internal/scalars": "./dist/kernel/scalars.js",
