@@ -1,18 +1,19 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { generateOrThrow, loadFixtureSources, writeGenerated } from "./apps/link.js";
+import { generateOrThrow, link, loadFixtureSources, writeGenerated } from "./apps/link.js";
 import { verifyOnLocalD1 } from "./apps/local-d1.js";
 import { seed, verifySqlPatterns } from "./sql-patterns-scenarios.js";
 
 const base = resolve(import.meta.dir, ".."),
   port = process.env.MANTLE_NEXT_SQL_PATTERNS_D1_PORT ?? "8990";
 const composition = `import {userCaller} from '${resolve(base, "src/kernel/user-caller.ts")}';import {rest} from './rest.js';import {mcp} from './mcp.js';
-const options={db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"oauth",scopes:["mcp"]}),handlers:{}};
+import {handlers} from './src/handlers.js';import {withRetryAfter} from './src/retry-after.js';
+const options={db:(env:{DB:any})=>env.DB,caller:async(request:Request)=>userCaller({id:request.headers.get("x-user")??"u",role:request.headers.get("x-role")},{adminRoles:["admin"],credential:"oauth",scopes:["mcp"]}),handlers};
 const api=rest(options),tools=mcp(options);
-export const app=(request:Request,env:{DB:any})=>(new URL(request.url).pathname.startsWith("/mcp")?tools:api)(request,env);`;
+export const app=async(request:Request,env:{DB:any})=>new URL(request.url).pathname.startsWith("/mcp")?tools(request,env):withRetryAfter((await api(request,env))!);`;
 // The guide's Views are admin-surface; public here so the oracle reads them through REST (requires stays ctx.admin).
 const restViews = (text: string) => text.replaceAll("surface: admin", "surface: public");
 // PostgreSQL's spelling of the nested read: jsonb_agg of zero rows is NULL, so default it to [].
@@ -31,6 +32,11 @@ async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") 
     dir = await mkdtemp(join(base, "tests/apps/.sql-patterns-"));
   await writeGenerated(dir, files);
   await writeFile(join(dir, "app.ts"), composition);
+  // The guide's TypeScript runs as written: src/handlers.ts and src/retry-after.ts beside the generated files.
+  const guide = await readFile(resolve(base, "../../docs/handbook/guides/sql-patterns.md"), "utf8");
+  await mkdir(join(dir, "src"));
+  for (const block of [...guide.matchAll(/^```ts\n(\/\/ (src\/[\w-]+\.ts)\n[\s\S]*?)^```$/gm)])
+    await writeFile(join(dir, block[2]!), link(block[1]!.replaceAll("../generated/", "../")));
   return { dir, files };
 }
 
@@ -88,6 +94,63 @@ test("bun:sqlite: the SQL patterns guide behaves as documented", async () => {
       await rm(dir, { recursive: true, force: true });
       await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {});
       await sql.close();
+    }
+  },
+  30000,
+);
+
+(process.env.MANTLE_NEXT_BUN_PG_URL ? test : test.skip)(
+  "PostgreSQL: first requests that race on separate connections create one row and all get it",
+  async () => {
+    const { dir, files } = await fixture("bun-postgres"),
+      schema = "patterns_" + crypto.randomUUID().replaceAll("-", ""),
+      setup = new SQL(process.env.MANTLE_NEXT_BUN_PG_URL!, { max: 1 }),
+      pool = new SQL({ url: process.env.MANTLE_NEXT_BUN_PG_URL!, max: 8, connection: { search_path: schema } });
+    try {
+      await setup.unsafe(`CREATE SCHEMA ${schema}`);
+      await setup.unsafe(`SET search_path TO ${schema}`);
+      await setup.unsafe(files["schema.sql"]!);
+      const { app } = await import(join(dir, "app.ts"));
+      const post = (path: string, body: object) =>
+        app(
+          new Request(`http://local${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-role": "user", "x-user": "u" },
+            body: JSON.stringify(body),
+          }),
+          { DB: pool },
+        ).then(async (response: Response) => ({ status: response.status, body: (await response.json()) as any }));
+      const backends = new Set<number>();
+      await Promise.all(
+        Array.from({ length: 8 }, async () => {
+          const [{ pid }] = await pool`SELECT pg_backend_pid() AS pid, pg_sleep(0.05)`;
+          backends.add(pid);
+        }),
+      );
+      expect(backends.size).toBeGreaterThan(1);
+      for (let round = 0; round < 5; round++) {
+        const invoices = await Promise.all(
+          Array.from({ length: 8 }, () =>
+            post("/api/invoices", { operationId: `race-${round}`, customer: "acme", amount: 5 }),
+          ),
+        );
+        expect(invoices.map(r => r.status)).toEqual(Array(8).fill(200));
+        expect(new Set(invoices.map(r => r.body.results[0][0].id)).size).toBe(1);
+        const transfers = await Promise.all(
+          Array.from({ length: 8 }, () =>
+            post("/api/transfers", { operationId: `race-${round}`, toAccount: "acct-1", amount: 5 }),
+          ),
+        );
+        expect(transfers.map(r => [r.status, r.body.error?.code])).toEqual(Array(8).fill([200, undefined]));
+        expect(new Set(transfers.map(r => r.body.id)).size).toBe(1);
+      }
+      expect(Number((await pool`SELECT count(*) AS n FROM invoices`)[0].n)).toBe(5);
+      expect(Number((await pool`SELECT count(*) AS n FROM transfers`)[0].n)).toBe(5);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+      await pool.close();
+      await setup.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`).catch(() => {});
+      await setup.close();
     }
   },
   30000,
