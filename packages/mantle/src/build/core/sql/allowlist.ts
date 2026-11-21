@@ -1,12 +1,5 @@
-/**
- * Mantle SQL's allowlist (ADR-0034 decisions 2 and 3, ADR-0037 decision 1): one walker and two profiles. `base` is what every
- * dialect runs (D1 runs exactly this); `reference` is base plus ADR-0037 decision 2, and the PostgreSQL dialect runs it.
- * Shared by the CLI (run on the raw AST, so a refusal carries a source offset) and by the runtime (run on the stripped IR of
- * every program). An unknown node type, key or enum value is refused, never skipped: a printer that skipped keys would
- * silently drop OFFSET or FOR UPDATE.
- *
- * Pure JavaScript. This file must never import the parser: the runtime imports it, and the parser
- * declares a 128 MiB WASM memory, which is a Worker's whole isolate limit.
+/** Build-time SQL allowlist: one walker with base (SQLite) and reference (PostgreSQL) profiles.
+ * Unknown nodes, keys and enum values are refused, never silently omitted by the printer.
  */
 import type {
   SchemaColumns,

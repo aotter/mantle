@@ -1,6 +1,6 @@
 /**
- * IR -> physical statements: validate (the runtime never trusts an IR), inject policy, resolve binds.
- * Everything a Store does per statement before the executor runs it (ADR-0034 decisions 3 and 8).
+ * Checked IR -> physical statements: validate, inject policy and resolve binds.
+ * Build-time compilation for native generated operations (ADR-0034 decisions 3 and 8).
  */
 import { PG_GRAMMAR, type SchemaColumns, type SqlNode, type SqlPlan } from "../../spec/domain/index.js";
 import { runtimeDiagnostic, DiagnosticError } from "../../spec/kernel/diagnostic.js";

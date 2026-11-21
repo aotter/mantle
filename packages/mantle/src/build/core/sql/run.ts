@@ -115,14 +115,6 @@ function rowComparable(env: Pick<RunEnv, "dialect">, keys: readonly N[], notNull
   });
 }
 
-/**
- * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
- * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them. A NULL key
- * sorts by the dialect's own NULLS rule (stated on every key, so the cursor and the order agree).
- *
- * A View's own LIMIT bounds every page together. A View without ORDER BY (a DISTINCT, a GROUP BY or an aggregate) cannot
- * be paged: it returns its rows when they fit one page and is refused when they do not.
- */
 /** Where a paged statement's extra bind comes from on a later request: a cursor key, the search pattern, an equality value, or the page size + 1 (the LIMIT is a bind, so one statement serves every page size). */
 export type Source =
   | { readonly cursor: number }
@@ -156,7 +148,7 @@ export function pageShape(nkeys: number, cursor: readonly unknown[] | undefined,
   return JSON.stringify([cursorShape, search?.columns ?? null, (match?.eq ?? []).map(e => e.column)]);
 }
 
-/** The paged statement for one request shape (see `runView`): the View wrapped with its cursor condition, search and equality filters. */
+/** The paged statement for one request shape: the View wrapped with its cursor condition, search and equality filters. */
 export function pagedOf(
   env: Pick<RunEnv, "schemas" | "dialect">,
   c: Compiled,
