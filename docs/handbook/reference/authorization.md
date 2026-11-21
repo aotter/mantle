@@ -31,8 +31,8 @@ Predicate failure is `UNAUTHENTICATED` for a non-user or `AUTH_DENIED` for a use
 
 "Not while impersonating", "only with a verified email" and "only after a recent sign-in" are facts of the identity
 system, which Core cannot verify for a gateway caller, so `requires` stays closed
-([ADR-0002](../../adr/0002-closed-enums-for-bindings.md)) and the Caller gains no fields for them
-([ADR-lite #1937](../../adr/adr-lite-1937-human-approval.md)). The application states them once, in the
+(ADR-0002) and the Caller gains no fields for them
+(ADR-lite #1937). The application states them once, in the
 `authorize(target, caller)` it passes to `rest`, `mcp`, `web` and `admin`:
 
 ```ts
@@ -167,7 +167,7 @@ await store(db, caller).collection("documents").insert({ org, title });
 ### Organization members and invitations
 
 View SQL reads declared Schemas only, never an auth plugin's tables: those tables belong to one plugin's schema, and an
-application behind a gateway has none ([ADR-0046](../../adr/0046-roles-and-user-fields.md#amendment-enforcement-only-2026-10-14):
+application behind a gateway has none (ADR-0046:
 Mantle enforces rows and does not decide who holds what). To list "members of my organization" with paging, `describe`,
 REST and MCP, mirror the membership into a declared Schema scoped by the same user field that carries the caller's
 organizations, and keep both current from Better Auth's organization hooks.

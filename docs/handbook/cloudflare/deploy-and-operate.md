@@ -145,7 +145,7 @@ required current-authority path rather than weakening them for replica latency.
 
 The application owns its schedule: it declares the crons in `wrangler.jsonc` and exports `scheduled()`, which calls
 generated Procedures as a system caller. A manifest has no `schedule` source
-([ADR-lite #2111](../../adr/adr-lite-2111-scheduling-is-application-owned.md)). Keep one checked map from cron to the
+(ADR-lite #2111). Keep one checked map from cron to the
 work it runs; a test holds it equal to the Wrangler list, so the two cannot drift. With this manifest:
 
 ```yaml

@@ -126,7 +126,7 @@ The runtime never creates, alters or checks tables. Initial DDL is for an empty 
 ### A value unique across all owners
 
 A scoped Schema's unique indexes start with its scope columns, so uniqueness is per owner or partition
-([ADR-0046](../../adr/0046-roles-and-user-fields.md#schema-scope-one-row-template)); there is no global flag. A value
+(ADR-0046); there is no global flag. A value
 that must be unique across all owners, such as a custom hostname or a public handle, gets an unscoped registry Schema
 whose unique index is the global namespace. Only the Procedures that write the scoped row write the registry, in the
 same program, so both commit or neither does; on D1 the program is one batch.

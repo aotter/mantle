@@ -347,7 +347,7 @@ spec:
 ## Retry safely: the row is the replay record
 
 A client that timed out sends the same create again, with the same `operationId`. Mantle keeps no idempotency table
-and adds no write to every call ([ADR-0040](../../adr/0040-thin-native-toolkit.md) §2–3); the business row is the
+and adds no write to every call (ADR-0040 §2–3); the business row is the
 record. `uniqueIndexes: [[owner, operationId]]` makes the id unique per caller (a scoped Schema's unique index starts
 with its scope column), and the insert's conflict branch decides the retry in the same statement:
 

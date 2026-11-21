@@ -4,7 +4,7 @@ description: Write a schema migration yourself from the diff of generated/schema
 # Schema migrations
 
 The runtime never creates, alters or checks tables, and Mantle ships no migration command, apply helper or ledger
-([ADR-lite #2108](../../adr/adr-lite-2108-migrations-are-application-owned.md)).
+(ADR-lite #2108).
 A new database gets the generated `schema.sql`. Every later change is a migration that you, the application's author or
 its coding agent, write from the diff of `schema.sql` and apply with the application's own tooling, before the code that
 needs it deploys.

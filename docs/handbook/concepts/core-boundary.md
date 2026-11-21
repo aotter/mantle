@@ -12,13 +12,12 @@ missing Core feature are the application's to do, with a documented pattern.
 targets, enforces row policy where it compiles SQL (scope, `restrict`, publishing, TTL, locks, optimistic versions),
 and keeps the manifest grammar closed: a key or value it does not know is an error, never ignored
 ([CONTRIBUTING](https://github.com/aotter/mantle/blob/develop/CONTRIBUTING.md#product-and-architecture-contract),
-[ADR-0045](../../adr/0045-next-runtime-core.md), [ADR-0002](../../adr/0002-closed-enums-for-bindings.md)).
+ADR-0045, ADR-0002).
 
 **The application** owns its entry and routing, its auth configuration and how it resolves a Caller, its database
 handles, **schema migrations**, scheduling, and side effects such as email, payments and calls to other services. The
 runtime runs no DDL and no boot-time checks; generated modules do nothing on import (CONTRIBUTING, hard invariants;
-[ADR-lite #2108](../../adr/adr-lite-2108-migrations-are-application-owned.md),
-[ADR-lite #2111](../../adr/adr-lite-2111-scheduling-is-application-owned.md)).
+ADR-lite #2108, ADR-lite #2111).
 
 ## Does it belong in Core?
 
@@ -30,7 +29,7 @@ A request belongs in Core only when it passes all four:
    declares from your manifests, and never changes a database at runtime.
 3. **It does not couple Core to one auth plugin's tables, and it works for an application behind a gateway,** which
    has no auth tables and whose host verifies the caller
-   ([ADR-0046](../../adr/0046-roles-and-user-fields.md#amendment-enforcement-only-2026-10-14)).
+   (ADR-0046).
 4. **There is evidence from real application code:** a workaround in an application, marked
    `drop when aotter/mantle#N`, ideally in more than one application. A hypothetical need is not evidence.
 
@@ -40,18 +39,18 @@ Each of these was asked for and decided. Use the pattern; reopen only with the e
 
 | Asked for | Do instead | Decision |
 | --- | --- | --- |
-| Schema migrations: a diff command, an apply helper, a ledger | Diff `generated/schema.sql` and write the migration yourself: [schema migrations](../guides/migrations.md#write-a-migration); apply it with your own tooling ([applying migrations](../guides/migrations.md#applying-migrations)) | [ADR-lite #2108](../../adr/adr-lite-2108-migrations-are-application-owned.md) |
-| Schedules in the manifest, `schedule` Trigger sources, a generated cron dispatcher | One checked map from cron to generated Procedures in your `scheduled()`: [scheduled work](../cloudflare/deploy-and-operate.md#scheduled-work) | [ADR-lite #2111](../../adr/adr-lite-2111-scheduling-is-application-owned.md), [ADR-0027](../../adr/0027-scheduled-procedure-triggers.md) |
-| Views over an auth plugin's tables (organization members, invitations) | Mirror them into a declared Schema scoped by a user field: [organization members and invitations](../reference/authorization.md#organization-members-and-invitations) | [ADR-0046](../../adr/0046-roles-and-user-fields.md#amendment-enforcement-only-2026-10-14), #2106 |
-| Caller conditions in `requires` (email verified, not impersonating, recent sign-in), `requires.guard` | `authorize(target, caller)`: [caller conditions](../reference/authorization.md#caller-conditions) | [ADR-0002](../../adr/0002-closed-enums-for-bindings.md), [ADR-lite #1937](../../adr/adr-lite-1937-human-approval.md), #2107 |
+| Schema migrations: a diff command, an apply helper, a ledger | Diff `generated/schema.sql` and write the migration yourself: [schema migrations](../guides/migrations.md#write-a-migration); apply it with your own tooling ([applying migrations](../guides/migrations.md#applying-migrations)) | ADR-lite #2108 |
+| Schedules in the manifest, `schedule` Trigger sources, a generated cron dispatcher | One checked map from cron to generated Procedures in your `scheduled()`: [scheduled work](../cloudflare/deploy-and-operate.md#scheduled-work) | ADR-lite #2111, ADR-0027 |
+| Views over an auth plugin's tables (organization members, invitations) | Mirror them into a declared Schema scoped by a user field: [organization members and invitations](../reference/authorization.md#organization-members-and-invitations) | ADR-0046, #2106 |
+| Caller conditions in `requires` (email verified, not impersonating, recent sign-in), `requires.guard` | `authorize(target, caller)`: [caller conditions](../reference/authorization.md#caller-conditions) | ADR-0002, ADR-lite #1937, #2107 |
 | Idempotency keys and rate-limit or counter tables in Core | The row is the replay record: [retry safely](../guides/sql-patterns.md#retry-safely-the-row-is-the-replay-record); quotas in the Procedure: [per-caller quotas](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429); request rates at the platform's rate limiter: [limits and authorize](../reference/authorization.md#limits-and-authorize) | #2109 |
-| A globally unique index on a scoped Schema | An unscoped registry Schema written by the same Procedure: [a value unique across all owners](../reference/schema.md#a-value-unique-across-all-owners) | [ADR-0046](../../adr/0046-roles-and-user-fields.md#schema-scope-one-row-template), #2110 |
-| A membership predicate that reads plugin tables (`auth.memberOf()`) | Carry memberships and roles as verified user fields and use them in `scope` or `restrict`: [user fields](../reference/authorization.md#user-fields) | [ADR-0046](../../adr/0046-roles-and-user-fields.md), #2105 |
+| A globally unique index on a scoped Schema | An unscoped registry Schema written by the same Procedure: [a value unique across all owners](../reference/schema.md#a-value-unique-across-all-owners) | ADR-0046, #2110 |
+| A membership predicate that reads plugin tables (`auth.memberOf()`) | Carry memberships and roles as verified user fields and use them in `scope` or `restrict`, where `restrict` joins terms with `AND` and `OR` ("its creator or an owner of its organization"): [user fields](../reference/authorization.md#user-fields) | ADR-0046, #2105 |
 | Mounting an application's own MCP server behind Mantle's gate | Hand-built tools and `ref` handlers return content blocks and `_meta` with `withResult`: [tool metadata and result `_meta`](../guides/mcp-apps.md#tool-metadata-and-result-_meta) | #1843 |
 | Built-in content revisions | A publishing parent that points at operational revisions: [edit published content without downtime](../guides/revisions.md) | #1205 |
-| Per-target role lists in `requires` (`{ ctx.admin: [editor] }`) | Decide per-target roles in `authorize` or a handler: [authorization](../reference/authorization.md) | [ADR-0046](../../adr/0046-roles-and-user-fields.md) |
+| Per-target role lists in `requires` (`{ ctx.admin: [editor] }`) | Decide per-target roles in `authorize` or a handler: [authorization](../reference/authorization.md) | ADR-0046 |
 | A wrapper around Better Auth, or Core-owned sign-in | Write `auth.ts` and resolve the Caller yourself: [authentication](../cloudflare/authentication.md) | CONTRIBUTING, hard invariants |
-| A generated website or service preset | Write the entry and routes; generated surfaces mount into them: [service entry](../cloudflare/service-entry.md) | CONTRIBUTING, [ADR-0045](../../adr/0045-next-runtime-core.md) |
+| A generated website or service preset | Write the entry and routes; generated surfaces mount into them: [service entry](../cloudflare/service-entry.md) | CONTRIBUTING, ADR-0045 |
 
 ## When something really is missing
 
