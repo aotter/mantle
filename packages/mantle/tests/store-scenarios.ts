@@ -150,6 +150,25 @@ export async function verifyDeclaredNames(purchases: any) {
     ids = (rows: any[]) => rows.map(r => r.id);
   assert.equal(await purchases.count({ ...mine, submittedAt: { gte: new Date("2026-10-11T00:00:02Z") } }), 1);
   assert.equal(await purchases.count({ SortBucket: "declared", neededOn: "2026-10-20" }), 2);
+  assert.equal(
+    await purchases.count({
+      ...mine,
+      submittedAt: { in: [new Date("2026-10-11T00:00:01.500Z"), "2026-10-11T00:00:02.25Z"] },
+      sortBucket: { isNull: false },
+    }),
+    2,
+  );
+  assert.equal((await purchases.first({ where: mine, orderBy: "requestNumber", order: "desc" })).id, second.id);
+  // one column in two spellings is refused before SQL: SQLite would store one value and check the other
+  for (const write of [
+    () => purchases.insert({ ...declared("D-3", "2026-10-11T00:00:04Z"), title: "a", Title: "b" }),
+    () => purchases.update(first.id, { title: "a", Title: "b" }, { lock: first.version }),
+  ])
+    await assert.rejects(Promise.resolve().then(write), /names a column twice/);
+  await assert.rejects(
+    Promise.resolve().then(() => purchases.find({ where: mine, orderBy: ["title"] })),
+    /orderBy is a column name/,
+  );
   assert.deepEqual(ids((await purchases.find({ where: mine, orderBy: "submittedAt", order: "desc" })).rows), [
     second.id,
     first.id,

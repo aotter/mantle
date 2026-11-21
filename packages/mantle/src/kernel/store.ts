@@ -422,8 +422,10 @@ export function createStore<
 
     async function find(q: Query<object, string> = {}): Promise<Page<unknown>> {
       const dir = q.order ?? "asc",
-        name = (q.orderBy ?? "id").toLowerCase(),
+        by = q.orderBy ?? "id",
         limit = q.limit ?? 50;
+      if (typeof by !== "string") throw no("orderBy is a column name");
+      const name = by.toLowerCase();
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
       const values = base(),
         conds = conditions(q.where, values);
@@ -469,11 +471,15 @@ export function createStore<
       const push = (v: unknown) => (values.push(v), d.param(values.length));
       const recipe = (r: Recipe) => push(evaluate(d, [r], caller, { version: lock }, ms)[0]);
       /** The marks of the non-null columns written, by folded name. */
-      const marks = new Map<string, string>();
+      const marks = new Map<string, string>(),
+        seen = new Set<string>();
       const given = (set: object, insert = false) =>
         Object.entries(set).map(([name, v]) => {
           // a declared name (`orgId`) is its storage column (`orgid`) on every dialect, as SQLite already resolves it
           const key = name.toLowerCase();
+          // two spellings of one column: SQLite would store one value while the checks below read the other
+          if (seen.has(key)) throw no(`${name} names a column twice`);
+          seen.add(key);
           if (SYSTEM.includes(key) || key === p.scope || (!insert && !!f.u?.some(u => u[0] === key)))
             throw no(`${name} is not writable`);
           // a driver binds undefined as NULL: an update would silently clear the column
