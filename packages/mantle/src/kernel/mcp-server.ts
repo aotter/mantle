@@ -58,9 +58,9 @@ const MCP_PAGE_BUDGET = 60_000;
 const MCP_INPUT_ELEMENTS = 10_000;
 const TOOL_META_KEY = "net.aotter.mantle/tool";
 const CLIENT_CAPABILITIES_META_KEY = "io.modelcontextprotocol/clientCapabilities";
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
+export function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
   if (listener)
     try {
       void Promise.resolve(listener(event)).catch(() => {});

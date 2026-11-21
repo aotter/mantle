@@ -8,7 +8,7 @@ import { draining } from "./drain.js";
 import type { Tool, Tools, Options } from "./mcp.js";
 import { linkSurface, type McpAppRender, type McpAppsSource } from "./mcp-apps.js";
 import { resolveMcpApps } from "./mcp-app-pages.js";
-import { serveTools } from "./mcp-server.js";
+import { serveTools, isRecord, observe } from "./mcp-server.js";
 import {
   isView,
   notScopeGated,
@@ -29,17 +29,10 @@ const MAX_BATCH_SIZE = 100;
 const CATALOGUE_METHODS = ["initialize", "server/discover", "tools/list", "resources/list", "resources/read"];
 /** Methods whose answer names tools, so it is filtered to what the caller may call. */
 const LISTING_METHODS = ["tools/list", "resources/read"];
-const anonymous = () => ({ kind: "anonymous" }) as const;
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-/** The scopes a challenge asks for: the credential's, plus what the request needs. */
+/** The scopes a challenge asks for: the credential’s, plus what the request needs. */
 const union = (scopes: readonly string[], extra: readonly string[]) => [...new Set([...scopes, ...extra])].join(" ");
-function observe<T>(listener: ((event: T) => void | Promise<void>) | undefined, event: T): void {
-  if (listener)
-    try {
-      void Promise.resolve(listener(event)).catch(() => {});
-    } catch {}
-}
+const anonymous = () => ({ kind: "anonymous" }) as const;
+
 
 /** A refusal answered before any tool runs: `scope` is what the challenge asks for, `bare` sends no challenge. */
 interface Refusal {
