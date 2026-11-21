@@ -27,7 +27,7 @@ wrangler.stdout.on("data", (chunk) => { logs += chunk; });
 wrangler.stderr.on("data", (chunk) => { logs += chunk; });
 
 const json = { "content-type": "application/json", origin };
-/** One MCP request in protocol revision 2026-07-28 (the only one Mantle serves): the `_meta` envelope and its headers. */
+/** One MCP request in protocol revision 2026-07-28 (Mantle also serves the 2025 revisions): the `_meta` envelope and its headers. */
 const mcpRequest = (method, params = {}, { id = 1, capabilities = {}, headers = {} } = {}) => {
   const message = { jsonrpc: "2.0", id, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "reference-smoke", version: "1" }, "io.modelcontextprotocol/clientCapabilities": capabilities } } };
   const name = method === "tools/call" ? params.name : method === "resources/read" ? params.uri : undefined;

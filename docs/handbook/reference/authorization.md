@@ -138,21 +138,16 @@ Pins use [describe](describe.md)'s `_meta.id`: `rest:<METHOD> <path>`, `admin:<M
 
 A gateway computes the pin from the request with [`matchTarget(describe, request)`](describe.md#matching-a-request-to-its-target), which applies the routers' own path normalisation, `HEAD` handling, Admin mount and precedence to the saved `mantle describe` JSON. It returns the target's `_meta`, including `targetHash` and the `readOnly` flag that the freshness rule reads, or `null` when the application serves no such route or tool.
 
-MCP host callers forward one request in protocol revision 2026-07-28: `server/discover` (pinned to a mounted tool) or `tools/call` of their pinned tool. Batches stay refused, `tools/list` and `resources/*` return 403 because the host provides its catalogue, and a 2025-era message (an `initialize`, or one without the `_meta` envelope) is answered with HTTP 400 and JSON-RPC `-32022`. See [Forwarding MCP requests](#forwarding-mcp-requests).
+MCP host callers forward one message per request, in either protocol era: the connect step pinned to a mounted tool (`initialize` in the 2025 form, `server/discover` on 2026-07-28) or `tools/call` of their pinned tool. Batches stay refused, and `tools/list`, `resources/*` and notifications return 403 because the host provides its catalogue. See [Forwarding MCP requests](#forwarding-mcp-requests).
 
 ### Forwarding MCP requests
 
-Core serves MCP protocol revision 2026-07-28 only. A forwarded MCP request is one JSON-RPC message, not a batch,
-whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` (`"2026-07-28"`),
-`io.modelcontextprotocol/clientCapabilities` (the capabilities the host declares; include
-`extensions["io.modelcontextprotocol/ui"].mimeTypes: ["text/html;profile=mcp-app"]` for MCP App metadata) and,
-optionally, `io.modelcontextprotocol/clientInfo`, with headers that state the same: `MCP-Protocol-Version`,
-`Mcp-Method` and, for `tools/call`, `Mcp-Name` (the tool name). There is no `initialize` and no session: send
-`tools/call` directly, or `server/discover` for the server's capabilities. A host that forwarded the 2025-era form
-before must change it; Core answers that form with HTTP 400 and JSON-RPC `-32022` whose `data.supported` is
-`["2026-07-28"]`, and records the request as refused (`INPUT_VALIDATION_FAILED`, status 400) in its access event.
+Core serves both MCP protocol eras, so a host may forward either form, and the 2025 form a host forwards today keeps
+working. A forwarded MCP request is one JSON-RPC message, not a batch, and needs no `initialize` before it and no
+session: send `tools/call` directly. The host rule (one message; the connect step or a call of the pinned tool) applies
+to both forms alike.
 
-Before (2025-era, refused now):
+2025 form: plain JSON-RPC, no `_meta` envelope; `MCP-Protocol-Version` (a 2025 revision) may be sent.
 
 ```http
 POST /mcp/admin HTTP/1.1
@@ -162,7 +157,11 @@ Accept: application/json, text/event-stream
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"approve_request","arguments":{"id":"r1"}}}
 ```
 
-After (2026-07-28):
+2026-07-28 form: `params._meta` carries `io.modelcontextprotocol/protocolVersion` (`"2026-07-28"`),
+`io.modelcontextprotocol/clientCapabilities` (the capabilities the host declares; include
+`extensions["io.modelcontextprotocol/ui"].mimeTypes: ["text/html;profile=mcp-app"]` for MCP App metadata) and,
+optionally, `io.modelcontextprotocol/clientInfo`, with headers that state the same: `MCP-Protocol-Version`,
+`Mcp-Method` and, for `tools/call`, `Mcp-Name` (the tool name). `server/discover` describes the server.
 
 ```http
 POST /mcp/admin HTTP/1.1
@@ -176,11 +175,13 @@ Mcp-Name: approve_request
  "_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
 ```
 
-`ctx.props.mantle` is unchanged. A result is answered as JSON, or as an SSE stream once the call sends progress;
-it carries `resultType: "complete"` and `_meta["io.modelcontextprotocol/serverInfo"]`. A `tools/call` of an App-only
-tool (`_meta.ui.visibility` without `"model"`), such as an MCP App's own call the host forwards, runs with the
-`clientCapabilities: {}` above: visibility hides a tool only from `tools/list`, and the tool's own authorization
-decides the call. Declare the `io.modelcontextprotocol/ui` extension when the result should carry App metadata. A
+`ctx.props.mantle` is the same for both. In the 2025 form a result is answered as an SSE stream; in the 2026-07-28
+form as JSON, or as an SSE stream once the call sends progress, and it carries `resultType: "complete"` and
+`_meta["io.modelcontextprotocol/serverInfo"]`. A tool whose output is not an object sends its data as
+`structuredContent` only in the 2026-07-28 form; the 2025 form gets its JSON text block alone. A `tools/call` of an
+App-only tool (`_meta.ui.visibility` without `"model"`), such as an MCP App's own call the host forwards, runs in
+either form (with the `clientCapabilities: {}` above, or none): visibility hides a tool only from `tools/list`, and
+the tool's own authorization decides the call. Declare the `io.modelcontextprotocol/ui` extension when the result should carry App metadata. A
 call whose host request ends before the tool settles records `outcome: "error"` with reason `REQUEST_CANCELLED` in
 its access event at that moment, also on Workers; a tool that ignores the signal and finishes later does not change
 it.

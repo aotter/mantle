@@ -94,7 +94,7 @@ gates remain unchanged.
    - cookie-authenticated REST read (`GET /api/views/my-orders`): 3 DB round trips cold and warm
      with cookie cache off (joined session/user, current user, business), 2 cold and warm on a
      valid signed cache hit (current user, business);
-   - MCP `server/discover` (protocol revision 2026-07-28);
+   - MCP connect in both protocol eras: `initialize` (2025) and `server/discover` (2026-07-28);
    - MCP `tools/list`;
    - one successful authenticated write.
 
