@@ -55,7 +55,9 @@ block, for every Schema repeats what the database and the generated types alread
    cursors (percent-encoded JSON `[value, id]`, bound as parameters; a malformed one is `INPUT_VALIDATION_FAILED`).
    - **Names are storage names.** Rows, `where`, `set`, `orderBy` and cursors use the table's column names (`requestnumber`,
      `created_at`), the keys `SELECT *` returns on every target and the same SQL names as the other generated outputs.
-     Authored camelCase exists only in a View's aliases.
+     Authored camelCase exists only in a View's aliases. A name given anyway in its declared spelling (`requestNumber`, from
+     JavaScript or a cast) is folded to lower case first, so it is that storage column on every dialect, as SQLite already
+     resolved it, date-time and date conversion included (#2119); rows keep storage names.
    - **No runtime allowlist.** Every column name is quoted by the dialect (`ident`); an unknown one is a database error, never
      SQL. Column names, value types, operators, `order`, ids, lock values, writable columns and `orderBy` are enforced
      by the generated TypeScript types only; every value is a bound parameter, so the worst outcome of breaking a type is a

@@ -382,7 +382,8 @@ export function createStore<
     };
     const conditions = (where: object | undefined, values: unknown[]): string[] => {
       const out: string[] = [];
-      for (const [name, spec] of Object.entries(where ?? {})) {
+      for (const [given, spec] of Object.entries(where ?? {})) {
+        const name = given.toLowerCase();
         const operators =
           spec !== null && typeof spec === "object" && !(spec instanceof Date) && !Array.isArray(spec)
             ? Object.entries(spec)
@@ -421,7 +422,7 @@ export function createStore<
 
     async function find(q: Query<object, string> = {}): Promise<Page<unknown>> {
       const dir = q.order ?? "asc",
-        name = q.orderBy ?? "id",
+        name = (q.orderBy ?? "id").toLowerCase(),
         limit = q.limit ?? 50;
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw no("limit is 1 to 500");
       const values = base(),
@@ -471,15 +472,15 @@ export function createStore<
       const marks = new Map<string, string>();
       const given = (set: object, insert = false) =>
         Object.entries(set).map(([name, v]) => {
-          // SQLite matches column names without case, so compare folded
+          // a declared name (`orgId`) is its storage column (`orgid`) on every dialect, as SQLite already resolves it
           const key = name.toLowerCase();
           if (SYSTEM.includes(key) || key === p.scope || (!insert && !!f.u?.some(u => u[0] === key)))
             throw no(`${name} is not writable`);
           // a driver binds undefined as NULL: an update would silently clear the column
           if (v === undefined) throw no(`${name} is undefined`);
-          const mark = put(values, name, v);
+          const mark = put(values, key, v);
           if (v !== null) marks.set(key, mark);
-          return [d.ident(name), mark] as const;
+          return [d.ident(key), mark] as const;
         });
       /** For each non-null reference written, the referenced row as the caller sees it, in the child's partition (`child`). */
       const refs = (child: (column: string) => string | undefined): string[] =>
