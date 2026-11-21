@@ -2,8 +2,8 @@
 
 All four local services passed the same populated procurement acceptance case.
 This is functional acceptance at scale, not a sustained-load benchmark or a
-remote Cloudflare deployment certification. Reproduce with
-[scripts/alpha-matrix](../../scripts/alpha-matrix/README.md).
+remote Cloudflare deployment certification. The historical harness is preserved at the tested SDK commit:
+[scripts/alpha-matrix](https://github.com/aotter/mantle/tree/3dec8dcd/scripts/alpha-matrix).
 
 ## Provenance
 
