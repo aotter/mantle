@@ -45,7 +45,6 @@ export function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; wr
   return { reads, writes };
 }
 
-
 export function developerConsole(plan: RuntimePlan) {
   const schemaName = (key: string) => plan.schemas[key]?.name;
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
