@@ -243,7 +243,8 @@ function applySqlite(before: string, after: string, migration: string, data = ro
   try {
     old.exec(before);
     old.exec(data);
-    if (migration) old.transaction(() => old.exec(migration)).immediate();
+    // Bun 1.3.14: exec() drops the error of the last statement when whitespace follows its semicolon, so trim.
+    if (migration) old.transaction(() => old.exec(migration.trim())).immediate();
     fresh.exec(after);
     return { migrated: sqliteShape(old), fresh: sqliteShape(fresh), db: old };
   } finally {
