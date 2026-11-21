@@ -38,19 +38,30 @@ Values come from the verified Better Auth user record. Declare stored fields wit
 
 SQL cannot reference caller values: `auth.user()` fails with `USER_REF_SCOPE_ONLY`, and `auth.hasRole()` / `auth.role()` with `AUTH_ROLE_REMOVED`. Names are literals; Better Auth core fields and names beginning `mantle` are reserved.
 
-Values come from the original frozen Caller, which holds identity in a private WeakMap. Anonymous and copied/unbranded callers have no roles or user fields. Values are validated and frozen: finite numbers, integers when the field scopes an `integer` column; strings of 1–256 UTF-8 bytes without NUL or lone surrogates; arrays of at most 64 items with duplicates removed, only for multi-valued fields. `{ all: true }` is the typed "every value" state of one field; storing it requires a Better Auth additional field of type `json`. Unknown user fields are discarded. A missing or empty value is refused before SQL runs (`UNAUTHENTICATED` for anonymous callers, otherwise `AUTH_DENIED`); it never matches every row. Inside a restrict OR-clause it instead matches no row for that term, so the clause's other terms decide ([creator or organization owner](#creator-or-organization-owner)). Never mint verified users from request data. Resolve credentials before constructing an identity, and pass the original Caller to generated operations.
+Values come from the original frozen Caller, which holds identity in a private WeakMap. Anonymous and copied/unbranded callers have no roles or user fields. Values are validated and frozen: finite numbers, integers when the field scopes an `integer` column; strings of 1–256 UTF-8 bytes without NUL or lone surrogates; arrays of at most 64 items with duplicates removed, only for multi-valued fields. `{ all: true }` is the typed "every value" state of one field; storing it requires a Better Auth additional field of type `json`. Unknown user fields are discarded. A missing or empty value is refused before SQL runs (`UNAUTHENTICATED` for anonymous callers, otherwise `AUTH_DENIED`); it never matches every row. Inside a restrict OR-clause it instead matches no row for that term, so the clause's other terms decide ([creator or organization owner](#creator-or-organization-owner)); a host caller's field that the host did not forward at all is still refused there (`HOST_CONTRACT`, 412), and only a forwarded empty array matches no row. Never mint verified users from request data. Resolve credentials before constructing an identity, and pass the original Caller to generated operations.
 
 ### Creator or organization owner
 
 Membership and roles reach row policy as user fields the application maintains; Mantle reads no auth plugin's tables. For "a document is visible to its creator or to an owner of its organization", keep an `ownerOrgIds` field beside the organizations a user belongs to, and OR the two terms:
 
 ```yaml
-kind: View
+kind: Schema
 metadata: { name: documents }
 spec:
+  title: Documents
+  lifecycle: operational
+  indexes: [[title, id]]
+  schema:
+    type: object
+    required: [org, title]
+    properties: { org: { type: string }, title: { type: string } }
+---
+kind: View
+metadata: { name: my-docs }
+spec:
   surface: public
-  restrict: { documents: "author_id = auth.uid() OR orgId IN auth.user('ownerOrgIds')" }
-  sql: SELECT id, title, orgId FROM documents ORDER BY title, id
+  restrict: { documents: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')" }
+  sql: SELECT id, title, org FROM documents ORDER BY title, id
 ```
 
 ```ts
@@ -59,12 +70,16 @@ customSession(async ({ user, session }) => ({
   user: { ...user, ownerOrgIds: await ownedOrganizations(user.id) },
   session,
 }));
+// A handler (or server code) creates a document through the Store, which stamps author_id from the caller.
+await store(db, caller).collection("documents").insert({ org, title });
 ```
 
-- `author_id` is stamped from the caller on insert. `ownedOrganizations` is the application's own query, for example over the organization plugin's member rows with role `owner`.
-- A creator with an empty `ownerOrgIds` still sees their documents; a caller who is neither sees none. `{ all: true }` for `ownerOrgIds` is refused with `AUTH_DENIED`: it never lifts a restrict term.
-- Put the same `restrict` on the update and delete Procedures: their `UPDATE`/`DELETE` then change only rows the caller may see, and `orgId` and `author_id` can never be `SET` through them.
+- `ownedOrganizations` is the application's own query, for example over the organization plugin's member rows with role `owner`. Which organization a caller may create a document in is the application's check before the insert; a Schema without a field scope does not check `org`.
+- Insert through the Store, not an `INSERT` Procedure carrying this `restrict`: on a Schema without a field scope such a Procedure is refused at generation (`USER_FIELD_POSITION`), and with one (`scope: "org IN auth.user('orgIds')"`, which also makes the Store refuse an `org` outside the caller's organizations) it runs only for system callers.
+- A creator with an empty `ownerOrgIds` still sees their documents, and so does one whose session has no `ownerOrgIds` at all; a caller who is neither sees none. Under [gateway mode](#gateway-mode) the host forwards `ownerOrgIds: []` for a user who owns nothing: a host that does not forward the field is refused with `HOST_CONTRACT` (412). `{ all: true }` for `ownerOrgIds` is refused with `AUTH_DENIED`: it never lifts a restrict term.
+- Put the same `restrict` on the update and delete Procedures: their `UPDATE`/`DELETE` then change only rows the caller may see, and `org` and `author_id` can never be `SET` through them.
 - A paged View needs an index on its ordered columns (`[title, id]` here): an OR fixes no index prefix ([index prefixes](schema.md#index-prefixes-for-paged-views)).
+- The example is the `documents` part of the SDK's user-fields test application, run on all four targets.
 
 ## Gateway mode
 
@@ -74,7 +89,7 @@ The v1 props contain `v: 1`, the configured `tenant`, `layer` (`admin` or `membe
 
 Admin-layer callers have kind `host`, subject `host:<id>` and the admin layer. Member-layer callers have kind `user`, subject `<id>` and no admin privilege, regardless of role names. Both retain ordinary scope checks and expose freshness, credential and request id to application code. Admin-layer callers see drafts; member management refuses host-built callers with 403 because gateway-mode applications load no Better Auth instance. Copies lose identity authority.
 
-Snapshots may read only: SQL writes, Store/Admin mutations, publishing transitions and ref handlers fail before execution with `STALE_CALLER` (403). Boundary read classification comes from describe’s generated `_meta.readOnly`; generated SQL and Store writes retain their own freshness checks. Session writes keep origin checks. Both layers receive `{ error: { code, field?, target? } }`: 412 for invalid contracts, tenant mismatches or missing/empty required fields (naming the field), 403 for denials, and 400 for malformed bodies; never 401. MCP tool failures use the SDK error result with the same error fields.
+Snapshots may read only: SQL writes, Store/Admin mutations, publishing transitions and ref handlers fail before execution with `STALE_CALLER` (403). Boundary read classification comes from describe’s generated `_meta.readOnly`; generated SQL and Store writes retain their own freshness checks. Session writes keep origin checks. Both layers receive `{ error: { code, field?, target? } }`: 412 for invalid contracts, tenant mismatches or missing/empty required fields (naming the field; inside a restrict OR-clause only a field the host did not forward, since a forwarded `[]` there matches no row), 403 for denials, and 400 for malformed bodies; never 401. MCP tool failures use the SDK error result with the same error fields.
 
 Pins use [describe](describe.md)'s `_meta.id`: `rest:<METHOD> <path>`, `admin:<METHOD> <path template>`, or the View/Procedure target for MCP and web. The route checks `target` and the generated target hash before execution: mismatches return 412 `TARGET_MISMATCH` or `TARGET_HASH_MISMATCH`. The generated `access-targets.ts` map loads only for gateway requests. Manually composed boundaries can supply an `accessTargets` loader returning the same metadata.
 
