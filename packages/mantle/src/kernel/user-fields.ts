@@ -4,6 +4,8 @@ import type { Caller } from "./contracts.js";
 import type { Recipe } from "./binds.js";
 
 export const USER_REFS_V1 = 1 as const;
+/** V2 adds `any` on a user recipe (a restrict OR-clause term, #2105); output without OR still links as V1. */
+export const USER_REFS_V2 = 2 as const;
 /** The typed "every value" state of one field: a structural value, never a magic string. */
 export interface AllValues {
   readonly all: true;
@@ -87,11 +89,15 @@ export const userBinds =
         `This target restricts rows by '${recipe.field}', which needs explicit values; { all: true } does not lift a restrict.`,
       );
     const values = value === undefined ? [] : Array.isArray(value) ? value : [value];
-    if (!values.length) missing(caller, recipe.field);
+    // In a restrict OR-clause an empty set is false (not NULL), so the clause's other terms decide. A host that did not
+    // forward the field at all is misconfigured, not a caller without values: that stays HOST_CONTRACT (412).
+    if (!values.length && (!recipe.any || caller.kind === "anonymous" || (value === undefined && isHostCaller(caller))))
+      missing(caller, recipe.field);
     return sqlite ? JSON.stringify(values) : pgArray(values);
   };
 export const userRefs = (sqlite: boolean, version: number) => {
-  if (version !== USER_REFS_V1) throw new ContractError("USER_REFS_VERSION", "User-reference bind version differs.");
+  if (version !== USER_REFS_V1 && version !== USER_REFS_V2)
+    throw new ContractError("USER_REFS_VERSION", "User-reference bind version differs.");
   const user = userBinds(sqlite);
   return (recipe: Recipe, caller: Caller, input?: Readonly<Record<string, unknown>>): unknown => {
     if (recipe.k === "user") return user(recipe, caller);

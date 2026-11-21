@@ -48,7 +48,9 @@ Each target’s `_meta` contains:
   Optional lowering caches do not affect it. Ref registration keys are
   included; application-owned handler implementations are not.
 - `scope` and `restrict`: per-Schema owner and user-field terms. Owner terms
-  use `owner`; user-field terms name their `column`, `field` and `type`.
+  use `owner`; user-field terms name their `column`, `field` and `type`. A
+  restrict's OR-clauses are listed under `or`, each a list of such terms of
+  which one must hold; the single terms stay in `owner` and `terms`.
 - `readOnly`: true only when all reachable statements are reads. Ref handlers
   and routes without known dependencies are false.
 - `trustedOnly`, `opaque`, `unscopedReads`: trusted-only execution, ref-handler
@@ -119,7 +121,7 @@ return `null`. Web and site pages (pinned by `view:<name>`) and auth routes are
 outside `matchTarget`.
 
 Diff records contain `id`, `field`, `direction` and optional `before`/`after`.
-Removing a scope or restrict term widens access; adding one narrows it.
+Removing a scope or restrict term widens access; adding one narrows it. An OR-clause counts as one term, so changing it (adding or dropping a disjunct) reports a widening.
 Reading another Schema, dropping requirements, adding surfaces or Triggers,
 removing `readOnly` or `trustedOnly`, or enabling `opaque` or `unscopedReads`
 widens access. Variants are compared separately. Adding a target widens;

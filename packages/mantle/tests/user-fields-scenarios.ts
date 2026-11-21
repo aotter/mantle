@@ -13,7 +13,13 @@ const code = async (run: () => Promise<unknown>) =>
     (e: any) => e?.code ?? String(e),
   );
 
-export async function verifyUserFields(app: any, db: any, makeCaller: MakeCaller): Promise<number> {
+export async function verifyUserFields(
+  app: any,
+  db: any,
+  makeCaller: MakeCaller,
+  /** Paged View functions by name (`paged/views/<name>.ts`), when the harness loads them. */
+  pages?: Readonly<Record<string, Function>>,
+): Promise<number> {
   const sales = (id: string, values: Fields = {}, extra: Record<string, unknown> = {}): Caller =>
     makeCaller(
       { id, role: "sales", ...values, ...extra },
@@ -371,5 +377,92 @@ export async function verifyUserFields(app: any, db: any, makeCaller: MakeCaller
     "INPUT_VALIDATION_FAILED",
     "even { all: true } cannot SET the partition",
   );
+  await verifyRestrictOr(app, db, makeCaller, is, pages);
   return checks;
+}
+
+/** OR between restrict terms (ADR-0046, #2105): a document is visible to its creator or to an owner of its organization. */
+async function verifyRestrictOr(
+  app: any,
+  db: any,
+  makeCaller: MakeCaller,
+  is: (actual: unknown, expected: unknown, label: string) => void,
+  pages?: Readonly<Record<string, Function>>,
+): Promise<void> {
+  const fields = {
+    ownerOrgIds: { type: "string", multiple: true },
+    orgIds: { type: "string", multiple: true },
+  } as const;
+  const as = (id: string, values: Fields = {}): Caller => makeCaller({ id, ...values }, { fields });
+  const docs = (caller: Caller) => app.store(db, caller).collection("documents");
+  // c1 creates d1 (org o1) and d2 (o2); x creates d3 (o1) and d4 (o3).
+  for (const [author, org, title] of [
+    ["c1", "o1", "d1"],
+    ["c1", "o2", "d2"],
+    ["x", "o1", "d3"],
+    ["x", "o3", "d4"],
+  ] as const)
+    await docs(as(author)).insert({ org, title });
+  const ids = Object.fromEntries(
+    ((await docs(system).find({})).rows as { id: string; title: string }[]).map(r => [r.title, r.id]),
+  );
+  const callers: [string, Caller, string[]][] = [
+    ["creator only", as("c1", { ownerOrgIds: [] }), ["d1", "d2"]],
+    ["owner only", as("o", { ownerOrgIds: ["o1"] }), ["d1", "d3"]],
+    ["creator and owner", as("c1", { ownerOrgIds: ["o3"] }), ["d1", "d2", "d4"]],
+    ["neither", as("n", { ownerOrgIds: ["o9"] }), []],
+    ["neither, empty set", as("n", { ownerOrgIds: [] }), []],
+    ["creator, field missing", as("c1"), ["d1", "d2"]],
+  ];
+  const view = (name: string, caller: Caller, input: object = {}) =>
+    app.views[name](db, caller, input) as Promise<{ title: string }[]>;
+  for (const [who, caller, expected] of callers) {
+    is(titles(await view("my-docs", caller)), expected, `OR restrict list: ${who}`);
+    for (const title of ["d1", "d3", "d4"])
+      is(
+        titles(await view("my-doc", caller, { id: ids[title] })),
+        expected.includes(title) ? [title] : [],
+        `OR restrict single read of ${title}: ${who}`,
+      );
+    if (pages?.["my-docs"]) {
+      const got: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await pages["my-docs"](db, caller, {}, { limit: 1, cursor });
+        got.push(...page.rows.map((r: { title: string }) => r.title));
+        cursor = page.nextCursor;
+      } while (cursor && got.length < 10);
+      is(got, expected, `OR restrict paged read: ${who}`);
+    }
+  }
+  // AND binds tighter than OR: (member AND creator) OR owner.
+  is(
+    titles(await view("member-docs", as("c1", { orgIds: ["o1"], ownerOrgIds: [] }))),
+    ["d1"],
+    "precedence: a creator who is a member of only o1",
+  );
+  is(
+    titles(await view("member-docs", as("c1", { orgIds: [], ownerOrgIds: ["o3"] }))),
+    ["d4"],
+    "precedence: an owner who is a member of nothing",
+  );
+  const allOwners = as("staff", { ownerOrgIds: { all: true } });
+  is(await code(() => view("my-docs", allOwners)), "AUTH_DENIED", "{ all: true } in an OR-clause is refused");
+  is(await code(() => view("my-docs", { kind: "anonymous" })), "UNAUTHENTICATED", "an anonymous caller is refused");
+  // Writes carry the same clause: a caller neither creator nor owner changes nothing.
+  const rename = (caller: Caller, title: string, to: string) =>
+    code(() => app.procedures["rename-doc"](db, caller, { id: ids[title], title: to }));
+  const remove = (caller: Caller, title: string) =>
+    code(() => app.procedures["delete-doc"](db, caller, { id: ids[title] }));
+  is(await rename(as("n", { ownerOrgIds: ["o9"] }), "d1", "stolen"), "CONFLICT", "update: neither");
+  is(await rename(as("n", { ownerOrgIds: [] }), "d1", "stolen"), "CONFLICT", "update: neither, empty set");
+  is(await rename(as("c1", { ownerOrgIds: [] }), "d1", "d1"), "ok", "update: creator only");
+  is(await rename(as("o", { ownerOrgIds: ["o1"] }), "d3", "d3"), "ok", "update: owner only");
+  is(await rename(as("c1", { ownerOrgIds: ["o3"] }), "d4", "d4"), "ok", "update: creator and owner, as owner");
+  is(await rename(allOwners, "d1", "stolen"), "AUTH_DENIED", "update: { all: true }");
+  is(await remove(as("n", { ownerOrgIds: ["o9"] }), "d2"), "CONFLICT", "delete: neither");
+  is(await remove(as("o", { ownerOrgIds: ["o1"] }), "d2"), "CONFLICT", "delete: an owner of another organization");
+  is(await remove(as("o", { ownerOrgIds: ["o1"] }), "d3"), "ok", "delete: owner only");
+  is(await remove(as("c1", { ownerOrgIds: [] }), "d2"), "ok", "delete: creator only");
+  is(titles((await docs(system).find({})).rows), ["d1", "d4"], "refused writes changed nothing");
 }

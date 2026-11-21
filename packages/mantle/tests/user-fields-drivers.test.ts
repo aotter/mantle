@@ -13,15 +13,21 @@ afterAll(() => rm(directory, { recursive: true, force: true }));
 async function generated(target: "bun-sqlite" | "cloudflare-d1" | "bun-postgres") {
   const files = await generateOrThrow(target, await loadFixtureSources("user-fields.yaml"));
   await writeGenerated(resolve(directory, target), files);
-  return { app: await import(resolve(directory, target, "generated.ts")), ddl: files["schema.sql"]! };
+  return {
+    app: await import(resolve(directory, target, "generated.ts")),
+    pages: { "my-docs": (await import(resolve(directory, target, "paged/views/my-docs.ts"))).default },
+    ddl: files["schema.sql"]!,
+  };
 }
 for (const target of ["bun-sqlite", "cloudflare-d1"] as const)
   test(`${target} user fields and scoped Store scenarios`, async () => {
-    const { app, ddl } = await generated(target),
+    const { app, pages, ddl } = await generated(target),
       db = new Database(":memory:");
     db.exec(ddl);
     try {
-      expect(await verifyUserFields(app, target === "bun-sqlite" ? db : d1Shim(db), userCaller)).toBeGreaterThan(54);
+      expect(await verifyUserFields(app, target === "bun-sqlite" ? db : d1Shim(db), userCaller, pages)).toBeGreaterThan(
+        54,
+      );
     } finally {
       db.close();
     }
@@ -29,7 +35,7 @@ for (const target of ["bun-sqlite", "cloudflare-d1"] as const)
 const url = process.env.MANTLE_NEXT_BUN_PG_URL;
 for (const driver of ["bun", "postgres.js"] as const)
   test.skipIf(!url)(`${driver} user field array encoding and scoped Store scenarios`, async () => {
-    const { app, ddl } = await generated("bun-postgres"),
+    const { app, pages, ddl } = await generated("bun-postgres"),
       name = `user_fields_${crypto.randomUUID().replaceAll("-", "")}`;
     const admin = new SQL(url!);
     await admin.unsafe(`CREATE SCHEMA "${name}"`);
@@ -39,7 +45,7 @@ for (const driver of ["bun", "postgres.js"] as const)
         : postgres(url!, { max: 1, connection: { search_path: name }, onnotice: () => {} });
     try {
       await (db.unsafe as (query: string, values: never[]) => PromiseLike<unknown>)(ddl, []);
-      expect(await verifyUserFields(app, db, userCaller)).toBeGreaterThan(54);
+      expect(await verifyUserFields(app, db, userCaller, pages)).toBeGreaterThan(54);
     } finally {
       if (driver === "bun") await (db as SQL).close();
       else await (db as ReturnType<typeof postgres>).end();

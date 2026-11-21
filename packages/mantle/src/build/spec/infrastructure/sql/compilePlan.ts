@@ -11,8 +11,10 @@ import {
   type PlanSchema,
   type PlanTrigger,
   type PlanView,
+  type RestrictTerm,
   type RuntimePlan,
 } from "../../domain/model/RuntimePlan.js";
+import { canonical } from "../../domain/service/PlanFingerprint.js";
 import { classify, pinnedTarget } from "../../domain/service/SqlClassify.js";
 import { refChecks } from "../../domain/service/SqlRowPolicy.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
@@ -36,7 +38,7 @@ import { parseManifestSources, type ManifestSourceSet } from "../../domain/servi
 import { linkManifestSet, type LinkedManifestSet } from "../../domain/service/ManifestLinker.js";
 import { d1Dialect as d1 } from "../../../d1/dialect.js";
 import { compileSql, relationNames, statementCount, type SqlDialect } from "./compileSql.js";
-import { parseRowTemplate, type UserFieldSpec } from "../../domain/model/UserFields.js";
+import { parseRestrict, parseRowTemplate, type UserFieldSpec, type UserScope } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
 import { protectedColumns } from "../../domain/service/SqlRowPolicy.js";
@@ -795,7 +797,8 @@ export async function compileLinkedPlan(
       };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
-  // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.
+  // `restrict`: extra row terms a target puts on the Schemas its SQL reads. The scope's two terms, joined by AND or OR
+  // (ADR-0046, #2105; `scope` is AND-only), AND-ed onto the scope, so it never widens.
   const touched = (node: unknown, includeCtes = false, found = new Set<string>()): Set<string> => {
     if (!node || typeof node !== "object") return found;
     const n = node as SqlNode,
@@ -806,6 +809,7 @@ export async function compileLinkedPlan(
     Object.values(node).forEach(child => touched(child, includeCtes, found));
     return found;
   };
+  type Restrict = NonNullable<PlanView["restrict"]>;
   const restrictOf = (
     kind: "views" | "procedures",
     name: string,
@@ -825,8 +829,7 @@ export async function compileLinkedPlan(
       return undefined;
     }
     const read = touched(stmts),
-      out: Record<string, { owner?: string; terms: { column: string; field: string; type: "string" | "number" }[] }> =
-        {};
+      out: Record<string, Restrict[string]> = {};
     for (const [key, text] of Object.entries(raw)) {
       const table = key.toLowerCase(),
         schema = schemas[table],
@@ -838,21 +841,31 @@ export async function compileLinkedPlan(
         fail(`restrict key '${key}' is not a Schema this target's SQL reads.`);
         continue;
       }
-      const template = parseRowTemplate(text);
+      const template = parseRestrict(text);
       if (typeof template === "string") {
         fail(`restrict: ${template}`);
         continue;
       }
       const column = (c: string) => Object.keys(schema.fields).find(f => f === c.toLowerCase());
       // `= auth.uid()` must read a column the system stamps from the caller, or a writer could claim someone else's rows.
-      const owner = template.owner?.toLowerCase();
-      if (owner && owner !== "author_id" && owner !== schema.scope) {
+      const writable = [template.owner, ...template.or.flat().map(t => ("owner" in t ? t.owner : undefined))].find(
+        o => o && o.toLowerCase() !== "author_id" && o.toLowerCase() !== schema.scope,
+      );
+      if (writable) {
         fail(
-          `restrict '${template.owner} = auth.uid()': use author_id (stamped from the caller on insert) or the Schema's own '= auth.uid()' scope column; '${template.owner}' is writable.`,
+          `restrict '${writable} = auth.uid()': use author_id (stamped from the caller on insert) or the Schema's own '= auth.uid()' scope column; '${writable}' is writable.`,
         );
         continue;
       }
-      const terms = template.terms.flatMap(({ column: c, field }) => {
+      const owner = template.owner?.toLowerCase();
+      // Each distinct term is resolved once, so a mistake the CNF rewrite copies into several clauses is reported once.
+      const resolved = new Map<string, UserScope[]>();
+      const userTerm = (t: { column: string; field: string }) => {
+        const key = `${t.column.toLowerCase()}\0${t.field}`;
+        if (!resolved.has(key)) resolved.set(key, resolveTerm(t));
+        return resolved.get(key)!;
+      };
+      const resolveTerm = ({ column: c, field }: { column: string; field: string }): UserScope[] => {
         const found = column(c);
         if (!found) {
           fail(`restrict column '${c}' is not a field of '${schema.name}'.`);
@@ -872,19 +885,28 @@ export async function compileLinkedPlan(
           fail(error.message);
         }
         return [{ column: found, field, type }];
-      });
-      out[table] = { ...(owner ? { owner } : {}), terms };
+      };
+      const terms = template.terms.flatMap(userTerm);
+      // A clause of two or more terms (#2105): its terms in canonical order, so describe and composition compare clauses.
+      const or = template.or.map(clause =>
+        clause
+          .flatMap((t): RestrictTerm[] => ("owner" in t ? [{ owner: t.owner.toLowerCase() }] : userTerm(t)))
+          .sort((a, b) => (canonical(a) < canonical(b) ? -1 : 1)),
+      );
+      out[table] = { ...(owner ? { owner } : {}), terms, ...(or.length ? { or } : {}) };
     }
     return Object.keys(out).length ? out : undefined;
   };
   // A restricted View stays restricted when another target reads it: that target carries the View's restrict too
   // (AND-ed onto every relation of the Schema it names). `order` lists a View after the Views it reads.
-  type Restrict = NonNullable<PlanView["restrict"]>;
   const inherit = (own: Restrict | undefined, sql: string | undefined, path: string): Restrict | undefined => {
-    const merged: Record<
-      string,
-      { owner?: string; terms: { column: string; field: string; type: "string" | "number" }[] }
-    > = Object.fromEntries(Object.entries(own ?? {}).map(([k, r]) => [k, { ...r, terms: [...r.terms] }]));
+    const merged: Record<string, { owner?: string; terms: UserScope[]; or?: (readonly RestrictTerm[])[] }> =
+      Object.fromEntries(
+        Object.entries(own ?? {}).map(([k, r]) => [
+          k,
+          { ...(r.owner ? { owner: r.owner } : {}), terms: [...r.terms], ...(r.or ? { or: [...r.or] } : {}) },
+        ]),
+      );
     for (const ref of sql === undefined ? [] : viewRefs(sql))
       for (const [table, r] of Object.entries(views[refOf.get(ref)!.manifest.metadata.name]?.restrict ?? {})) {
         const into = (merged[table] ??= { terms: [] });
@@ -902,6 +924,8 @@ export async function compileLinkedPlan(
         if (r.owner) into.owner = r.owner;
         for (const t of r.terms)
           if (!into.terms.some(x => x.column === t.column && x.field === t.field)) into.terms.push(t);
+        for (const clause of r.or ?? [])
+          if (!into.or?.some(x => canonical(x) === canonical(clause))) (into.or ??= []).push(clause);
       }
     return Object.keys(merged).length ? merged : undefined;
   };

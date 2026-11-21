@@ -67,7 +67,7 @@ test("verified identities freeze values, discard unknown fields and lose authori
     expect(() => userCaller({ id: "ok", region: value }, { fields })).not.toThrow();
   expect(() => userCaller({ id: "bad", region: "界".repeat(86) }, { fields })).toThrow();
   expect(() => userCaller({ id: "host:bad" })).toThrow();
-  expect(() => userRefs(true, 2)).toThrow("version");
+  expect(() => userRefs(true, 3)).toThrow("version");
   expect(() => binds({ userRefs: userRefs(true, 1) }, [{ k: "future" }] as never, caller)).toThrow(
     "Unknown user-reference",
   );
@@ -553,7 +553,8 @@ test("caller references are refused in SQL and restrict is validated", async () 
     { orders: "missing IN auth.user('region')" },
     { orders: "region = auth.user('region')" },
     { orders: "region = auth.uid()" },
-    { orders: "region IN auth.user('region') OR tier IN auth.user('tier')" },
+    { orders: "region IN auth.user('region') OR tier = auth.user('tier')" },
+    { orders: "(region IN auth.user('region') OR tier IN auth.user('tier')" },
   ])
     await expect(
       generateOrThrow("bun-sqlite", [

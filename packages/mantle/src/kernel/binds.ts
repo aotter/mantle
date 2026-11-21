@@ -12,6 +12,7 @@ export type Recipe =
       readonly type: "string" | "number";
       readonly multiple: boolean;
       readonly scope?: true;
+      readonly any?: true;
     }
   | { readonly k: "uid" | "admin" | "now" | "version" }
   | { readonly k: "cutoff"; readonly seconds: number }

@@ -145,6 +145,8 @@ const combine = (directions: Direction[]): Direction =>
 const terms = (p: PlanRestrict[string]) => [
   ...(p.owner ? [canonical({ owner: p.owner })] : []),
   ...p.terms.map(canonical),
+  // An OR-clause is one conjunct: losing or changing it widens, adding it narrows.
+  ...(p.or ?? []).map(canonical),
 ];
 function policyDirection(before: PlanRestrict, after: PlanRestrict, scope: boolean): Direction {
   const directions: Direction[] = [];

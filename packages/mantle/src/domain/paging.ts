@@ -21,6 +21,8 @@ type Relation = {
   unique: boolean;
   fixed: Set<string>;
   sets: Set<string>;
+  /** Columns only an OR compares (a restrict OR-clause, #2105): never fixed, they only guide the refusal. */
+  ors: Set<string>;
 };
 export type PagingProof = { types: string[]; single: boolean; reason?: string };
 const fieldName = (n: SqlNode) => n.ColumnRef?.fields?.at(-1)?.String?.sval;
@@ -138,6 +140,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           unique: true,
           fixed: new Set(),
           sets: new Set(),
+          ors: new Set(),
         };
       } else if (r?.mantle === "cte") fact = ctes.get(r.relname);
       else if (sub) fact = select(sub.subquery.SelectStmt, ctes)?.relation;
@@ -154,6 +157,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           ),
           fixed: new Set(fact.fixed),
           sets: new Set(fact.sets),
+          ors: new Set(fact.ors),
         };
         aliases.set(r?.alias?.aliasname ?? r?.relname ?? sub.alias.aliasname, fact);
       }
@@ -166,7 +170,15 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (!r || (base && !base.single && !r.single)) return;
       if (!base || !r.single) base = r;
     }
-    base ??= { fields: new Map(), names: new Set(), single: true, unique: false, fixed: new Set(), sets: new Set() };
+    base ??= {
+      fields: new Map(),
+      names: new Set(),
+      single: true,
+      unique: false,
+      fixed: new Set(),
+      sets: new Set(),
+      ors: new Set(),
+    };
     const targets = new Map<string, SqlNode>(
       (s.targetList ?? []).map((t: SqlNode) => [t.ResTarget.name ?? fieldName(t.ResTarget.val), t.ResTarget.val]),
     );
@@ -193,8 +205,25 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (output && pos > 0) return resolve(s.targetList[pos - 1]?.ResTarget.val, false);
       return;
     };
+    // Columns an OR compares to a value, as `fixed` tests an equality (a restrict OR-clause, #2105, or the View's own SQL):
+    // an OR fixes none of them, so they only guide the refusal.
+    const either = (n: SqlNode): void => {
+      const raw = n?.Raw?.parts,
+        e = n?.A_Expr,
+        col = anyOf(raw)
+          ? resolve(raw[1], false)
+          : e?.kind === "AEXPR_OP" && e.name?.[0]?.String?.sval === "="
+            ? scalar(e.rexpr)
+              ? resolve(e.lexpr, false)
+              : scalar(e.lexpr)
+                ? resolve(e.rexpr, false)
+                : undefined
+            : undefined;
+      if (col && col.source === base!.fields.get("id")?.source) base!.ors.add(col.name);
+    };
     const fixed = (n: SqlNode): void => {
       if (n?.BoolExpr?.boolop === "AND_EXPR") n.BoolExpr.args.forEach(fixed);
+      if (n?.BoolExpr?.boolop === "OR_EXPR") n.BoolExpr.args.forEach(either);
       // `col IN auth.user(field)` (a scope or restrict) never fixes a prefix (#1644): the plan is prepared for a set, so
       // native ORDER BY after it reads and sorts all the caller's rows. It is only remembered for the refusal's guidance.
       const raw = n?.Raw?.parts;
@@ -273,7 +302,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
             });
           if (!serving(base.fixed)) {
             // SQL names a column (`created_at`), a manifest index the field (`createdAt`).
-            const index = serving(new Set([...base.fixed, ...base.sets])),
+            const index = serving(new Set([...base.fixed, ...base.sets, ...base.ors])),
               named = (c: string) => schema.names?.[c] ?? c,
               field = (c: string) => schema.names?.[c] ?? NATIVE_FIELDS.get(c) ?? c;
             const columns = order.map(f => named(f.name)).join(", "),
@@ -283,10 +312,20 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
                 `Missing index for ORDER BY (${columns}): declare a Schema index with [${fields}] in this order after any fixed equality prefix.`,
               );
             const prefix = index.slice(0, index.indexOf(order[0]!.name)),
-              set = prefix.filter(c => !base!.fixed.has(c));
-            // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
-            const lead = prefix.slice(prefix.indexOf(set[0]!)),
+              set = prefix.filter(c => !base!.fixed.has(c)),
+              eq = [...base.fixed].filter(c => c !== "id" && !order.some(f => f.name === c));
+            // A column only an OR compares (#2105): an equality input fixes it; an index on the ordered columns is read in
+            // order and filtered. Ordering by the OR's column first would scan that whole index too, so it is not offered.
+            const unfixed = set.filter(c => base!.ors.has(c) && !base!.sets.has(c)),
               quoted = (cs: string[]) => cs.map(c => `'${field(c)}'`).join(", ");
+            // The equality way names every unfixed prefix column: one a user-field term binds to a set needs its own too.
+            const others = set.filter(c => !unfixed.includes(c));
+            if (unfixed.length)
+              return fail(
+                `ORDER BY (${columns}) needs index [${index.map(field).join(", ")}] past ${quoted(unfixed)}, which an OR (such as a restrict OR-clause) never fixes${others.length ? `, and ${quoted(others)}, which a user-field scope or restrict binds to a set of values` : ""}: every page would sort all of the caller's matching rows. Bounded: ${set.length > 1 ? `View inputs bound with equality on ${quoted(set)}` : "a View input bound with equality on that column"}; or index [${[...eq.map(field), fields].join(", ")}, id], read in order and filtered (handbook: reference/schema.md#index-prefixes-for-paged-views).`,
+              );
+            // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
+            const lead = prefix.slice(prefix.indexOf(set[0]!));
             // The scope-first order is offered only when SQL can name every added column and none can be null. The owner
             // scope column is NOT NULL in storage, but a View cannot address it.
             const notNull = notNullColumns(schema),
@@ -301,7 +340,6 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
               ? ", read backwards; on PostgreSQL confirm with EXPLAIN that no Sort remains"
               : "";
             // `{ all: true }` drops only scope terms: offer it an index on the View's equality-fixed columns, unless a restrict remains.
-            const eq = [...base.fixed].filter(c => c !== "id" && !order.some(f => f.name === c));
             const ways = [
               ...(nullable.length || owner.length ? [] : [`ORDER BY ${sorted} (same index${desc})`]),
               ...(restricts(ast)
@@ -335,6 +373,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
         unique: !group.length && base.unique && !!same(fields.get("id"), base.fields.get("id")),
         fixed: base.fixed,
         sets: base.sets,
+        ors: base.ors,
       },
       keys: keys as Field[],
     };
