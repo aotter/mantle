@@ -266,9 +266,10 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   `{ results }`; Views keep sending `{ rows, nextCursor? }` without a schema.
 >   A success whose data the listed schema's root `type` (with `nullable`) does
 >   not admit, `undefined` included, fails as `INTERNAL_ERROR` before it is
->   recorded; this is a root check, not validation. A dry run answers its
+>   recorded; this is a root check, not validation. ~~A dry run answers its
 >   decision (`{ dryRun, event }`) as `structuredContent` whatever that root, as
->   it does for an object schema. A failure omits `structuredContent` when a
+>   it does for an object schema.~~ *(Superseded 2026-11-21, #2101: host dry runs
+>   are removed, ADR-0046.)* A failure omits `structuredContent` when a
 >   schema is listed.
 > - Cancellation on Workers (measured on deployed Workers, 2026-11-20). From
 >   compatibility date 2026-11-17, or with `enable_request_signal`, a client
@@ -422,8 +423,9 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   (`REQUEST_CANCELLED`, 499, one completion recorded in the abort event); App-only
 >   tools callable by name; `client` on invocation observations (2026-07-28
 >   requests carry it; a stateless 2025-era call does not); client-caused 4xx
->   transport refusals not logged, server faults logged; the dry-run exemption
->   and the root-type guard; the `protocol-version` refusal reason.
+>   transport refusals not logged, server faults logged; ~~the dry-run exemption
+>   and~~ the root-type guard (the dry-run exemption was removed with host dry
+>   runs, #2101, 2026-11-21); the `protocol-version` refusal reason.
 > - Observation. An `invocation` event gains optional `protocolVersion`: the
 >   revision the call was served on (2026-07-28, or the 2025-era
 >   `MCP-Protocol-Version` header, `2025-03-26` when the client sent none, as

@@ -1,6 +1,6 @@
 # ADR-lite #1971: Admin uses the kernel request pipeline
 
-Status: Accepted (Option B).
+Status: Accepted (Option B); amended 2026-11-21 (#2101): host dry runs are removed (ADR-0046), so the pipeline has no dry-run step and `nativeRest` no route `variant` or `prepare`.
 
 Admin's API is one `nativeRest` mount at `/admin/api`. Each request runs the
 kernel router's steps once, in its order: canonical path, route match, target,

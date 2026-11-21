@@ -1,6 +1,6 @@
 # ADR-0046: Roles and user fields in SQL scope
 
-**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492), amended the same day by the section "Amendment: enforcement only", which takes precedence over the sections it names; §4 Paging amended 2026-10-15 (#1644); OR between `restrict` terms added 2026-11-21 (#2105), its diff direction amended the same day (#2128); an `authorize` rejection with status 429 keeps it (#2126, 2026-11-21).
+**Status:** Accepted for 0.2.0 (2026-10-14, issue #1492), amended the same day by the section "Amendment: enforcement only", which takes precedence over the sections it names; §4 Paging amended 2026-10-15 (#1644); OR between `restrict` terms added 2026-11-21 (#2105), its diff direction amended the same day (#2128); an `authorize` rejection with status 429 keeps it (#2126, 2026-11-21); `dryRun` leaves host contract v1 (#2101, 2026-11-21), which supersedes "Dry runs" and the dry-run parts of "Host contract v1" and "`onAccess(event)` hook".
 
 **Date:** 2026-10-13
 
@@ -101,15 +101,38 @@ restrict: { orders: "owner = auth.uid()" }
 
 ### Gateways
 - **Gateway mode.** Selected REST, MCP, Admin and web boundaries accept `gateway: { tenant }` and receive the execution context as their third argument. The caller comes only from `ctx.props.mantle`; absent props mean anonymous. Set gateway mode on every boundary of an application. Application cookies, sessions and bearer tokens are ignored, without loading the application's auth instance; present `props.mantle` prevents falling back to application credentials.
-- **Host contract v1.** `hostCaller(props, { tenant, fields })` accepts `{ v: 1, tenant, layer: "admin" | "member", user: { id, role?, ...fields }, authenticatedAs: "snapshot" | "fresh", credential: "session" | "oauth", requestId }`. `target` and `targetHash` are required for the admin layer, optional for members, and enforced whenever supplied. `dryRun` is an optional boolean. Validate the entire shape and require an exact configured tenant match; malformed/version/tenant failures are `HOST_CONTRACT` (412). Roles and fields use ordinary caller validation, including arity and `{ all: true }`, and retain authority only on the original branded, frozen caller.
+- **Host contract v1.** `hostCaller(props, { tenant, fields })` accepts `{ v: 1, tenant, layer: "admin" | "member", user: { id, role?, ...fields }, authenticatedAs: "snapshot" | "fresh", credential: "session" | "oauth", requestId }`. `target` and `targetHash` are required for the admin layer, optional for members, and enforced whenever supplied. ~~`dryRun` is an optional boolean.~~ *(Superseded 2026-11-21, #2101: see "Amendment: `dryRun` leaves host contract v1" below.)* Validate the entire shape and require an exact configured tenant match; malformed/version/tenant failures are `HOST_CONTRACT` (412). Roles and fields use ordinary caller validation, including arity and `{ all: true }`, and retain authority only on the original branded, frozen caller.
 - **Layers and subjects.** The admin layer produces `kind: "host"`, subject `'host:' + user.id`, and passes `ctx.admin`. The member layer produces `kind: "user"` and the unprefixed subject `user.id`; its roles never grant the admin layer. User subjects cannot start with `host:` or `system:` (case-insensitive). Scope applies throughout, including Admin drafts. Member management refuses host-built callers with 403.
 - **Freshness.** Callers expose `authenticatedAs`, `credential` and `requestId`. A snapshot may read; any SQL write, Store/Admin mutation, publishing transition, member mutation or ref handler is refused before execution with `STALE_CALLER` (403). Statement kinds determine whether SQL Procedures write. Session writes retain origin checks according to `credential`.
 - **Errors (amended #2050, 2026-11-17).** Both host-built layers receive JSON `{ error: { code, message?, field?, target? } }`: a 4xx `ContractError` retains its caller-facing message; 5xx and internal failures omit it. This additive response field does not change the closed v1 input props; the response fixture is updated with this amendment. Contract failures are 412, denials (including `authorize` and stale callers) are 403 (an `authorize` rejection with status 429 is answered 429, #2126), and malformed bodies are 400. Host callers never receive 401. MCP tool failures use the SDK error result with the same error fields. A needed missing or empty field fails before SQL with `HOST_CONTRACT` (412), naming the field.
 - **Tripwire.** Present execution props outside gateway mode is `HOST_CONTRACT` (412); an entry never silently ignores or honors it.
 - **Testing.** Tests call `hostCaller(props, { tenant, fields })` with the same props JSON.
 - **Target pinning.** Every boundary checks its describe `_meta.id`: REST route ids, Admin route templates, and View/Procedure ids for MCP and web. A wrong target fails with `TARGET_MISMATCH` (412); a stale hash fails with `TARGET_HASH_MISMATCH` (412). Generation computes a target-id → hash map with `targetHash`; gateway requests alone load its module. MCP host callers may initialize and call the pinned tool; batches are refused and `tools/list` is `AUTH_DENIED` (403), since the host answers it.
-- **Dry runs.** `dryRun: true` performs pinning, hash, input validation, generated caller checks, authorization and freshness without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work fail with `DRY_RUN_UNSUPPORTED` (412).
-- **`onAccess(event)` hook.** REST, MCP, Admin and web accept an optional observer for every forwarded caller, both layers, on every outcome including contract errors. It runs after the decision, is never awaited, and logs listener failures once without affecting the response. Non-gateway applications never invoke it. The v1 event is `{ v: 1, requestId, target, targetHash, caller: { kind, subject, layer }, outcome: "allow" | "deny" | "error", reason?, field?, dryRun }`. Reasons match error codes. Dry runs return the same event supplied to the hook.
+- **Dry runs.** *Superseded 2026-11-21 (#2101): removed; see "Amendment: `dryRun` leaves host contract v1" below.* ~~`dryRun: true` performs pinning, hash, input validation, generated caller checks, authorization and freshness without SQL or side effects. It returns 200 `{ dryRun: true, event }`; MCP carries this result in the SDK tool response. Ref handlers, custom guards, uploads and opaque work fail with `DRY_RUN_UNSUPPORTED` (412).~~
+- **`onAccess(event)` hook.** REST, MCP, Admin and web accept an optional observer for every forwarded caller, both layers, on every outcome including contract errors. It runs after the decision, is never awaited, and logs listener failures once without affecting the response. Non-gateway applications never invoke it. The v1 event is `{ v: 1, requestId, target, targetHash, caller: { kind, subject, layer }, outcome: "allow" | "deny" | "error", reason?, field? }`. Reasons match error codes. *(Amended 2026-11-21, #2101: the event no longer carries `dryRun`, and no answer returns the event.)*
+- **Amendment: `dryRun` leaves host contract v1 (2026-11-21, #2101).** Host contract v1 had a `dryRun` key that no host
+  used; it is removed, and #2099 (the MCP dry-run result of a SQL Procedure did not match the tool's `outputSchema`)
+  goes with it.
+  - **Version rule.** `v` stays `1`. A `v: 1` host that never sent `dryRun` is unaffected: the same props are accepted
+    and answered as before. A host that sends `dryRun`, with any value (`true` and `false` alike), gets 412
+    `HOST_CONTRACT`: `hostCaller` refuses unknown top-level keys, and `dryRun` is now one. The refusal names the key
+    (message `Unknown key 'dryRun'.`, `field: "dryRun"`), as it now does for any unknown key, after the shape, version
+    and tenant checks; a `v` other than `1` is still refused as malformed first. `false` is refused too: accepting it
+    would keep a key in the contract that means nothing.
+  - **Why no `v` bump.** The evolution rule ("input props evolve only by bumping `v`, never by adding an optional key")
+    keeps a host from sending a key that a Core refuses without the version telling it so. Removing a key that no host
+    sends leaves no such host: before this amendment the maintainer checked that the hosting service sends no
+    `dryRun`. A bump would instead make every v1 host change its props for nothing. The host-contract fixture changes
+    with this amendment, as it did for #2050.
+  - **Removed with it.** The dry-run answers (`{ dryRun: true, event }` on REST and web, the same as MCP structured
+    content), the `DRY_RUN_UNSUPPORTED` code, the access event's `dryRun` field (it is always absent now; a listener
+    that read it as a boolean reads `undefined`, which was `false` for every host), and the parts of the generated
+    gateway metadata that only decided dry runs (an access target's `opaque` and `variants`, a native route's
+    `variant` and `prepare`).
+  - **What a host uses instead.** An access preview ("who gains or loses which targets") is computed from the plan
+    and `mantle describe` (`describeApp`: targets, target hashes, scope and `restrict` terms, and the diff between two
+    plans) before anything is called; it sends no request. A host that needs "would this one call be allowed" is the
+    first consumer of such a feature and files an Extension point request; its need decides the design.
 - **`describeApp(plan)`** is computable before deploy. It lists:
   - the targets: id, `targetHash`, surface and input schema;
   - each Schema's scope terms and each target's `restrict` terms, with field types and enums;
