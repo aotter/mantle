@@ -90,7 +90,8 @@ export type BrandPlacement =
 /**
  * `Brand`: the console's name and image. Surface: browser. Outside the sidebar it renders only when an application
  * supplies it, in a box at most 40px high; there the site settings are not read yet, so `title` is the generic console
- * title, `image` is absent and `renderDefault` renders nothing.
+ * title, `image` is absent and `renderDefault` renders nothing. A component that renders nothing for a placement leaves
+ * that page as it is without a Brand. Props passed to `renderDefault` may leave `placement` out to keep this one.
  */
 export interface BrandProps extends AdminBrand {
   // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").

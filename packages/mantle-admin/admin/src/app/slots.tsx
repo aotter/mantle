@@ -65,7 +65,8 @@ export function Slot<P extends object>({
       const Layer = layers[index] as unknown as React.ComponentType<
         P & { renderDefault: (props: P) => React.ReactNode }
       >;
-      return <Layer {...next} {...extra} renderDefault={at(index - 1)} />;
+      // like `Default`, a layer keeps the props the layer above left out (`Brand`'s `placement`)
+      return <Layer {...props} {...next} {...extra} renderDefault={at(index - 1)} />;
     };
   return <>{at(layers.length - 1)(props)}</>;
 }

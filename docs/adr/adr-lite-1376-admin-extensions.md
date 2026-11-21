@@ -79,16 +79,21 @@ authorizes.
      (`sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`,
      `error`, `loading`). An application's `Brand` also renders above the card
      of the pages shown before or without the console and in the bar of the
-     loading frame, in a box at most 40px high, behind an error boundary that
-     renders nothing when a component written for the sidebar throws there.
+     loading frame shown before the console, in a box at most 40px high
+     behind an error boundary; the box collapses when the component renders
+     nothing there (returns null, or throws because it was written for the
+     sidebar), so the page looks as it does with no `Brand`. Loading states
+     inside the console keep their placeholder: the sidebar shows the brand.
      Site settings are read only after sign-in, so there `title` is the
      generic console title, `image` is absent and `renderDefault` renders
-     nothing; with no `Brand` those pages are unchanged. The loading frame
-     stays neutral: brand, never the sign-in card. Core's script-free consent
+     nothing; with no `Brand` those pages are unchanged. Props passed to
+     `renderDefault` may leave `placement` out to keep the one received. The
+     loading frame stays neutral: brand, never the sign-in card. Core's script-free consent
      and connected-apps pages, which run no slot, take
      `authRoutes({ brand: { name, logo, primary, primaryForeground } })`:
      plain values checked when the routes are built (the logo an https URL or
-     a same-origin path, the colours hex or numeric colour functions), the
+     a same-origin path, the colours hex or colour functions of numbers,
+     percentages, angles and `none`, with no other token), the
      name escaped, the logo's origin the page's only `img-src`, no markup
      from the application.
 4. **Data.** Hooks (`useView`, `useEntries`, `useEntry`, `useOperation`,

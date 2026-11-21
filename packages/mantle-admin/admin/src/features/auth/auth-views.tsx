@@ -151,7 +151,7 @@ export function OAuthConsentView(): React.ReactElement {
     retry: false,
   });
 
-  if (consent.isLoading) return <GateLoading />;
+  if (consent.isLoading) return <GateLoading brand />;
   if (consent.isError) return <GateError error={consent.error} />;
   if (!consent.data) {
     return (

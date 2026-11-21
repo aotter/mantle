@@ -8,7 +8,8 @@ import { createServer } from "node:http";
 // The `SignIn` slot (#1936): an application changes the email input's autocomplete, adds its own element, and runs its
 // own step after an in-page sign-in before continuing to the same URL. A `passkey` method is listed for the slot to use;
 // the default renders nothing for it and makes no WebAuthn request. The application's `Brand` shows on the sign-in card
-// and in the sidebar after it (#1943); one that throws outside the sidebar renders nothing and leaves the page working.
+// and in the sidebar after it (#1943); one that throws outside the sidebar renders nothing, leaves no empty box and
+// leaves the page working.
 it("the SignIn slot sets the email autocomplete, adds the app's element and runs the app's step", async () => {
   const root = await mkdtemp(join(tmpdir(), "mantle-sign-in-slot-"));
   const { buildAdmin } = await import("../dist/build/index.js");
@@ -124,10 +125,14 @@ export default defineAdmin({}, {
     expect(await page.evaluate(() => sessionStorage.getItem("after-sign-in"))).toBe("/admin/from-otp");
     await page.getByText("app-brand sidebar").waitFor();
 
-    // a Brand that throws on a page outside the console renders nothing there; the page still works
+    // a Brand that throws on a page outside the console renders nothing there and leaves no box above the card's
+    // header; the page still works
     await page.goto(origin + "/admin/oauth/consent");
     await page.getByRole("heading", { name: "Invalid authorization request" }).waitFor();
     expect(await page.getByText("app-brand").count()).toBe(0);
+    const box = page.locator('[data-slot="card"] > .peer');
+    expect(await box.count()).toBe(1);
+    expect(await box.evaluate(element => getComputedStyle(element).display)).toBe("none");
 
     // no server methods: the slot still mounts, so what the application adds still shows
     signedIn = false;

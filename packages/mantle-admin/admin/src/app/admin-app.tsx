@@ -102,14 +102,14 @@ export function AdminApp({ preview = false }: { preview?: boolean } = {}): React
 
   if (CONSENT_PATHS.includes(location.pathname))
     return (
-      <React.Suspense fallback={<GateLoading />}>
+      <React.Suspense fallback={<GateLoading brand />}>
         <OAuthConsentView />
       </React.Suspense>
     );
 
   if (location.pathname === "/admin/sign-in") {
     return (
-      <React.Suspense fallback={<GateLoading />}>
+      <React.Suspense fallback={<GateLoading brand />}>
         <SignInView />
       </React.Suspense>
     );
@@ -175,12 +175,12 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     const ret = window.location.pathname + window.location.search;
     window.location.href = `/admin/sign-in?return=${encodeURIComponent(ret)}`;
   }, [is401, preview]);
-  if (is401) return preview ? <GateError error={me.error} /> : <GateLoading />;
+  if (is401) return preview ? <GateError error={me.error} /> : <GateLoading brand />;
 
   if (me.isError && me.error instanceof ApiError && me.error.status === 403) {
     if (path === "/admin/connected-apps")
       return (
-        <React.Suspense fallback={<GateLoading />}>
+        <React.Suspense fallback={<GateLoading brand />}>
           <ConnectedAppsPage />
         </React.Suspense>
       );
@@ -192,7 +192,7 @@ function Gate({ path, search, preview }: { path: string; search: string; preview
     return <GateError error={me.error} />;
   }
 
-  if (me.isLoading) return <GateLoading />;
+  if (me.isLoading) return <GateLoading brand />;
 
   if (collectionMatch) {
     return (
@@ -368,7 +368,7 @@ function Landing(): React.ReactElement {
   React.useEffect(() => {
     if (url) navigate(url, { replace: true });
   }, [url, navigate]);
-  if (project.home && (url || collections.isPending || views.isPending)) return <GateLoading />;
+  if (project.home && (url || collections.isPending || views.isPending)) return <GateLoading brand />;
   return (
     <AuthenticatedLayout>
       <HomePage />

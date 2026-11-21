@@ -200,7 +200,7 @@ export default {
   "settings.brandSection": "网站识别",
   "settings.brandSectionBody": "这些默认值会用于管理后台与 Mantle 生成的前台页面。",
   "settings.siteBrand": "后台名称",
-  "settings.siteBrandHelp": "显示在管理后台侧栏与登录页面，不会取代公开页面标题。",
+  "settings.siteBrandHelp": "登录后显示在管理后台侧栏与首页，不会取代公开页面标题。",
   "settings.siteTitle": "默认页面标题",
   "settings.siteTitleHelp": "页面没有自己的标题时使用，也是默认 SEO 网站名称。",
   "settings.siteDescription": "默认网站描述",

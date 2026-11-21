@@ -52,7 +52,7 @@ const surfaces: [string, () => React.ReactNode, QueryClient?][] = [
   ["connected-apps", () => <ConnectedAppsPage />],
   ["access-denied", () => <AccessDeniedView login="ada" />],
   ["error", () => <GateError error={new Error("down")} />],
-  ["loading", () => <GateLoading />],
+  ["loading", () => <GateLoading brand />],
 ];
 
 describe("Brand before and without the console", () => {
@@ -61,9 +61,7 @@ describe("Brand before and without the console", () => {
 
   it.each(surfaces)("%s renders the application's Brand in a bounded box, with nothing as its default", (placement, node, client) => {
     const html = render(node(), branded, client);
-    expect(html).toContain(
-      `<div class="flex max-h-10 min-w-0 items-center overflow-hidden`,
-    );
+    expect(html).toContain(`<div class="peer flex max-h-10 min-w-0 items-center overflow-hidden empty:hidden`);
     expect(html).toContain(`<b data-placement="${placement}" data-image="undefined" data-href="/admin">Admin console</b>`);
   });
 
@@ -73,8 +71,21 @@ describe("Brand before and without the console", () => {
     expect(html).not.toContain("data-placement");
   });
 
+  // a component may render nothing for a placement it does not want; the page then looks as it does without a Brand
+  const sidebarOnly = defineAdmin(
+    {},
+    { components: { Brand: props => (props.placement === "sidebar" ? <b>{props.title}</b> : null) } },
+  ).layers;
+  const emptyBox = /<div class="peer flex max-h-10 [^"]*empty:hidden[^"]*"><\/div>/;
+
+  it.each(surfaces)("%s looks as it does without a Brand when the Brand renders nothing there", (_placement, node, client) => {
+    const html = render(node(), sidebarOnly, client);
+    expect(html).toMatch(emptyBox);
+    expect(html.replace(emptyBox, "")).toBe(render(node(), {}, client));
+  });
+
   it("keeps the loading frame neutral: the brand in its bar, never the sign-in card", () => {
-    const html = render(<GateLoading />, branded);
+    const html = render(<GateLoading brand />, branded);
     expect(html).toContain('role="status"');
     expect(html).not.toMatch(/data-slot="card"|<form|<input/);
     expect(render(<GateLoading />, {})).toContain('data-slot="skeleton"');

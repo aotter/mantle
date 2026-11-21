@@ -451,14 +451,16 @@ continuation, so a "same-origin only" check would also break connector sign-in. 
 
 `Brand` renders at the top of the sidebar and, when the application supplies one, on the pages shown before or without
 the console: above the card of the sign-in page, the OAuth consent page, connected apps (for a signed-in user who is not
-an admin), the access-denied and error pages, and in the bar of the frame shown while the session loads. `placement`
-says which: `sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`, `error` or `loading`. Outside the
-sidebar:
+an admin), the access-denied and error pages, and in the bar of the frame shown while the session loads (the loading
+states inside the console keep their placeholder: the sidebar already shows the brand). `placement` says which:
+`sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`, `error` or `loading`. Props you pass to
+`renderDefault` may leave `placement` out to keep the one received. Outside the sidebar:
 
 - the box is at most 40px high and as wide as the card, and clips what overflows, so size a logo for it;
 - the site settings are read only after sign-in, so `title` is the generic console title ("Admin console", localized),
   `image` is absent, and `renderDefault` renders nothing: render your own logo and name;
-- a component that throws there, such as one that needs the sidebar's context, renders nothing and the page still works.
+- a component that returns `null` for a placement leaves that page as it is without a `Brand`, and so does one that
+  throws there, such as one that needs the sidebar's context; the page still works.
 
 Without a `Brand` component these pages are unchanged. The loading frame never shows the sign-in card.
 

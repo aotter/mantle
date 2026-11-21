@@ -31,21 +31,21 @@ export function AdminAuthCard({
 }
 
 /**
- * The application's `Brand` outside the console, in a box at most 40px high; nothing when it supplies none (#1943). A
- * component written for the sidebar that throws here (one that needs the sidebar's context) renders nothing instead.
+ * The application's `Brand` outside the console, in a box at most 40px high; nothing when it supplies none (#1943). The
+ * box collapses (`empty:hidden`) when the component renders nothing here: one that returns null for this placement, or
+ * one written for the sidebar that throws here (one that needs the sidebar's context). The box is a `peer`, so a
+ * placeholder after it shows only then.
  */
 function PreAuthBrand({
   placement,
   className = "",
-  fallback = null,
 }: {
   placement: BrandPlacement;
   className?: string;
-  fallback?: React.ReactNode;
 }): React.ReactNode {
-  if (!useHasSlot("Brand")) return fallback;
+  if (!useHasSlot("Brand")) return null;
   return (
-    <div className={`flex max-h-10 min-w-0 items-center overflow-hidden ${className}`}>
+    <div className={`peer flex max-h-10 min-w-0 items-center overflow-hidden empty:hidden ${className}`}>
       <BrandBoundary>
         <AppBrand placement={placement} />
       </BrandBoundary>
@@ -75,15 +75,17 @@ class BrandBoundary extends React.Component<React.PropsWithChildren, { failed: b
 }
 
 /**
- * While the session or `me` loads: a neutral page frame, not the sign-in card. A signed-in user who lands here from
- * an app's own sign-in page would otherwise read the card as a second sign-in step (#1943). The bar shows the
- * application's `Brand` when it supplies one.
+ * While the session, `me` or a lazy page loads: a neutral page frame, not the sign-in card. A signed-in user who lands
+ * here from an app's own sign-in page would otherwise read the card as a second sign-in step (#1943). With `brand`, for
+ * the frames shown before the console, the bar shows the application's `Brand` when it renders one there; inside the
+ * console the sidebar shows it, so the bar keeps its placeholder.
  */
-export function GateLoading(): React.ReactElement {
+export function GateLoading({ brand = false }: { brand?: boolean }): React.ReactElement {
   return (
     <div role="status" aria-busy="true" className="min-h-svh bg-background">
       <div className="flex h-14 items-center border-b px-4">
-        <PreAuthBrand placement="loading" fallback={<Skeleton className="h-5 w-32" />} />
+        {brand && <PreAuthBrand placement="loading" />}
+        <Skeleton className="h-5 w-32 peer-not-empty:hidden" />
       </div>
       <div className="space-y-3 p-6">
         <Skeleton className="h-6 w-48" />
