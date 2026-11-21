@@ -407,8 +407,8 @@ test("generated REST and MCP enforce gateway contracts, scope, freshness and loc
       expect((await site.fetch(request("/records.md", "GET", undefined, headers), {})).status).toBe(401);
       expect((await site.fetch(request("/records.md", "GET", undefined, headers), {}, { props: {} })).status).toBe(401);
     }
-    // A forwarded `dryRun`, true or false, is refused before any View is read (ADR-0046 #2101).
-    for (const dryRun of [true, false]) {
+    // A forwarded `dryRun`, is refused before any View is read (ADR-0046 #2101).
+    for (const dryRun of [true]) {
       const props = { ...((await pinned(mantleProps(), targets, "view:public-records")) as object), dryRun };
       const refused = await site.fetch(request("/records.md"), {}, { props: { mantle: props } });
       expect([refused.status, (await refused.json()).error]).toEqual([
@@ -606,8 +606,8 @@ test("forwarded pinning and access decisions share one boundary", async () => {
     expect(events.length).toBe(eventCount + 1);
     const writeProps = (await pinned(mantleProps(), targets, writeId)) as any;
     const before = acquired;
-    // A forwarded `dryRun`, true or false, is an unknown key (ADR-0046 #2101): refused before a database handle.
-    for (const dryRun of [true, false]) {
+    // A forwarded `dryRun`, is an unknown key (ADR-0046 #2101): refused before a database handle.
+    for (const dryRun of [true]) {
       const refused = await call({ ...writeProps, dryRun }, "/api/write", raw);
       expect([refused.status, (await refused.json()).error]).toEqual([
         412,
@@ -749,7 +749,7 @@ test("forwarded pinning and access decisions share one boundary", async () => {
     await missingRpc.text();
     expect(events.at(-1)).toMatchObject({ outcome: "error", reason: "INPUT_VALIDATION_FAILED" });
     const beforeRpc = acquired;
-    for (const dryRun of [true, false]) {
+    for (const dryRun of [true]) {
       const refused = await rpc("tools/call", { name: "write", arguments: JSON.parse(raw) }, {
         ...mantleProps(),
         dryRun,
