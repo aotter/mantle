@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { OAuthConsentInfo, OAuthConsentRequest } from "../../../../src/types/auth.js";
+import type { OAuthConsentInfo, OAuthConsentRequest } from "@aotter/mantle/auth/oauth";
 import { useQuery } from "@tanstack/react-query";
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@aotter/mantle-ui/kit";
 import { Input } from "@aotter/mantle-ui/kit";
