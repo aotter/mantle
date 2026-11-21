@@ -1,3 +1,4 @@
+import { insertAppHead, catalogueScript } from "../app-head.js";
 /// <reference types="node" />
 /**
  * `@aotter/mantle-admin/testing`: the compatibility test of an application's Admin MCP App. It loads the App `mantle bundle`
@@ -176,14 +177,7 @@ export async function checkMcpApp(options: CheckMcpAppOptions): Promise<void> {
   for (const tool of scenarios.keys()) rows[tool] ??= rowsOf(undefined);
 
   const hostScript = readFileSync(fileURLToPath(new URL("host.js", import.meta.url)), "utf8");
-  const app = html.replace(
-    /<head[^>]*>/i,
-    head =>
-      head +
-      '<script type="application/json" id="mantle-catalog">' +
-      JSON.stringify(catalogue).replace(/</g, "\\u003c") +
-      "</script>",
-  );
+  const app = insertAppHead(html, catalogueScript(catalogue));
 
   const playwright = await import("playwright-core").catch(() => {
     throw new Error(
