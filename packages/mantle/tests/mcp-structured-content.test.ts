@@ -67,7 +67,12 @@ test("every tool lists its outputSchema whatever its root, and sends its data as
 test("on a 2025 revision a non-object tool lists no outputSchema and sends text only, never the SDK's { result } wrap; versions match", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const objectish = tool("objectish", () => ({ id: "o" }), { anyOf: [{ type: "object" }, { properties: {} }] });
-  const tools = [...conforming, objectish];
+  // SDK 2.4.0 lists a `$ref` to an object definition as an object, so it is not wrapped and stays listed.
+  const refObject = tool("refobject", () => ({ id: "r" }), {
+    $ref: "#/$defs/item",
+    $defs: { item: { type: "object", properties: { id: { type: "string" } } } },
+  });
+  const tools = [...conforming, objectish, refObject];
   const handle = mcp(tools as never, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
   // The raw wire, so nothing a client normalises hides a wrap.
   const raw = async (body: unknown) => {
@@ -82,6 +87,7 @@ test("on a 2025 revision a non-object tool lists no outputSchema and sends text 
   expect(Object.entries(listed).filter(([, schema]) => schema !== undefined)).toEqual([
     ["record", { type: "object", properties: { id: { type: "string" } }, required: ["id"] }],
     ["objectish", { type: "object", anyOf: [{ type: "object" }, { properties: {} }] }],
+    ["refobject", { type: "object", ...refObject.outputSchema }],
   ]);
   for (const { name, run } of tools) {
     const value = await run();
