@@ -31,12 +31,6 @@ export interface MantleDialect {
    */
   readonly nativeOrder?: boolean;
   /**
-   * The engine's SQL is its own (ADR-0039), not SQLite's vocabulary lowered onto it: `json_each`, `->> '$.path'`, integer
-   * truthiness and `||` over non-text are refused or mean what the engine says. The compliance suite then runs the engine's
-   * spelling of those cases.
-   */
-  readonly nativeSql?: boolean;
-  /**
    * The dialect's printer: the very function its executor prints with (ADR-0044 decision 3). `mantle generate` prints every View and
    * inline Procedure through it. Absent, a plan for this dialect carries no lowered statements.
    */
