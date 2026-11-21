@@ -355,9 +355,27 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     );
     const d = out.at(-1)!;
     if (generic) {
+      const operation =
+        route === "POST /entries"
+          ? "create"
+          : route === "DELETE /entries/:id"
+            ? "delete"
+            : route.startsWith("GET ")
+              ? undefined
+              : route.endsWith("/publish")
+                ? "publish"
+                : "update";
+      const inspected = inspectBehavior(
+        plan,
+        undefined,
+        false,
+        undefined,
+        operation ? Object.keys(plan.schemas).map(schema => ({ schema, operation })) : [],
+      );
       d.schemas = Object.keys(plan.schemas).sort();
       d.readSchemas = d.schemas;
-      d.behavior = { schemas: plan.schemas, dependencies: [] };
+      d.opaque = inspected.opaque;
+      d.behavior = { schemas: plan.schemas, dependencies: inspected.dependencies };
     }
   }
   return [...new Map(out.map(d => [d.id, d])).values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
