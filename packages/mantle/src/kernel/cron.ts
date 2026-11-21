@@ -1,4 +1,4 @@
-/** SDK-owned POSIX to Cloudflare cron conversion, copied verbatim from Core's CloudflareCron so Workers don't pull Core's D1 driver; Core is retired with 0.2.0, so this copy becomes the only one. */
+/** Validate POSIX cron expressions and map weekdays to Cloudflare’s numbering. */
 const PART = /^(\*|\d+|[A-Za-z]{3})(?:-(\d+|[A-Za-z]{3}))?(?:\/(\d+))?$/;
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const DAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
