@@ -445,6 +445,12 @@ export function admin<Env, Database, Handlers = never>(
             path: "/developer/views/{name}",
             run: (c: Context<Env, Database>) => viewPage(c, true),
           },
+          {
+            method: "GET" as const,
+            path: "/developer-console",
+            run: (c: Context<Env, Database>) =>
+              options.authorize ? visibleMetadata(c, true).then(m => m.developerConsole) : developerConsole(),
+          },
         ]),
     {
       method: "POST",
@@ -465,16 +471,6 @@ export function admin<Env, Database, Handlers = never>(
         return { ok: true, output: resultData(output) };
       },
     },
-    ...(metadata.developerConsole === undefined
-      ? []
-      : [
-          {
-            method: "GET",
-            path: "/developer-console",
-            run: (c: Context<Env, Database>) =>
-              options.authorize ? visibleMetadata(c, true).then(m => m.developerConsole) : developerConsole(),
-          },
-        ]),
     ...(options.routes ?? []),
   ];
   const context = (
