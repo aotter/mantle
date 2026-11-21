@@ -32,7 +32,7 @@ export interface MantleDialect {
   readonly nativeOrder?: boolean;
   /**
    * The dialect's printer: the very function its executor prints with (ADR-0044 decision 3). `mantle generate` prints every View and
-   * inline Procedure through it. Absent, a plan for this dialect carries no lowered statements.
+   * inline Procedure through it.
    */
-  print?(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
+  print(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
 }
