@@ -8,7 +8,7 @@ import {
   type PlanSchema,
   type SqlNode,
 } from "../build/compiler.js";
-import { declaredType } from "./columns.js";
+import { declaredType, SCALAR } from "./columns.js";
 
 /** Storage column -> the native field a manifest index names. */
 const NATIVE_FIELDS = new Map(Object.entries(NATIVE_COLUMNS).map(([field, column]) => [column, field]));
@@ -130,7 +130,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
           "author_id",
           "status",
         ]) {
-          const type = declaredType(schema.fields, name) ?? (name === "version" ? "integer" : "text");
+          const type = declaredType(schema.fields, name) ?? "text";
           fields.set(name, { schema, name, type, notNull: NATIVE_NOT_NULL.has(name) || notNull.has(name), source });
         }
         fact = {
@@ -258,15 +258,7 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       return fail(
         `Nullable ORDER BY key '${keys.find(k => k && !k.notNull)!.name}': make the operational Schema field required and non-null, and order by the preserved side of a LEFT JOIN.`,
       );
-    if (
-      keys.some(
-        k =>
-          !k?.notNull ||
-          (!["text", "bool", "integer", "int4", "int8", "real", "float8", "date", "timestamptz"].includes(k.type) &&
-            !/^numeric\(/.test(k.type)),
-      )
-    )
-      return;
+    if (keys.some(k => !k?.notNull || (!SCALAR.has(k.type) && !/^numeric\(/.test(k.type)))) return;
     const same = (a: Field | undefined, b: Field | undefined) => a && b && a.name === b.name && a.source === b.source;
     if (sorts.length) {
       if (group.length) {

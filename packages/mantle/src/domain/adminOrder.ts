@@ -3,31 +3,15 @@ import { adminIndexColumns, NATIVE_NOT_NULL, notNullColumns, type RuntimePlan } 
 import type { CursorKind } from "../kernel/paging.js";
 import { dialect as sqlite } from "../kernel/dialect/sqlite.js";
 import { dialect as postgres } from "../kernel/dialect/postgres.js";
-import { declaredType } from "./columns.js";
+import { cursorKind, declaredType } from "./columns.js";
 type Schema = RuntimePlan["schemas"][string];
 export function adminOrder(schema: Schema): Record<string, readonly [CursorKind, boolean]> {
   const notNull = notNullColumns(schema);
   const fields = adminIndexColumns(schema);
   return Object.fromEntries(
     ["id", "updated_at", ...(schema.publishing ? ["status"] : []), ...fields].flatMap(f => {
-      const type = declaredType(schema.fields, f) ?? "text";
-      const kind: CursorKind | undefined =
-        type === "text"
-          ? "text"
-          : type === "bool"
-            ? "bool"
-            : type === "int4"
-              ? "int4"
-              : ["integer", "int8"].includes(type)
-                ? "int"
-                : ["real", "float8"].includes(type)
-                  ? "float"
-                  : type === "date"
-                    ? "date"
-                    : type === "timestamptz"
-                      ? "timestamp"
-                      : undefined;
-      return kind ? [[f, [kind, !NATIVE_NOT_NULL.has(f) && !notNull.has(f)] as const]] : [];
+      const kind = cursorKind(declaredType(schema.fields, f) ?? "text");
+      return kind && kind !== "numeric" ? [[f, [kind, !NATIVE_NOT_NULL.has(f) && !notNull.has(f)] as const]] : [];
     }),
   );
 }
