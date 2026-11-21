@@ -10,53 +10,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-// Alpha.6 only: Snyk revoked this advisory and Vite considers it a false positive.
-// The scaffold's Admin/MCP build takes glob rules from build inputs, not service requests.
-// https://github.com/vitejs/vite/issues/24131#issuecomment-6963223033
-const alpha6Advisory = "https://github.com/advisories/GHSA-fc5q-39xc-vjpf";
-
-function onlyAlpha6Advisory(report) {
-  if (report?.auditReportVersion !== 2 || report.error || !report.vulnerabilities) return false;
-  const entries = Object.values(report.vulnerabilities);
-  const high = entries.filter(entry => entry.severity === "high");
-  if (
-    high.length === 0 ||
-    high.length !== report.metadata?.vulnerabilities?.high ||
-    report.metadata.vulnerabilities.critical !== 0 ||
-    entries.some(entry => entry.severity === "critical")
-  )
-    return false;
-
-  // npm lists inherited advisories as package names in via. Follow only the reported
-  // High entries, and require every High to lead to the one approved advisory.
-  const explained = new Set();
-  for (const { name, via } of high) {
-    if (report.vulnerabilities[name]?.via !== via || !Array.isArray(via) || via.length === 0) return false;
-    for (const advisory of via) {
-      if (typeof advisory === "string") {
-        if (!Object.hasOwn(report.vulnerabilities, advisory)) return false;
-      } else {
-        if (
-          advisory?.severity === "high" &&
-          name === "picomatch" &&
-          advisory.name === name &&
-          advisory.url === alpha6Advisory
-        )
-          explained.add(name);
-        else if (!["info", "low", "moderate"].includes(advisory?.severity)) return false;
-      }
-    }
-  }
-  let previousSize;
-  do {
-    previousSize = explained.size;
-    for (const { name, via } of high) {
-      if (via.some(parent => explained.has(parent))) explained.add(name);
-    }
-  } while (explained.size > previousSize);
-  return explained.size === high.length;
-}
-
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "packages/mantle/dist/infrastructure/cli.js");
 if (!existsSync(cli)) throw new Error("check-init-audit: run pnpm build first");
@@ -104,18 +57,15 @@ try {
       .map(([name, pin]) => `${name}@${pin}`)
       .join(", ")}`,
   );
-  const temporaryException = version === "0.2.2-alpha.6";
-  const audit = spawnSync("npm", ["audit", "--audit-level=high", ...(temporaryException ? ["--json"] : [])], {
+  const audit = spawnSync("npm", ["audit", "--audit-level=high"], {
     cwd: app,
     env,
     encoding: "utf8",
-    stdio: ["ignore", temporaryException ? "pipe" : "inherit", "inherit"],
+    stdio: ["ignore", "inherit", "inherit"],
   });
   if (audit.stdout) process.stdout.write(audit.stdout);
   if (audit.error) throw audit.error;
-  if (temporaryException && audit.status === 1 && onlyAlpha6Advisory(JSON.parse(audit.stdout))) {
-    console.warn(`check:init-audit: alpha.6 temporary exception applied to ${alpha6Advisory}`);
-  } else if (audit.status !== 0) {
+  if (audit.status !== 0) {
     console.error(
       "check-init-audit: the mantle init app has high or critical advisories. Bump the pins in docs/examples/app-shell/package.json (Wrangler together with a compatible @cloudflare/workers-types), align docs/examples/reference-service, and rerun.",
     );
