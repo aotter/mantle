@@ -71,14 +71,18 @@ const authorize: Authorize = async (target, caller) => {
 - REST and web answer HTTP 429 with `{ "error": { "code", "message", "path", "retryAfter" } }`; MCP answers the
   `tools/call` with HTTP 429 and the same `error`, before the tool runs. No surface sets a `Retry-After` header.
 - Lists never fail for it: MCP `tools/list` and Admin navigation metadata leave the target out, as for any refusal;
-  Admin's bootstrap omits its first page of entries, and a View batch marks the View `{ "error": true }`. Admin's check
-  of a translation's parent Schema is a yes or no, so a 429 there answers 403.
+  Admin's bootstrap omits its first page of entries, and a View batch marks the View `{ "error": true }`. Admin asks some
+  targets with a yes or no beside the route's own, so there a 429 counts as a refusal: when a translation's parent Schema's read gets
+  429, listing the translation answers 403 and reading one entry answers 200 without `data`; a committed create, patch or publishing transition whose
+  Schema read gets 429 still answers 200 with the entry's `id` and `version` and no `data`, as for a caller who may
+  write but not read. An entry read is authorized once, by its route.
 - Under [gateway mode](#gateway-mode) the host gets 429 with `{ "error": { "code", "message", "target" } }`, as for a
   handler's 429, and the access event records `outcome: "error"` with the code as `reason`. MCP `onObservation` gets no
   `request-refused` event for it.
-- Only status 429 passes. A `ContractError` with another status (or none), or any other rejection, is still 403
-  `AUTH_DENIED` "Target is not authorized.", and a synchronous throw is an internal error. Throw from an `async`
-  callback, or return a rejected promise.
+- Two rejections pass as thrown: a `ContractError` with status 429, and one with code `AUTH_DENIED` (its own message;
+  403 unless it states another status). Any other rejection, such as a `ContractError` with another code and another
+  status or none, is 403 `AUTH_DENIED` "Target is not authorized.", and a synchronous throw is an internal error.
+  Throw from an `async` callback, or return a rejected promise.
 
 The callback also runs once per target when MCP lists tools or Admin builds its navigation, and cannot tell those from
 a call: read the count there, and count requests (per client address or credential) in the application's route before

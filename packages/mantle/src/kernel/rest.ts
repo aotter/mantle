@@ -86,7 +86,10 @@ export type NativeTarget<Env = unknown> = (
 ) => Target;
 /** Application `authorize`, bound to the request's caller; without one every target is authorized. */
 export interface RouteAccess {
-  /** Refuse with `AUTH_DENIED` unless the target is authorized. */
+  /**
+   * Refuse unless the target is authorized: an `AUTH_DENIED` or status-429 ContractError rejection as thrown, any other
+   * refusal as `AUTH_DENIED` "Target is not authorized." (handbook: authorization, "Limits and authorize").
+   */
   authorize(target: Target): Promise<void>;
   /** Whether the target is authorized; a rejection is `false`. */
   authorized(target: Target): Promise<boolean>;
