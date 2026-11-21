@@ -1,14 +1,13 @@
 /** The `upload_media` and `find_media` tools over a media library: argument modes, the fetch-and-commit path, and the upload card's targets. */
 import { ContractError } from "./contract-error.js";
-import { mediaError } from "./media.js";
+import { mediaError, obj } from "./media.js";
 import { acceptedBy } from "./media-type.js";
 import { withResultMeta } from "./result-meta.js";
 import type { MediaLibrary, MediaPurposePolicy } from "./site-types.js";
 
 const fail = (code: string, message: string) => mediaError(code, message);
 const bad = (expected: string) => fail("INPUT_VALIDATION_FAILED", `expected ${expected}`);
-const obj = (v: unknown): Record<string, unknown> =>
-  v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+
 
 /** Where `upload_media` puts the upload targets for an MCP App: the result `_meta`, which the host gives the App and not the model. */
 export const UPLOAD_META = "net.aotter.mantle/upload";
