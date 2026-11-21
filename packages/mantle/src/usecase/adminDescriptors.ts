@@ -14,7 +14,7 @@ import {
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { advertised } from "./validation.js";
-import { publishingAnnotations, publishingInput, publishingTransitions } from "./publishing.js";
+import { publishingAnnotations, publishingInput, publishingTransitions } from "../domain/generated-tools.js";
 import { versioned } from "./tool-version.js";
 
 export function emitAdminDescriptors(

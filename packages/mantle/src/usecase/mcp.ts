@@ -11,12 +11,12 @@ import {
   type LoweredStatement,
 } from "../build/compiler.js";
 import type { Target } from "../domain/model.js";
-import { emitMcpMedia, mediaDefinitions } from "./mcp-media.js";
+import { emitMcpMedia } from "./mcp-media.js";
 import type { mediaPolicies } from "./site.js";
 import { advertised, emitValidation } from "./validation.js";
 import { databaseImport, literal, q } from "../domain/entry.js";
 import { authLines, conversions, requiredScopes } from "../domain/input.js";
-import { publishingAnnotations, publishingInput } from "./publishing.js";
+import { mediaDefinitions, publishingAnnotations, publishingInput } from "../domain/generated-tools.js";
 import { versioned } from "./tool-version.js";
 import { boundaryPage, outputConversions } from "../domain/columns.js";
 export function emitMcp(

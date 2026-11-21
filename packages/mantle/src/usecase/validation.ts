@@ -1,7 +1,7 @@
 /** Compile boundary checks into each operation; no schema enters the request bundle. */
 import { INPUT_RULE_KEYWORDS, lookupLocalRef as lookup, rootRefChain, type JsonSchema } from "../build/compiler.js";
 import { literal, q } from "../domain/entry.js";
-import { publishingInput } from "./publishing.js";
+import { publishingInput } from "../domain/generated-tools.js";
 import { equal } from "../kernel/validation.js";
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 const supported = new Set([
