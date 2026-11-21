@@ -333,26 +333,34 @@ export function admin<Env, Database, Handlers = never>(
     {
       method: "GET",
       path: "/collections",
-      run: c =>
-        visibleMetadata(c).then(m => ({
+      run: c => {
+        const result = (m: Metadata) => ({
           collections: m.collections,
           allCollections: m.allCollections ?? Object.fromEntries(m.collections.map(c => [c.name, c])),
-        })),
+        });
+        return options.authorize ? visibleMetadata(c).then(result) : result(metadata);
+      },
     },
     {
       method: "GET",
       path: "/views-manifest",
-      run: c => visibleMetadata(c).then(m => ({ views: m.views })),
+      run: c =>
+        options.authorize
+          ? visibleMetadata(c).then(m => ({ views: m.views }))
+          : { views: sees(metadata.views, views, c.caller) },
     },
     {
       method: "GET",
       path: "/operations",
-      run: c => visibleMetadata(c).then(m => ({ operations: m.operations })),
+      run: c =>
+        options.authorize
+          ? visibleMetadata(c).then(m => ({ operations: m.operations }))
+          : { operations: sees(metadata.operations, operations, c.caller) },
     },
     {
       method: "GET",
       path: "/webmcp",
-      run: c => visibleMetadata(c).then(m => m.webmcp),
+      run: c => (options.authorize ? visibleMetadata(c).then(m => m.webmcp) : catalogue),
     },
     {
       method: "GET",
