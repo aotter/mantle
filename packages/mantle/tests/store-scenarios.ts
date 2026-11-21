@@ -122,6 +122,83 @@ const COLUMNS = [
   "version",
 ];
 
+/**
+ * #2119: a declared field name (`submittedAt`) outside the generated types is its storage column (`submittedat`) on every
+ * dialect: insert, update, `where`, `orderBy` and cursors, with the date-time conversion; rows keep storage names. `purchases`
+ * is a signed-in caller's `purchase_requests`; the rows it adds are deleted again.
+ */
+export async function verifyDeclaredNames(purchases: any) {
+  const declared = (n: string, submittedAt: string | Date) => ({
+    requestNumber: n,
+    title: "declared",
+    amount: 1,
+    approved: false,
+    requestedUnits: 3,
+    submittedAt,
+    neededOn: "2026-10-20",
+    payload: { n },
+    sortBucket: "declared",
+  });
+  const first = await purchases.insert(declared("D-1", new Date("2026-10-11T00:00:01.500Z"))),
+    second = await purchases.insert(declared("D-2", "2026-10-11T00:00:02.25Z"));
+  assert.deepEqual(Object.keys(first).sort(), COLUMNS);
+  assert.deepEqual(
+    [first.requestnumber, first.submittedat, first.neededon, second.submittedat],
+    ["D-1", "2026-10-11T00:00:01.500000Z", "2026-10-20", "2026-10-11T00:00:02.250000Z"],
+  );
+  const mine = { sortBucket: "declared" },
+    ids = (rows: any[]) => rows.map(r => r.id);
+  assert.equal(await purchases.count({ ...mine, submittedAt: { gte: new Date("2026-10-11T00:00:02Z") } }), 1);
+  assert.equal(await purchases.count({ SortBucket: "declared", neededOn: "2026-10-20" }), 2);
+  assert.equal(
+    await purchases.count({
+      ...mine,
+      submittedAt: { in: [new Date("2026-10-11T00:00:01.500Z"), "2026-10-11T00:00:02.25Z"] },
+      sortBucket: { isNull: false },
+    }),
+    2,
+  );
+  assert.equal((await purchases.first({ where: mine, orderBy: "requestNumber", order: "desc" })).id, second.id);
+  // one column in two spellings is refused before SQL: SQLite would store one value and check the other
+  for (const write of [
+    () => purchases.insert({ ...declared("D-3", "2026-10-11T00:00:04Z"), title: "a", Title: "b" }),
+    () => purchases.update(first.id, { title: "a", Title: "b" }, { lock: first.version }),
+  ])
+    await assert.rejects(Promise.resolve().then(write), /names a column twice/);
+  await assert.rejects(
+    Promise.resolve().then(() => purchases.find({ where: mine, orderBy: ["title"] })),
+    /orderBy is a column name/,
+  );
+  assert.deepEqual(ids((await purchases.find({ where: mine, orderBy: "submittedAt", order: "desc" })).rows), [
+    second.id,
+    first.id,
+  ]);
+  // keyset paging by a declared name: the cursor carries the row's value under its storage key
+  for (const orderBy of ["submittedAt", "requestNumber"])
+    for (const order of ["asc", "desc"]) {
+      const page = await purchases.find({ where: mine, orderBy, order, limit: 1 });
+      assert.ok(page.cursor, `${orderBy} ${order}: a cursor`);
+      const next = await purchases.find({ where: mine, orderBy, order, limit: 1, cursor: page.cursor });
+      assert.deepEqual(
+        [...ids(page.rows), ...ids(next.rows)],
+        order === "asc" ? [first.id, second.id] : [second.id, first.id],
+        `${orderBy} ${order} pages`,
+      );
+    }
+  const updated = await purchases.update(
+    first.id,
+    { submittedAt: new Date("2026-10-11T00:00:03Z"), neededOn: "2026-10-21", sortBucket: null },
+    { lock: first.version },
+  );
+  assert.deepEqual(
+    [updated.submittedat, updated.neededon, updated.sortbucket, updated.version],
+    ["2026-10-11T00:00:03.000000Z", "2026-10-21", null, first.version + 1],
+  );
+  for (const row of [updated, second]) await purchases.delete(row.id, { lock: row.version });
+  assert.equal(await purchases.count({ requestNumber: { in: ["D-1", "D-2"] } }), 0);
+  return 1;
+}
+
 export async function verifyStore(env: StoreEnv) {
   let checks = 0;
   const ok = () => {
@@ -639,6 +716,7 @@ export async function verifyStore(env: StoreEnv) {
   await catalog(system).delete(item.id, { lock: item.version });
   assert.equal(await catalog(system).findById(item.id), null);
   ok();
+  checks += await verifyDeclaredNames(a);
 
   // ---- equivalence: for every Schema and mode, the generic Store's rows are the rows Core's compiled SQL returns
   const stores = env.stores;
