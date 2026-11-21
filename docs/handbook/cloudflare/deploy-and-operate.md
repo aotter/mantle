@@ -1,5 +1,5 @@
 ---
-description: The first deploy step by step (sign-in method, Cloudflare account, Wrangler login, database, secrets), schema installation and migrations, and operating a native Worker.
+description: The first deploy step by step (sign-in method, Cloudflare account, Wrangler login, database, secrets), schema installation and migrations, scheduled work, and operating a native Worker.
 ---
 # Deploy and operate
 
@@ -141,6 +141,115 @@ session within that logical flow; all writes still go to the primary. Keep fresh
 authentication/authorization checks and mutation/read-after-write paths on their
 required current-authority path rather than weakening them for replica latency.
 
+## Scheduled work
+
+The application owns its schedule: it declares the crons in `wrangler.jsonc` and exports `scheduled()`, which calls
+generated Procedures as a system caller. A manifest has no `schedule` source
+([ADR-lite #2111](../../adr/adr-lite-2111-scheduling-is-application-owned.md)). Keep one checked map from cron to the
+work it runs; a test holds it equal to the Wrangler list, so the two cannot drift. With this manifest:
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: login_codes }
+spec:
+  title: Login codes
+  lifecycle: operational
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema:
+    type: object
+    required: [code, expiresAt]
+    properties:
+      code: { type: string }
+      expiresAt: { type: string, format: date-time }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: carts }
+spec:
+  title: Carts
+  lifecycle: operational
+  schema:
+    type: object
+    required: [cartState]
+    properties:
+      cartState: { type: string, enum: [open, closed] }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: close-stale-carts }
+spec:
+  description: Close the carts nobody touched for 24 hours. Run by the scheduler as the system caller.
+  input: { type: object, additionalProperties: false, properties: {} }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE carts SET cartState = 'closed'
+        WHERE cartState = 'open' AND updated_at < now() - CAST('24 hours' AS interval)
+        RETURNING id
+```
+
+```ts
+// src/schedule.ts
+import { toCloudflareCron } from "@aotter/mantle/cron";
+import sweepLoginCodes from "../generated/procedures/login_codes.sweepExpired.js";
+import closeStaleCarts from "../generated/procedures/close-stale-carts.js";
+
+type Env = { DB: D1Database };
+const system = (job: string) => ({ kind: "system", reason: `cron: ${job}` }) as const;
+
+/** POSIX cron (UTC, weekday 0 = Sunday) → the jobs it runs. */
+export const schedules: Record<string, Record<string, (env: Env) => Promise<unknown>>> = {
+  "*/15 * * * *": {
+    "login_codes.sweepExpired": env => sweepLoginCodes(env.DB, system("login_codes.sweepExpired"), { limit: 500 }),
+  },
+  "0 3 * * 1": {
+    "close-stale-carts": env => closeStaleCarts(env.DB, system("close-stale-carts"), {}),
+    "login_codes.sweepExpired": env => sweepLoginCodes(env.DB, system("login_codes.sweepExpired"), { limit: 500 }),
+  },
+};
+// Cloudflare spells weekdays 1-7 (1 = Sunday); `controller.cron` is the spelling wrangler.jsonc lists.
+const byCron = new Map(Object.entries(schedules).map(([cron, jobs]) => [toCloudflareCron(cron), jobs]));
+if (byCron.size !== Object.keys(schedules).length) throw new Error("Two schedules map to one Cloudflare cron.");
+
+export async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
+  const jobs = byCron.get(controller.cron);
+  if (!jobs) throw new Error(`No scheduled work for cron "${controller.cron}".`);
+  const names = Object.keys(jobs);
+  const outcomes = await Promise.allSettled(names.map(name => jobs[name]!(env)));
+  outcomes.forEach((outcome, i) => console.log(JSON.stringify({ cron: controller.cron, job: names[i], outcome: outcome.status })));
+  const failed = names.filter((_, i) => outcomes[i]!.status === "rejected");
+  if (failed.length)
+    throw new AggregateError(
+      outcomes.flatMap(outcome => (outcome.status === "rejected" ? [outcome.reason] : [])),
+      `Scheduled jobs failed for "${controller.cron}": ${failed.join(", ")}`,
+    );
+}
+```
+
+The Worker exports it beside `fetch` (`export default { fetch, scheduled }`), and `wrangler.jsonc` lists the
+Cloudflare spelling of each key: `"triggers": { "crons": ["*/15 * * * *", "0 3 * * 2"] }`. An unknown cron and a failed
+job both throw, so the invocation shows as failed in Workers Logs, and the other jobs of that cron still ran. The
+system Caller's `reason` names the job. Cloudflare does not document automatic retries for Cron Triggers: keep each job
+bounded (a sweep's `limit`, with the rest left for the next run) and safe to run twice.
+
+```ts
+// schedule.test.ts, beside wrangler.jsonc
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { toCloudflareCron } from "@aotter/mantle/cron";
+import { unstable_readConfig } from "wrangler";
+import { schedules } from "./src/schedule.js";
+
+test("wrangler.jsonc declares exactly the crons the schedule map runs", () => {
+  const declared = unstable_readConfig({ config: "wrangler.jsonc" }).triggers.crons ?? [];
+  assert.deepEqual([...declared].sort(), Object.keys(schedules).map(toCloudflareCron).sort());
+});
+```
+
+A host that runs applications as Workers it dispatches to must invoke each application's `scheduled()` itself. The
+application's declaration is still its `triggers.crons`, which the host reads to know what to run and when.
+
 ## Operate
 
 Enable Workers Logs and traces in production. The top-level `observability.enabled` alone does not enable traces:
@@ -155,7 +264,7 @@ Enable Workers Logs and traces in production. The top-level `observability.enabl
 
 Auth configuration and production email delivery are app-owned; follow [authentication](authentication.md). Keep secrets in the platform's secret store. With `secrets.required`, `wrangler deploy` refuses to upload while a required secret is unset: set them with `wrangler secret put` (or pass `--secrets-file` on the first deploy). Serve the selected Admin assets through the [native Admin](../guides/native-admin.md) shell contract.
 
-Scheduling is app-owned. Wire generated system-only TTL sweeps into `scheduled()` and configure Wrangler crons explicitly. Bound each invocation and retain a cursor if work remains; see [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
+Scheduling is app-owned: see [scheduled work](#scheduled-work) and [TTL maintenance](../guides/native-execution.md#ttl-maintenance). Expired rows remain stored and hold unique keys until removed.
 
 An `OUTCOME_UNKNOWN` write may have committed; reconcile before deciding what to do next and never retry automatically. For MCP Apps, verify a newly invoked render tool on the deployed host and keep old
 conversations working with the [retained-page recipe](../guides/mcp-apps.md#keep-old-conversations-working-after-an-upgrade).
