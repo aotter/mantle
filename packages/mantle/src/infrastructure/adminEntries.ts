@@ -31,6 +31,19 @@ const fields = (s: Schema) =>
   Object.keys(s.fields)
     .filter(f => f !== s.scope)
     .flatMap(f => (s.fields[f] === "geo" ? [f + "_lat", f + "_lng"] : [f]));
+/** A name not in `used` (case-insensitively), then reserved there: `base` with `_` appended until free. */
+const fresh = (used: Set<string>, base: string) => {
+  let name = base;
+  while (used.has(name.toLowerCase())) name += "_";
+  used.add(name.toLowerCase());
+  return name;
+};
+/** A parameter number from 32767 up that the authored text does not contain, so the printed marker cannot collide. */
+export const freeMarker = (text: string) => {
+  let marker = 32767;
+  while (text.includes(String(marker))) marker++;
+  return marker;
+};
 export async function adminEntries(
   plan: RuntimePlan,
   dialect: MantleDialect,
@@ -40,8 +53,7 @@ export async function adminEntries(
   const result: Record<string, unknown> = Object.create(null),
     postgres = !!dialect.nativeOrder;
   const tableNames = new Set(Object.keys(plan.schemas).map(name => name.toLowerCase()));
-  let rowsName = "_mantle_admin_rows";
-  while (tableNames.has(rowsName.toLowerCase())) rowsName += "_";
+  const rowsName = fresh(tableNames, "_mantle_admin_rows");
   const rowsAlias = { name: rowsName, sql: wire.ident(rowsName) };
   const parse = async (sql: string) => {
     const { stmts } = await parsePgSql(sql);
@@ -121,23 +133,17 @@ export async function adminEntries(
         if (typeof projected === "string") throw Error(projected);
         return projected;
       };
-      let marker = 32767;
-      const authored = JSON.stringify([plan.schemas, s]);
-      while (authored.includes(String(marker))) marker++;
+      const marker = freeMarker(JSON.stringify([plan.schemas, s]));
       const markerText = wire.param(marker);
       const usedNames = new Set([...columns, ...(parent ? fields(parent) : [])].map(name => name.toLowerCase()));
       const cursorAliases = [0, 1].map(i => {
-        let name = "_mantle_admin_key" + i;
-        while (usedNames.has(name.toLowerCase())) name += "_";
-        usedNames.add(name.toLowerCase());
+        const name = fresh(usedNames, "_mantle_admin_key" + i);
         return { name, sql: wire.ident(name) };
       });
       // #1822: per verb, the first lock that holds for the row as the probe reads it (NULL holds), else NULL; caller reads only
       const lockColumns = s.locks?.length
         ? (["update", "delete"] as const).map(verb => {
-            let name = "_mantle_admin_lock_" + verb;
-            while (usedNames.has(name.toLowerCase())) name += "_";
-            usedNames.add(name.toLowerCase());
+            const name = fresh(usedNames, "_mantle_admin_lock_" + verb);
             const qualify = (n: unknown): void => {
               if (!n || typeof n !== "object") return;
               const f = (n as SqlNode).ColumnRef?.fields;

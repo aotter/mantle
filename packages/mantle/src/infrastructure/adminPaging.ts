@@ -1,6 +1,6 @@
 /** Print native Admin matching fragments once. No compiler, AST or authored schema reaches requests. */
 import type { RuntimePlan, SqlNode } from "../build/compiler.js";
-import { adminEntries } from "./adminEntries.js";
+import { adminEntries, freeMarker } from "./adminEntries.js";
 import { printExpression, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType } from "../domain/columns.js";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -15,7 +15,7 @@ export function adminPaging(
   plan: RuntimePlan,
   dialect: MantleDialect,
   proofs: Readonly<Record<string, PagingProof | undefined>>,
-  project: (ast: SqlNode, names: readonly string[], keys: number, name: string) => SqlNode,
+  wire: Dialect,
   refuse: (path: string, message: string) => void,
 ): Record<string, { caller: AdminPage; trusted: AdminPage }> {
   const all: Record<string, { caller: AdminPage; trusted: AdminPage }> = Object.create(null);
@@ -47,30 +47,33 @@ export function adminPaging(
           ),
           next = keys ? pagedOf({ schemas: plan.schemas, dialect }, c, Array(keys).fill(0), undefined) : undefined;
         if (!keys && !first.flat) first.ast.SelectStmt.whereClause = undefined;
-        const reserved = JSON.stringify([c.ast, v.source, list, Object.values(plan.schemas).map(s => s.fields)]);
-        let marker = 32767;
-        while (reserved.includes(String(marker))) marker++;
+        const marker = freeMarker(
+          JSON.stringify([c.ast, v.source, list, Object.values(plan.schemas).map(s => s.fields)]),
+        );
         const print = (ast: SqlNode) => dialect.print!(ast, plan.schemas);
         const read = (p: typeof first) => {
           const typed = castCursor(p.ast, p.sources, proof.types, !!dialect.nativeOrder);
+          const names = p.flat ? (viewOutputs(v, plan.schemas).keys ?? []) : p.names;
+          const projected = wireScalars(
+            {
+              SelectStmt: {
+                ...typed.SelectStmt,
+                whereClause: undefined,
+                sortClause: undefined,
+                limitCount: undefined,
+                limitOption: "LIMIT_OPTION_DEFAULT",
+              },
+            },
+            [...names, ...Array.from({ length: keys }, (_, i) => `_k${i}`)],
+            [...names.map(key => boundaryType(plan, name, key)), ...proof.types],
+            wire,
+            true,
+          );
+          if (typeof projected === "string") throw Error(projected);
           return {
             prefix:
-              print(
-                project(
-                  {
-                    SelectStmt: {
-                      ...typed.SelectStmt,
-                      whereClause: undefined,
-                      sortClause: undefined,
-                      limitCount: undefined,
-                      limitOption: "LIMIT_OPTION_DEFAULT",
-                    },
-                  },
-                  p.flat ? (viewOutputs(v, plan.schemas).keys ?? []) : p.names,
-                  keys,
-                  name,
-                ),
-              ) + (typed.SelectStmt.whereClause ? ` WHERE (${expression(typed.SelectStmt.whereClause)})` : ""),
+              print(projected) +
+              (typed.SelectStmt.whereClause ? ` WHERE (${expression(typed.SelectStmt.whereClause)})` : ""),
             extra: p.sources.filter(x => "cursor" in x).map(x => (x as { cursor: number }).cursor),
           };
         };
@@ -138,27 +141,11 @@ export async function adminBindingsOf(
   wire: Dialect,
   refusals: GenerateDiagnostic[],
 ): Promise<{
-  ok: true;
   adminPages: Record<string, { caller: AdminPage; trusted: AdminPage }>;
   adminEntries: Record<string, unknown>;
 }> {
-  const adminPages = adminPaging(
-    plan,
-    dialect,
-    paging,
-    (ast, names, nkeys, name) => {
-      const keys = [...names, ...Array.from({ length: nkeys }, (_, i) => `_k${i}`)];
-      const projected = wireScalars(
-        ast,
-        keys,
-        [...names.map(key => boundaryType(plan, name, key)), ...(paging[name]?.types ?? [])],
-        wire,
-        true,
-      );
-      if (typeof projected === "string") throw Error(projected);
-      return projected;
-    },
-    (path, message) => refusals.push({ code: "GENERATE_UNSUPPORTED", path, message }),
+  const adminPages = adminPaging(plan, dialect, paging, wire, (path, message) =>
+    refusals.push({ code: "GENERATE_UNSUPPORTED", path, message }),
   );
-  return { ok: true as const, adminPages, adminEntries: await adminEntries(plan, dialect, wire as Dialect, refusals) };
+  return { adminPages, adminEntries: await adminEntries(plan, dialect, wire, refusals) };
 }
