@@ -1469,6 +1469,47 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow admin read (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -1507,6 +1548,47 @@
     ]
   },
   "mcp allow member read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow member read (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -1580,7 +1662,73 @@
       true
     ]
   },
+  "mcp TARGET_MISMATCH (2026-07-28)": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_MISMATCH",
+          "message": "TARGET_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp TARGET_HASH_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_HASH_MISMATCH",
+          "message": "TARGET_HASH_MISMATCH",
+          "target": "view:public-records"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_HASH_MISMATCH",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp TARGET_HASH_MISMATCH (2026-07-28)": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
@@ -1646,7 +1794,87 @@
       true
     ]
   },
+  "mcp STALE_CALLER snapshot write (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
+          "target": "procedure:write"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp dry run write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "dryRun": true,
+            "event": {
+              "v": 1,
+              "requestId": "request-1",
+              "target": "procedure:write",
+              "targetHash": "<hash:procedure:write>",
+              "caller": {
+                "kind": "host",
+                "subject": "host:person",
+                "layer": "admin"
+              },
+              "outcome": "allow",
+              "dryRun": true
+            }
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp dry run write (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -1726,7 +1954,79 @@
       true
     ]
   },
+  "mcp DRY_RUN_UNSUPPORTED ref handler (2026-07-28)": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "DRY_RUN_UNSUPPORTED",
+          "message": "DRY_RUN_UNSUPPORTED",
+          "target": "procedure:touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "DRY_RUN_UNSUPPORTED",
+        "dryRun": true
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp deny member write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "message": "Authorization predicate not satisfied.",
+              "target": "procedures/write/requires/auth/all/0"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny member write (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -1798,7 +2098,79 @@
       true
     ]
   },
+  "mcp deny member on admin endpoint (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "message": "Admin role is required.",
+          "target": "mcp/admin"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:admin-records",
+        "targetHash": "<hash:view:admin-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp error invalid input": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "INPUT_VALIDATION_FAILED",
+              "message": "Expected string.",
+              "target": "procedures/write/input/title"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp error invalid input (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -1841,6 +2213,40 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+          "code": -32602,
+          "message": "No tool named \"missing\" exists in the current catalogue (catalogue version 71c7e718)."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp error unknown tool (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "jsonrpc": "2.0",
@@ -1879,7 +2285,40 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
-          "message": "Host callers may only discover the server or call a tool.",
+          "message": "Host callers may only initialize, discover the server or call a tool.",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny tools/list (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "message": "Host callers may only initialize, discover the server or call a tool.",
           "target": "mcp"
         }
       }
@@ -1936,7 +2375,87 @@
       true
     ]
   },
+  "mcp HOST_CONTRACT unknown key (2026-07-28)": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "Malformed host contract or tenant mismatch."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp HOST_CONTRACT missing user field": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp HOST_CONTRACT missing user field (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -1988,6 +2507,45 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "message": "Cross-origin session mutation rejected.",
+              "target": "request:origin"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp origin session write (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -2024,6 +2582,45 @@
     ]
   },
   "mcp origin session write, member refused by requires": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "message": "Authorization predicate not satisfied.",
+              "target": "procedures/write/requires/auth/all/0"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp origin session write, member refused by requires (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -2066,6 +2663,44 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": null,
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "message": "Sign in again."
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp 401 answered as AUTH_DENIED (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -2101,6 +2736,47 @@
     ]
   },
   "mcp allow write": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "results": [
+              [
+                {
+                  "id": "<row 1>",
+                  "title": "changed"
+                }
+              ]
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:write",
+        "targetHash": "<hash:procedure:write>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow write (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -2551,6 +3227,36 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "UNAUTHENTICATED",
+                "message": "Rows scoped by 'region' require an authenticated caller.",
+                "path": ""
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "UNAUTHENTICATED",
+              "message": "Rows scoped by 'region' require an authenticated caller.",
+              "path": ""
+            }
+          ]
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "mcp no props (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -2578,6 +3284,22 @@
     "frozen": []
   },
   "mcp no props, admin endpoint": {
+    "answer": {
+      "status": 401,
+      "wwwAuthenticate": "Bearer scope=\"mcp\", resource_metadata=\"https://app.test/.well-known/oauth-protected-resource/mcp\"",
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "UNAUTHENTICATED",
+          "message": "Authentication is required.",
+          "path": "mcp"
+        }
+      }
+    },
+    "events": [],
+    "frozen": []
+  },
+  "mcp no props, admin endpoint (2026-07-28)": {
     "answer": {
       "status": 401,
       "wwwAuthenticate": "Bearer scope=\"mcp\", resource_metadata=\"https://app.test/.well-known/oauth-protected-resource/mcp\"",
@@ -2645,6 +3367,47 @@
     ]
   },
   "mcp allow member with matched target": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow member with matched target (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -2721,6 +3484,47 @@
     ]
   },
   "mcp allow snapshot read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow snapshot read (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -2860,6 +3664,80 @@
       true
     ]
   },
+  "mcp STALE_CALLER snapshot ref handler (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
+          "target": "procedure:touch"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:touch",
+        "targetHash": "<hash:procedure:touch>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp allow admin endpoint without initialize": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:admin-records",
+        "targetHash": "<hash:view:admin-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp allow admin endpoint without server/discover": {
     "answer": {
       "status": 200,
@@ -2934,6 +3812,39 @@
       true
     ]
   },
+  "mcp batch refused (2026-07-28)": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "message": "Host calls cannot batch MCP messages.",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "mcp deny resources/list": {
     "answer": {
       "status": 403,
@@ -2942,7 +3853,7 @@
       "body": {
         "error": {
           "code": "AUTH_DENIED",
-          "message": "Host callers may only discover the server or call a tool.",
+          "message": "Host callers may only initialize, discover the server or call a tool.",
           "target": "mcp"
         }
       }
@@ -2960,6 +3871,71 @@
         },
         "outcome": "deny",
         "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp deny resources/list (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "message": "Host callers may only initialize, discover the server or call a tool.",
+          "target": "mcp"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp initialize": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": null,
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
         "dryRun": false
       }
     ],
@@ -2992,85 +3968,6 @@
           "layer": "admin"
         },
         "outcome": "allow",
-        "dryRun": false
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp 2025-era initialize refused": {
-    "answer": {
-      "status": 400,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32022,
-          "message": "Unsupported protocol version: 2025-06-18",
-          "data": {
-            "supported": [
-              "2026-07-28"
-            ],
-            "requested": "2025-06-18"
-          }
-        },
-        "id": 1
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "view:public-records",
-        "targetHash": "<hash:view:public-records>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
-        "dryRun": false
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp 2025-era tools/call refused": {
-    "answer": {
-      "status": 400,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "jsonrpc": "2.0",
-        "error": {
-          "code": -32022,
-          "message": "Unsupported protocol version: the request did not name a protocol version",
-          "data": {
-            "supported": [
-              "2026-07-28"
-            ]
-          }
-        },
-        "id": 1
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "view:public-records",
-        "targetHash": "<hash:view:public-records>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "INPUT_VALIDATION_FAILED",
         "dryRun": false
       }
     ],
@@ -3120,6 +4017,53 @@
     ]
   },
   "mcp user field: region all": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 2>",
+                "region": "JP",
+                "store": "A",
+                "title": "second"
+              },
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region all (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -3243,6 +4187,59 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 2>",
+                "region": "JP",
+                "store": "A",
+                "title": "second"
+              },
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              },
+              {
+                "id": "<row 3>",
+                "region": "TW",
+                "store": "B",
+                "title": "third"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region and stores all (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -3354,6 +4351,47 @@
     ]
   },
   "mcp user field: region scalar": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "rows": [
+              {
+                "id": "<row 1>",
+                "region": "TW",
+                "store": "A",
+                "title": "changed"
+              }
+            ]
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region scalar (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -3484,6 +4522,38 @@
       true
     ]
   },
+  "mcp user field: region outside enum (2026-07-28)": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' is outside its enum."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "web user field: region outside enum": {
     "answer": {
       "status": 412,
@@ -3551,6 +4621,54 @@
     ]
   },
   "mcp user field: region missing": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region missing (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -3670,6 +4788,54 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'region'.",
+                "field": "region"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'region'.",
+              "field": "region"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "region",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: region empty (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -3783,6 +4949,54 @@
     ]
   },
   "mcp user field: stores missing": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "HOST_CONTRACT",
+                "message": "The target needs user field 'stores'.",
+                "field": "stores"
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "HOST_CONTRACT",
+              "message": "The target needs user field 'stores'.",
+              "field": "stores"
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "field": "stores",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp user field: stores missing (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -3928,6 +5142,38 @@
       true
     ]
   },
+  "mcp user field: region number (2026-07-28)": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "HOST_CONTRACT",
+          "message": "User field 'region' must contain string values."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:public-records",
+        "targetHash": "<hash:view:public-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "HOST_CONTRACT",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "web user field: region number": {
     "answer": {
       "status": 412,
@@ -4029,6 +5275,51 @@
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": true,
+          "structuredContent": {
+            "diagnostics": [
+              {
+                "code": "AUTH_DENIED",
+                "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
+              }
+            ]
+          },
+          "diagnostics": [
+            {
+              "code": "AUTH_DENIED",
+              "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
+            }
+          ]
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "view:restricted-records",
+        "targetHash": "<hash:view:restricted-records>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp restrict term: all refused (2026-07-28)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
       "cacheControl": "private, no-store",
       "body": {
         "result": {
@@ -4099,6 +5390,40 @@
     ]
   },
   "mcp snapshot peek": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "ok": true
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:peek",
+        "targetHash": "hash of procedure:peek",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp snapshot peek (2026-07-28)": {
     "answer": {
       "status": 200,
       "wwwAuthenticate": null,
@@ -4192,6 +5517,86 @@
         "outcome": "deny",
         "reason": "STALE_CALLER",
         "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp snapshot poke (2026-07-28)": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "STALE_CALLER",
+          "message": "Snapshot callers cannot write.",
+          "target": "procedure:poke"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:poke",
+        "targetHash": "hash of procedure:poke",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "STALE_CALLER",
+        "dryRun": false
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "mcp dry run array output (2025)": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "no-cache, no-transform",
+      "body": {
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "dryRun": true,
+            "event": {
+              "v": 1,
+              "requestId": "request-1",
+              "target": "procedure:peek_list",
+              "targetHash": "hash of procedure:peek_list",
+              "caller": {
+                "kind": "host",
+                "subject": "host:person",
+                "layer": "admin"
+              },
+              "outcome": "allow",
+              "dryRun": true
+            }
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "procedure:peek_list",
+        "targetHash": "hash of procedure:peek_list",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow",
+        "dryRun": true
       }
     ],
     "frozen": [

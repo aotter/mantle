@@ -21,7 +21,7 @@ import {
   type AppCatalog,
   type ToolResult,
 } from "../src/app/bridge.js";
-import { mcpInit } from "./mcp-wire.js";
+import { ERAS, mcpInit } from "./mcp-wire.js";
 
 const action = {
   capability: "review_requisition",
@@ -442,17 +442,19 @@ describe("adminMcpApps", () => {
         apps: { public: upgraded },
       },
     );
-    const request = async (method: string, params = {}) => {
-      const response = await api(new Request("https://app.test/mcp/", mcpInit(method, params)), {});
-      const text = await response!.text();
-      return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
-    };
-    const listed = await request("tools/list");
-    expect(listed.tools[0]._meta.ui.resourceUri).toBe(current!.uri);
-    const oldRead = await request("resources/read", { uri: old.uri });
-    expect(oldRead.contents[0].text).toContain("Build A");
-    expect(oldRead.contents[0].text).not.toContain("review_requisition");
-    expect(oldRead.contents[0]._meta.ui.csp).toEqual(snapshot.csp);
+    for (const era of ERAS) {
+      const request = async (method: string, params = {}) => {
+        const response = await api(new Request("https://app.test/mcp/", mcpInit(method, params, { era })), {});
+        const text = await response!.text();
+        return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
+      };
+      const listed = await request("tools/list");
+      expect([era, listed.tools[0]._meta.ui.resourceUri]).toEqual([era, current!.uri]);
+      const oldRead = await request("resources/read", { uri: old.uri });
+      expect(oldRead.contents[0].text).toContain("Build A");
+      expect(oldRead.contents[0].text).not.toContain("review_requisition");
+      expect(oldRead.contents[0]._meta.ui.csp).toEqual(snapshot.csp);
+    }
     // A no-op redeploy: the same build answers at the fixed URI and at its hash, where the snapshot is not repeated.
     expect(
       (
@@ -541,10 +543,20 @@ describe("adminMcpApps", () => {
       })),
       { db: () => null, caller: () => ({ kind: "anonymous" as const }), apps },
     );
-    const response = await api(new Request("https://app.test/mcp/", mcpInit("resources/read", { uri })), {});
-    const text = await response!.text();
-    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
-      ._meta;
+    // The same content `_meta` in either era.
+    const [legacy, modern] = await Promise.all(
+      ERAS.map(async era => {
+        const response = await api(
+          new Request("https://app.test/mcp/", mcpInit("resources/read", { uri }, { era })),
+          {},
+        );
+        const text = await response!.text();
+        return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result
+          .contents[0]._meta;
+      }),
+    );
+    expect(legacy).toEqual(modern);
+    return modern;
   };
 
   it("declares no font origin by default, and adds the fontDomains given beside the CSP the build declared", async () => {

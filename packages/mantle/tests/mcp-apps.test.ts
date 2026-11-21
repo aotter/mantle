@@ -3,7 +3,16 @@ import { expect, test, spyOn } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import type { McpApps, McpAppResource } from "../src/kernel/mcp-apps.js";
-import { mcpInit } from "./mcp-wire.js";
+import {
+  ERAS,
+  LEGACY_REVISION,
+  legacyInit,
+  legacyInitialize,
+  MCP_REVISION,
+  mcpInit,
+  mcpMessage,
+  type Era,
+} from "./mcp-wire.js";
 
 const capabilities = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
 const meta = { "io.modelcontextprotocol/clientCapabilities": capabilities };
@@ -258,6 +267,110 @@ test("clients that declare no MCP Apps support list no App resources or App-only
   expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
 });
 
+test("the MCP Apps support matrix: era × declared, undeclared or absent support → listed, callable, rendered in an App", async () => {
+  const seen: Record<string, boolean> = {};
+  const tool = (name: string): Tool<null> => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async (_db, _caller, _input, _handlers, call) => {
+      seen[name] = call!.apps;
+      return { ok: true };
+    },
+  });
+  // `hidden` is App-only through its own meta, like a Procedure an App calls; `linked` renders in an App.
+  const hiddenApi = mcp<unknown, null>([tool("linked"), { ...tool("hidden"), meta: { ui: { visibility: ["app"] } } }], {
+    db: () => null,
+    caller: () => ({ kind: "anonymous" }),
+    apps: { public: { resources: [resource("ui://my-app/view", ["linked"])] } },
+  });
+  const declarations = { declared: capabilities, undeclared: {}, absent: undefined } as const;
+  const send = async (era: Era, declared: object | undefined, method: string, params: Record<string, unknown> = {}) => {
+    const message = { jsonrpc: "2.0", id: 1, method, params };
+    const request =
+      era === MCP_REVISION
+        ? new Request(
+            "https://app.test/mcp",
+            declared === undefined
+              ? // A 2026-07-28 envelope without client capabilities: not a request the SDK serves.
+                (() => {
+                  const init = mcpInit(mcpMessage(method, params));
+                  const body = JSON.parse(init.body as string);
+                  delete body.params._meta["io.modelcontextprotocol/clientCapabilities"];
+                  return { ...init, body: JSON.stringify(body) };
+                })()
+              : mcpInit(mcpMessage(method, params, { capabilities: declared })),
+          )
+        : new Request(
+            "https://app.test/mcp",
+            legacyInit(
+              declared === undefined
+                ? message
+                : {
+                    ...message,
+                    params: { ...params, _meta: { "io.modelcontextprotocol/clientCapabilities": declared } },
+                  },
+            ),
+          );
+    const response = (await hiddenApi(request, {}))!;
+    const text = await response.text();
+    return {
+      status: response.status,
+      body: text ? JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text) : undefined,
+    };
+  };
+  const matrix: Record<string, unknown> = {};
+  for (const era of ERAS)
+    for (const [name, declared] of Object.entries(declarations)) {
+      const listing = await send(era, declared, "tools/list");
+      if (listing.status !== 200) {
+        matrix[`${era} ${name}`] = { status: listing.status };
+        continue;
+      }
+      const listed = listing.body.result.tools.map((t: any) => t.name);
+      for (const key of Object.keys(seen)) delete seen[key];
+      const hidden = await send(era, declared, "tools/call", { name: "hidden", arguments: {} });
+      await send(era, declared, "tools/call", { name: "linked", arguments: {} });
+      const resources = (await send(era, declared, "resources/list")).body;
+      matrix[`${era} ${name}`] = {
+        listed: listed.includes("hidden"),
+        callable: hidden.body.result?.structuredContent?.ok === true,
+        rendersInApp: seen.linked,
+        resources: (resources.result?.resources ?? []).length > 0,
+      };
+    }
+  expect(matrix).toEqual({
+    [`${LEGACY_REVISION} declared`]: { listed: true, callable: true, rendersInApp: true, resources: true },
+    [`${LEGACY_REVISION} undeclared`]: { listed: false, callable: true, rendersInApp: false, resources: false },
+    // A stateless request after `initialize` carries no capabilities: support is unknown, so Apps stay offered but
+    // no result is said to render in an App.
+    [`${LEGACY_REVISION} absent`]: { listed: true, callable: true, rendersInApp: false, resources: true },
+    [`${MCP_REVISION} declared`]: { listed: true, callable: true, rendersInApp: true, resources: true },
+    [`${MCP_REVISION} undeclared`]: { listed: false, callable: true, rendersInApp: false, resources: false },
+    // Every 2026-07-28 request declares its capabilities; one without them is refused by the SDK.
+    [`${MCP_REVISION} absent`]: { status: 400 },
+  });
+  // A 2025-era initialize that declares MCP Apps support is answered with the resources capability; one that declares
+  // none without it.
+  for (const [declared, has] of [
+    [capabilities, true],
+    [{}, false],
+  ] as const) {
+    const response = (await hiddenApi(
+      new Request(
+        "https://app.test/mcp",
+        legacyInit({ ...legacyInitialize, params: { ...legacyInitialize.params, capabilities: declared } }),
+      ),
+      {},
+    ))!;
+    const text = await response.text();
+    const body = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+    expect([has, body.result.capabilities.resources !== undefined]).toEqual([has, has]);
+  }
+});
+
 test("a host forwarding an App's call of an App-only tool with no declared capabilities runs it, authorized as any call", async () => {
   const { mantleProps, pinned } = await import("./gateway-fixture.js");
   const write: Tool<null> = {
@@ -307,9 +420,41 @@ test("a host forwarding an App's call of an App-only tool with no declared capab
     status: 200,
     body: { result: { structuredContent: { rows: [{ id: "one" }] } } },
   });
+  // The 2025 form a host forwards (no envelope, no capabilities) reaches it too.
+  const legacy = await api(
+    new Request(
+      "https://app.test/mcp",
+      legacyInit({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "public_write", arguments: {} } }),
+    ),
+    {},
+    { props: { mantle: await pinned(mantleProps({}), targets, "admin:tool:public_write") } },
+  );
+  expect(await legacy!.text()).toContain('"structuredContent":{"written":true}');
   // Its own authorization still decides.
   allowed = false;
   expect(await forward("public_write")).toMatchObject({ status: 403, body: { error: { code: "AUTH_DENIED" } } });
+});
+
+test("a 2025-era request that advertises no capabilities (unknown) still sees App resources, _meta.ui and App-only tools", async () => {
+  const api = handle({
+    public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
+  });
+  const legacyCall = async (method: string, params: Record<string, unknown> = {}) => {
+    const response = await api(
+      new Request("https://app.test/mcp", legacyInit({ jsonrpc: "2.0", id: 1, method, params })),
+      {},
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+  };
+  expect((await legacyCall("resources/list")).result.resources.map((r: any) => r.uri)).toEqual(["ui://my-app/rows"]);
+  const listed = (await legacyCall("tools/list")).result.tools;
+  expect(listed.map((t: any) => t.name)).toEqual(["public_rows", "public_details"]);
+  expect(listed[0]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows" });
+  expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
+  expect((await legacyCall("tools/call", { name: "public_details", arguments: {} })).result.structuredContent).toEqual({
+    rows: [{ id: "one" }],
+  });
 });
 
 for (const [name, resources, fragment] of [

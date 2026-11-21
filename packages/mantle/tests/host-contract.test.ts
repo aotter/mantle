@@ -23,7 +23,7 @@ import { describeOf, fill, prober, variants } from "./match-target-fixture.js";
 import { matchTarget } from "../dist/domain/describe/index.js";
 import { rest as kernelRest, type Route } from "../src/kernel/rest.js";
 import { mcp as kernelMcp, type Tool } from "../src/kernel/mcp.js";
-import { mcpInit } from "./mcp-wire.js";
+import { ERAS, eraInit, LEGACY_REVISION, MCP_REVISION, mcpMessage, type Era } from "./mcp-wire.js";
 
 const GOLDEN = resolve(import.meta.dir, "host-contract.golden.json");
 const ORIGIN = "https://app.test";
@@ -333,18 +333,29 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     touch = "ok";
     await record("rest allow write", restCall(pinnedTo(WRITE), "/api/write", input));
 
+    // A host forwards either form: the 2025 form (plain JSON-RPC) or 2026-07-28 (the `_meta` envelope and the headers
+    // that state it). Each MCP case is recorded in both: the 2025 form under its own name, 2026-07-28 with a suffix.
+    let era: Era = LEGACY_REVISION;
     const mcpCall =
       (props: unknown, name: string, args: object = {}, path = "/mcp", method = "tools/call") =>
       async () => {
-        // A forwarded request in protocol revision 2026-07-28: the `_meta` envelope and the headers that state it.
         const message = {
           jsonrpc: "2.0",
           id: 1,
           method,
           params: method === "tools/call" ? { name, arguments: args } : {},
         };
-        return http(await tools(new Request(ORIGIN + path, mcpInit(message)), {}, { props: { mantle: props } }));
+        return http(await tools(new Request(ORIGIN + path, eraInit(era, message)), {}, { props: { mantle: props } }));
       };
+    /** Record a case in each era; `name` may name the two forms apart. */
+    const recordMcp = async (name: string | readonly [string, string], call: () => () => Promise<unknown>) => {
+      for (const each of ERAS) {
+        era = each;
+        const [legacy, modern] = typeof name === "string" ? [name, `${name} (2026-07-28)`] : name;
+        await record(each === MCP_REVISION ? modern : legacy, call());
+      }
+      era = LEGACY_REVISION;
+    };
     const VIEW = "view:public-records",
       PROCEDURE = "procedure:write",
       REF = "procedure:touch";
@@ -352,44 +363,40 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       ...input,
       version: (db.query("SELECT version FROM records WHERE id=?").get(row.id) as { version: number }).version,
     });
-    await record("mcp allow admin read", mcpCall(pinnedTo(VIEW), "public_records"));
-    await record(
-      "mcp allow member read",
+    await recordMcp("mcp allow admin read", () => mcpCall(pinnedTo(VIEW), "public_records"));
+    await recordMcp("mcp allow member read", () =>
       mcpCall(without(base({ layer: "member" }), "target", "targetHash"), "public_records"),
     );
-    await record("mcp TARGET_MISMATCH", mcpCall(pinnedTo(VIEW, { target: PROCEDURE }), "public_records"));
-    await record("mcp TARGET_HASH_MISMATCH", mcpCall(pinnedTo(VIEW, { targetHash: "old" }), "public_records"));
-    await record(
-      "mcp STALE_CALLER snapshot write",
+    await recordMcp("mcp TARGET_MISMATCH", () => mcpCall(pinnedTo(VIEW, { target: PROCEDURE }), "public_records"));
+    await recordMcp("mcp TARGET_HASH_MISMATCH", () => mcpCall(pinnedTo(VIEW, { targetHash: "old" }), "public_records"));
+    await recordMcp("mcp STALE_CALLER snapshot write", () =>
       mcpCall(pinnedTo(PROCEDURE, { authenticatedAs: "snapshot" }), "write", input),
     );
-    await record("mcp dry run write", mcpCall(pinnedTo(PROCEDURE, { dryRun: true }), "write", input));
-    await record("mcp DRY_RUN_UNSUPPORTED ref handler", mcpCall(pinnedTo(REF, { dryRun: true }), "touch"));
-    await record(
-      "mcp deny member write",
+    await recordMcp("mcp dry run write", () => mcpCall(pinnedTo(PROCEDURE, { dryRun: true }), "write", input));
+    await recordMcp("mcp DRY_RUN_UNSUPPORTED ref handler", () => mcpCall(pinnedTo(REF, { dryRun: true }), "touch"));
+    await recordMcp("mcp deny member write", () =>
       mcpCall(without(base({ layer: "member" }), "target", "targetHash"), "write", input),
     );
-    await record(
-      "mcp deny member on admin endpoint",
+    await recordMcp("mcp deny member on admin endpoint", () =>
       mcpCall(without(base({ layer: "member" }), "target", "targetHash"), "admin_records", {}, "/mcp/admin"),
     );
-    await record("mcp error invalid input", mcpCall(pinnedTo(PROCEDURE), "write", { ...input, title: 1 }));
-    await record("mcp error unknown tool", mcpCall(pinnedTo(PROCEDURE), "missing"));
-    await record("mcp deny tools/list", mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "tools/list"));
-    await record("mcp HOST_CONTRACT unknown key", mcpCall({ ...pinnedTo(VIEW), extra: 1 }, "public_records"));
-    await record(
-      "mcp HOST_CONTRACT missing user field",
+    await recordMcp("mcp error invalid input", () => mcpCall(pinnedTo(PROCEDURE), "write", { ...input, title: 1 }));
+    await recordMcp("mcp error unknown tool", () => mcpCall(pinnedTo(PROCEDURE), "missing"));
+    await recordMcp("mcp deny tools/list", () => mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "tools/list"));
+    await recordMcp("mcp HOST_CONTRACT unknown key", () => mcpCall({ ...pinnedTo(VIEW), extra: 1 }, "public_records"));
+    await recordMcp("mcp HOST_CONTRACT missing user field", () =>
       mcpCall(pinnedTo(VIEW, { user: without(user, "region") as HostProps["user"] }), "public_records"),
     );
-    await record("mcp origin session write", mcpCall(pinnedTo(PROCEDURE, { credential: "session" }), "write", input));
-    await record(
-      "mcp origin session write, member refused by requires",
+    await recordMcp("mcp origin session write", () =>
+      mcpCall(pinnedTo(PROCEDURE, { credential: "session" }), "write", input),
+    );
+    await recordMcp("mcp origin session write, member refused by requires", () =>
       mcpCall(without(base({ layer: "member", credential: "session" }), "target", "targetHash"), "write", input),
     );
     touch = "unauthenticated";
-    await record("mcp 401 answered as AUTH_DENIED", mcpCall(pinnedTo(REF), "touch"));
+    await recordMcp("mcp 401 answered as AUTH_DENIED", () => mcpCall(pinnedTo(REF), "touch"));
     touch = "ok";
-    await record("mcp allow write", mcpCall(pinnedTo(PROCEDURE), "write", current()));
+    await recordMcp("mcp allow write", () => mcpCall(pinnedTo(PROCEDURE), "write", current()));
 
     const page =
       (props: unknown, path = "/records.md") =>
@@ -426,32 +433,37 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     // What the host sends beyond the cases above: no props at all, a member whose target matched, snapshot reads.
     const member = (id: string, overrides: Partial<HostProps> = {}) => pinnedTo(id, { layer: "member", ...overrides });
     const bare = (path: string, init?: RequestInit) => new Request(ORIGIN + path, init);
-    const rpcInit = (message: unknown) => mcpInit(message);
+    const rpcInit = (message: unknown) => eraInit(era, message);
     const callMessage = (name: string, args: object = {}) => ({
       jsonrpc: "2.0",
       id: 1,
       method: "tools/call",
       params: { name, arguments: args },
     });
+    const callEnvelope = (name: string) => mcpMessage("tools/call", { name, arguments: {} });
     await record("rest no ctx", async () => http(await api(bare("/api/views/public-records"), {})));
     await record("rest empty props", async () => http(await api(bare("/api/views/public-records"), {}, { props: {} })));
     await record("rest no props, write", async () =>
       http(await api(bare("/api/write", { method: "POST", body: JSON.stringify(input) }), {}, { props: {} })),
     );
-    await record("mcp no props", async () =>
-      http(await tools(bare("/mcp", rpcInit(callMessage("public_records"))), {}, { props: {} })),
+    await recordMcp(
+      "mcp no props",
+      () => async () => http(await tools(bare("/mcp", rpcInit(callMessage("public_records"))), {}, { props: {} })),
     );
-    await record("mcp no props, admin endpoint", async () =>
-      http(await tools(bare("/mcp/admin", rpcInit(callMessage("admin_records"))), {}, { props: {} })),
+    await recordMcp(
+      "mcp no props, admin endpoint",
+      () => async () => http(await tools(bare("/mcp/admin", rpcInit(callMessage("admin_records"))), {}, { props: {} })),
     );
     await record("web no props", async () => http(await site.fetch(bare("/records.md"), {}, { props: {} })));
     await record("rest allow member with matched target", restCall(member(READ), "/api/views/public-records"));
-    await record("mcp allow member with matched target", mcpCall(member(VIEW), "public_records"));
+    await recordMcp("mcp allow member with matched target", () => mcpCall(member(VIEW), "public_records"));
     await record(
       "rest allow snapshot read",
       restCall(pinnedTo(READ, { authenticatedAs: "snapshot" }), "/api/views/public-records"),
     );
-    await record("mcp allow snapshot read", mcpCall(pinnedTo(VIEW, { authenticatedAs: "snapshot" }), "public_records"));
+    await recordMcp("mcp allow snapshot read", () =>
+      mcpCall(pinnedTo(VIEW, { authenticatedAs: "snapshot" }), "public_records"),
+    );
     const RENAME = "rest:POST /api/records/:id/rename";
     await record(
       "rest STALE_CALLER snapshot write, path parameter",
@@ -463,49 +475,54 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       "rest STALE_CALLER snapshot ref handler",
       restCall(pinnedTo(TOUCH, { authenticatedAs: "snapshot" }), "/api/touch", {}),
     );
-    await record(
-      "mcp STALE_CALLER snapshot ref handler",
+    await recordMcp("mcp STALE_CALLER snapshot ref handler", () =>
       mcpCall(pinnedTo(REF, { authenticatedAs: "snapshot" }), "touch"),
     );
 
-    // MCP as a host uses it: one unbatched tools/call per request, with no server/discover before it.
-    await record(
-      "mcp allow admin endpoint without server/discover",
-      mcpCall(pinnedTo("view:admin-records"), "admin_records", {}, "/mcp/admin"),
+    // MCP as a host uses it: one unbatched tools/call per request, with no connect step before it.
+    await recordMcp(
+      ["mcp allow admin endpoint without initialize", "mcp allow admin endpoint without server/discover"],
+      () => mcpCall(pinnedTo("view:admin-records"), "admin_records", {}, "/mcp/admin"),
     );
-    await record("mcp batch refused", async () =>
-      http(
-        await tools(bare("/mcp", rpcInit([callMessage("public_records")])), {}, { props: { mantle: pinnedTo(VIEW) } }),
-      ),
-    );
-    await record("mcp deny resources/list", mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "resources/list"));
-    await record("mcp server/discover", mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "server/discover"));
-    // A 2025-era host request (an `initialize`, or a call without the `_meta` envelope) is refused: 2026-07-28 only.
-    for (const [name, message] of [
-      [
-        "mcp 2025-era initialize refused",
-        {
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "host", version: "1" } },
-        },
-      ],
-      ["mcp 2025-era tools/call refused", callMessage("public_records")],
-    ] as const)
-      await record(name, async () =>
+    // A batch (2025-03-26 and earlier; 2026-07-28 has none) is refused for a host in either form.
+    await recordMcp(
+      "mcp batch refused",
+      () => async () =>
         http(
           await tools(
-            bare("/mcp", {
-              method: "POST",
-              body: JSON.stringify(message),
-              headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-            }),
+            bare(
+              "/mcp",
+              era === MCP_REVISION
+                ? { ...rpcInit(mcpMessage("tools/list")), body: JSON.stringify([callEnvelope("public_records")]) }
+                : rpcInit([callMessage("public_records")]),
+            ),
             {},
             { props: { mantle: pinnedTo(VIEW) } },
           ),
         ),
-      );
+    );
+    await recordMcp("mcp deny resources/list", () => mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "resources/list"));
+    // The connect step, pinned to a mounted tool: `initialize` in the 2025 form, `server/discover` on 2026-07-28.
+    await record("mcp initialize", async () =>
+      http(
+        await tools(
+          bare(
+            "/mcp",
+            rpcInit({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "initialize",
+              params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "host", version: "1" } },
+            }),
+          ),
+          {},
+          { props: { mantle: pinnedTo(VIEW) } },
+        ),
+      ),
+    );
+    era = MCP_REVISION;
+    await record("mcp server/discover", mcpCall(pinnedTo(VIEW), "", {}, "/mcp", "server/discover"));
+    era = LEGACY_REVISION;
 
     // User fields: arity, enum, `{ all: true }` on scope and restrict terms, and a missing or empty value.
     const RESTRICTED = "rest:GET /api/views/restricted-records";
@@ -523,7 +540,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     };
     for (const [name, values] of Object.entries(userCases)) {
       await record(`rest user field: ${name}`, restCall(withUser(READ, values), "/api/views/public-records"));
-      await record(`mcp user field: ${name}`, mcpCall(withUser(VIEW, values), "public_records"));
+      await recordMcp(`mcp user field: ${name}`, () => mcpCall(withUser(VIEW, values), "public_records"));
       await record(`web user field: ${name}`, page(withUser(VIEW, values)));
     }
     await record(
@@ -534,8 +551,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       "rest restrict term: all refused",
       restCall(withUser(RESTRICTED, { region: { all: true }, stores: ["A"] }), "/api/views/restricted-records"),
     );
-    await record(
-      "mcp restrict term: all refused",
+    await recordMcp("mcp restrict term: all refused", () =>
       mcpCall(withUser("view:restricted-records", { region: { all: true }, stores: ["A"] }), "restricted_records"),
     );
 
@@ -584,18 +600,21 @@ test("host contract v1: callers, refusals, surface answers and access events", a
           ),
         ),
       );
-      await record(`mcp snapshot ${name}`, async () =>
-        http(
-          await handMcp(
-            bare("/mcp", rpcInit(callMessage(name))),
-            {},
-            { props: { mantle: snapshot(`procedure:${name}`) } },
+      await recordMcp(
+        `mcp snapshot ${name}`,
+        () => async () =>
+          http(
+            await handMcp(
+              bare("/mcp", rpcInit(callMessage(name))),
+              {},
+              { props: { mantle: snapshot(`procedure:${name}`) } },
+            ),
           ),
-        ),
       );
     }
 
-    // A dry run answers the decision whatever the root of the tool's listed outputSchema: an array here.
+    // A dry run answers the decision whatever the root of the tool's listed outputSchema: an array here (listed on
+    // 2026-07-28 only; a 2025 revision lists no non-object schema).
     const LIST = "procedure:peek_list";
     const listMcp = kernelMcp(
       [
@@ -619,14 +638,16 @@ test("host contract v1: callers, refusals, surface answers and access events", a
         db: getDb,
       },
     );
-    await record("mcp dry run array output", async () =>
-      http(
-        await listMcp(
-          bare("/mcp", rpcInit(callMessage("peek_list"))),
-          {},
-          { props: { mantle: base({ target: LIST, targetHash: `hash of ${LIST}`, dryRun: true }) } },
+    await recordMcp(
+      ["mcp dry run array output (2025)", "mcp dry run array output"],
+      () => async () =>
+        http(
+          await listMcp(
+            bare("/mcp", rpcInit(callMessage("peek_list"))),
+            {},
+            { props: { mantle: base({ target: LIST, targetHash: `hash of ${LIST}`, dryRun: true }) } },
+          ),
         ),
-      ),
     );
 
     // Store writes under a snapshot caller.
@@ -684,8 +705,10 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     // The behaviours the host depends on, stated one by one (the golden file pins the full answers).
     const codeOf = (name: string) =>
       answers[name]!.body?.error?.code ?? answers[name]!.body?.result?.diagnostics?.[0]?.code;
+    /** An MCP case's names in both forms. */
+    const both = (...names: string[]) => names.flatMap(name => [name, `${name} (2026-07-28)`]);
     // 1. A stale target hash: 412 and `error.code`, on REST and MCP.
-    for (const name of ["rest TARGET_HASH_MISMATCH", "mcp TARGET_HASH_MISMATCH"]) {
+    for (const name of ["rest TARGET_HASH_MISMATCH", ...both("mcp TARGET_HASH_MISMATCH")]) {
       expect(answers[name]!.status).toBe(412);
       expect(answers[name]!.body.error.code).toBe("TARGET_HASH_MISMATCH");
     }
@@ -698,7 +721,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       status: 403,
       body: { error: { code: "AUTH_DENIED" } },
     });
-    expect(codeOf("mcp 401 answered as AUTH_DENIED")).toBe("AUTH_DENIED");
+    for (const name of both("mcp 401 answered as AUTH_DENIED")) expect(codeOf(name)).toBe("AUTH_DENIED");
     // 3. Subjects of the two layers never collide.
     expect(hostCaller(base({ layer: "admin" }), { tenant: "example", fields }).subject).toBe("host:person");
     expect(hostCaller(base({ layer: "member" }), { tenant: "example", fields }).subject).toBe("person");
@@ -711,24 +734,23 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       "rest STALE_CALLER snapshot write",
       "rest STALE_CALLER snapshot write, path parameter",
       "rest STALE_CALLER snapshot ref handler",
-      "mcp STALE_CALLER snapshot write",
-      "mcp STALE_CALLER snapshot ref handler",
+      ...both("mcp STALE_CALLER snapshot write", "mcp STALE_CALLER snapshot ref handler"),
       "rest snapshot poke",
-      "mcp snapshot poke",
+      ...both("mcp snapshot poke"),
     ];
     for (const name of staleWrites)
       expect([name, answers[name]!.status, codeOf(name)]).toEqual([name, 403, "STALE_CALLER"]);
     for (const name of [
       "rest allow snapshot read",
-      "mcp allow snapshot read",
+      ...both("mcp allow snapshot read"),
       "web allow snapshot llms.txt",
       "rest snapshot peek",
-      "mcp snapshot peek",
+      ...both("mcp snapshot peek"),
     ])
       expect([name, answers[name]!.status, codeOf(name)]).toEqual([name, 200, undefined]);
-    expect(ran).toBe(2);
-    // 4a. A dry run answers its decision as structured content, also for a tool whose listed outputSchema is an array.
-    for (const name of ["mcp dry run write", "mcp dry run array output"])
+    expect(ran).toBe(3);
+    // 4a. A dry run answers its decision as structured content, also for a tool whose output is an array.
+    for (const name of [...both("mcp dry run write"), "mcp dry run array output", "mcp dry run array output (2025)"])
       expect([name, answers[name]]).toMatchObject([
         name,
         {
@@ -736,27 +758,24 @@ test("host contract v1: callers, refusals, surface answers and access events", a
           body: { result: { isError: false, structuredContent: { dryRun: true, event: { outcome: "allow" } } } },
         },
       ]);
-    // 5. One unbatched tools/call per request in protocol revision 2026-07-28, without server/discover; a batch or any
-    // other method is refused, and so is a 2025-era request (JSON-RPC -32022, naming the supported revision).
+    // 5. One unbatched tools/call per request in either form, without a connect step; a batch or any other method is
+    // refused. The connect step is `initialize` (2025) or `server/discover` (2026-07-28), pinned to a mounted tool.
     for (const name of [
-      "mcp allow admin read",
+      ...both("mcp allow admin read", "mcp allow member with matched target"),
+      "mcp allow admin endpoint without initialize",
       "mcp allow admin endpoint without server/discover",
-      "mcp allow member with matched target",
     ])
       expect(answers[name]).toMatchObject({ status: 200, body: { result: { isError: false } } });
-    expect(answers["mcp batch refused"]!.status).toBeGreaterThanOrEqual(400);
-    for (const name of ["mcp deny tools/list", "mcp deny resources/list"])
+    for (const name of both("mcp batch refused")) expect(answers[name]!.status).toBeGreaterThanOrEqual(400);
+    for (const name of both("mcp deny tools/list", "mcp deny resources/list"))
       expect([name, answers[name]!.status]).toEqual([name, 403]);
-    expect(answers["mcp server/discover"]!.status).toBe(200);
-    for (const name of ["mcp 2025-era initialize refused", "mcp 2025-era tools/call refused"])
-      expect([name, answers[name]]).toMatchObject([
-        name,
-        { status: 400, body: { error: { code: -32022, data: { supported: ["2026-07-28"] } } } },
-      ]);
+    for (const name of ["mcp initialize", "mcp server/discover"])
+      expect([name, answers[name]!.status]).toEqual([name, 200]);
     // 6. User fields: a missing or empty value is refused before any SQL; `{ all: true }` drops a scope term and is refused on a restrict term.
-    for (const surface of ["rest", "mcp", "web"])
+    for (const surface of ["rest", "mcp", "mcp (2026-07-28)", "web"])
       for (const field of ["region missing", "region empty", "stores missing"]) {
-        const name = `${surface} user field: ${field}`;
+        const name =
+          surface === "mcp (2026-07-28)" ? `mcp user field: ${field} (2026-07-28)` : `${surface} user field: ${field}`;
         expect([name, codeOf(name), acquisitions[name]]).toEqual([name, "HOST_CONTRACT", 0]);
       }
     expect(answers["rest user field: region all"]!.body.rows.map((record: { title: string }) => record.title)).toEqual([
@@ -764,7 +783,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       "changed",
     ]);
     expect(answers["rest user field: region and stores all"]!.body.rows).toHaveLength(3);
-    for (const name of ["rest restrict term: all refused", "mcp restrict term: all refused"])
+    for (const name of ["rest restrict term: all refused", ...both("mcp restrict term: all refused")])
       expect([name, codeOf(name), acquisitions[name]]).toEqual([name, "AUTH_DENIED", 0]);
     expect(answers["rest restrict term: listed value"]!.status).toBe(200);
     // Fail closed: the only writes that reached the table are the two allowed ones.

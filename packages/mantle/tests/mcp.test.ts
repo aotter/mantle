@@ -15,7 +15,17 @@ import type {
 } from "@modelcontextprotocol/server";
 import type { McpContentBlock, ToolCall } from "../src/kernel/mcp.js";
 import { mcpClient } from "./mcp-client.js";
-import { legacyInitialize, mcpInit } from "./mcp-wire.js";
+import {
+  connectMethod,
+  connectParams,
+  ERAS,
+  eraRequest,
+  LEGACY_REVISION,
+  legacyInit,
+  legacyInitialize,
+  mcpInit,
+  mcpMessage,
+} from "./mcp-wire.js";
 const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
@@ -201,8 +211,18 @@ spec: {source: {kind: mcp, surface: public}, target: {procedure: scoped-add}}
         expect(response.status).toBe(403);
         expect((await json(response)).error.code).toBe("AUTH_DENIED");
       }
-      // 2026-07-28 has no batches: one is refused before any call runs.
-      expect((await send(handle, [add("scoped_add"), add("add_item")])).status).toBe(400);
+      // A 2025-era batch: every call of it is refused before any runs, the allowed first one included.
+      const batch = await handle(
+        new Request("https://app.test/mcp", legacyInit([add("scoped_add"), add("add_item")])),
+        {},
+      );
+      expect([batch.status, (await json(batch)).error.code]).toEqual([403, "AUTH_DENIED"]);
+      // 2026-07-28 has no batches: the SDK refuses one with a 2026-07-28 element.
+      const modern = mcpInit(mcpMessage("tools/list"));
+      const enveloped = [mcpMessage("tools/call", { name: "scoped_add", arguments: { title: "x" } })];
+      expect(
+        (await handle(new Request("https://app.test/mcp", { ...modern, body: JSON.stringify(enveloped) }), {})).status,
+      ).toBe(400);
       expect((await json(await send(handle, add("scoped_add")))).result.isError).toBeUndefined();
     }
     expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 3 });
@@ -934,7 +954,7 @@ test("MCP parity advertises localized metadata and native SQL output; callbacks 
   }
 });
 
-test("MCP challenges a closed call before any work, refuses a batch, and reports expired caller challenges", async () => {
+test("MCP preflights all batch calls before any work and reports expired caller challenges", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { ContractError } = await import("../src/kernel/contracts.js");
   let runs = 0;
@@ -975,9 +995,22 @@ test("MCP challenges a closed call before any work, refuses a batch, and reports
   const response = await handle(request(message("closed")), {});
   expect(response!.status).toBe(401);
   expect(response!.headers.get("www-authenticate")).toContain('scope="mcp write"');
-  // 2026-07-28 has no batches: the SDK refuses one, so no call of it runs.
-  const batch = await handle(request([message("open", 0), message("closed", 1)]), {});
-  expect(batch!.status).toBe(400);
+  // A 2025-era batch: the closed second call is challenged before the open first one runs.
+  const batch = await handle(
+    new Request("https://app.test/mcp", legacyInit([message("open", 0), message("closed", 1)])),
+    {},
+  );
+  expect(batch!.status).toBe(401);
+  expect(batch!.headers.get("www-authenticate")).toContain('scope="mcp write"');
+  // 2026-07-28 has no batches: the SDK refuses one with a 2026-07-28 element, so no call of it runs.
+  const modern = await handle(
+    new Request("https://app.test/mcp", {
+      ...mcpInit(mcpMessage("tools/list")),
+      body: JSON.stringify([mcpMessage("tools/call", { name: "open", arguments: {} })]),
+    }),
+    {},
+  );
+  expect(modern!.status).toBe(400);
   expect(runs).toBe(0);
   const expired = await mcp(tools, {
     db: () => ({}),
@@ -988,6 +1021,59 @@ test("MCP challenges a closed call before any work, refuses a batch, and reports
   })(request({ jsonrpc: "2.0", id: 1, method: "tools/list" }), {});
   expect(expired!.status).toBe(401);
   expect(expired!.headers.get("www-authenticate")).toContain('resource_metadata="https://proxy.test/metadata"');
+});
+
+test("a 2025-era batch whose second call the caller may not make runs neither call", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { user } = await import("./apps/fixtures.js");
+  let runs = 0;
+  const tool = (name: string, extra: object = {}) => ({
+    name,
+    surface: "public",
+    description: name,
+    target: { kind: "procedure", name },
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => {
+      runs++;
+      return { ran: name };
+    },
+    ...extra,
+  });
+  const tools = [tool("allowed"), tool("forbidden"), tool("scoped", { scopes: ["extra"] })];
+  const authorized: string[] = [];
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ ...user("person"), credential: "oauth", scopes: ["mcp"] }),
+    authorize: target => {
+      authorized.push(target.name);
+      return target.name !== "forbidden";
+    },
+  });
+  const send = (names: string[]) =>
+    handle(
+      new Request(
+        "https://app.test/mcp",
+        legacyInit(
+          names.map((name, id) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: {} } })),
+        ),
+      ),
+      {},
+    );
+  // Application `authorize` refuses the second call: neither runs, and `authorize` decided both before any ran.
+  const denied = (await send(["allowed", "forbidden"]))!;
+  expect(denied.status).toBe(403);
+  expect(authorized).toEqual(["allowed", "forbidden"]);
+  // The credential lacks the second call's scope: refused before `authorize` or any call.
+  authorized.length = 0;
+  const scoped = (await send(["allowed", "scoped"]))!;
+  expect(scoped.status).toBe(403);
+  expect(scoped.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  expect(authorized).toEqual([]);
+  expect(runs).toBe(0);
+  // Both allowed: both run.
+  expect((await send(["allowed", "allowed"]))!.status).toBe(200);
+  expect(runs).toBe(2);
 });
 
 test("MCP tools advertise input rules as description sentences and enforce them", async () => {
@@ -1079,7 +1165,7 @@ spec: {source: {kind: http, method: POST, path: /api/log-items}, target: {proced
   }
 });
 
-test("An anonymous closed surface challenges from server/discover; an open tool or a signed-in caller does not", async () => {
+test("An anonymous closed surface challenges from the connect step of either era; an open tool or a signed-in caller does not", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const { user } = await import("./apps/fixtures.js");
   const tool = (name: string, closed?: boolean) => ({
@@ -1104,36 +1190,30 @@ test("An anonymous closed surface challenges from server/discover; an open tool 
     );
   const allClosed = (caller: any) =>
     mcp([tool("a", true), tool("b", true)], { db: () => ({}), caller: () => caller, authorize: () => true });
-  const challenged = await post(allClosed({ kind: "anonymous" }), "server/discover");
-  expect(challenged!.status).toBe(401);
-  // The RFC 9728 challenge: the surface's scope floor and its protected-resource metadata.
-  expect(challenged!.headers.get("www-authenticate")).toBe(
-    'Bearer scope="mcp", resource_metadata="https://app.test/.well-known/oauth-protected-resource/mcp"',
-  );
-  expect((await post(allClosed(user("person")), "server/discover"))!.status).toBe(200);
-  const get = (handle: any) => handle(new Request("https://app.test/mcp"), {});
-  const legacy = (handle: any) =>
-    handle(
-      new Request("https://app.test/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-        body: JSON.stringify(legacyInitialize),
-      }),
-      {},
+  // The connect step of either era (`initialize` on a 2025 revision, `server/discover` on 2026-07-28): anonymous on a
+  // closed surface, the RFC 9728 challenge with the surface's scope floor and its protected-resource metadata.
+  for (const era of ERAS) {
+    const connect = (handle: any) =>
+      handle(eraRequest(era, "https://app.test/mcp", connectMethod(era), connectParams(era)), {});
+    const challenged = await connect(allClosed({ kind: "anonymous" }));
+    expect([era, challenged!.status]).toEqual([era, 401]);
+    expect(challenged!.headers.get("www-authenticate")).toBe(
+      'Bearer scope="mcp", resource_metadata="https://app.test/.well-known/oauth-protected-resource/mcp"',
     );
-  // The caller rules answer before the SDK: an anonymous GET or 2025-era `initialize` on a closed surface is challenged;
-  // a signed-in one gets the SDK's 405 or -32022.
+    expect([era, (await connect(allClosed(user("person"))))!.status]).toEqual([era, 200]);
+  }
+  const get = (handle: any) => handle(new Request("https://app.test/mcp"), {});
+  // The caller rules answer before the SDK: an anonymous GET on a closed surface is challenged; a signed-in one gets
+  // the SDK's 405.
   expect((await get(allClosed({ kind: "anonymous" })))!.status).toBe(401);
   expect((await get(allClosed(user("person"))))!.status).toBe(405);
-  expect((await legacy(allClosed({ kind: "anonymous" })))!.status).toBe(401);
-  const refused = (await legacy(allClosed(user("person"))))!;
-  expect([refused.status, ((await refused.json()) as any).error.code]).toEqual([400, -32022]);
   const mixed = mcp([tool("open"), tool("closed", true)], {
     db: () => ({}),
     caller: () => ({ kind: "anonymous" }),
     authorize: () => true,
   });
   expect((await post(mixed, "server/discover"))!.status).toBe(200);
+  expect((await mixed(new Request("https://app.test/mcp", legacyInit(legacyInitialize)), {}))!.status).toBe(200);
   expect((await get(mixed))!.status).toBe(405);
   const listed = await post(mixed, "tools/list");
   expect(listed!.status).toBe(200);
@@ -1502,7 +1582,7 @@ test("tools/list pages with toolsPageSize and an opaque cursor bound to the cata
     );
 });
 
-test("a ref handler's withResult reaches the official client; Store and REST callers get the data", async () => {
+test("a ref handler's withResult reaches an official client on both protocol eras; Store and REST callers get the data", async () => {
   const text = source.replace(
     "  output: {type: object}\n  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",
     "  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}\n  handler: {ref: app.addItem}",
@@ -1546,21 +1626,24 @@ spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure:
     );
     expect(await posted.json()).toEqual({ title: "Rest" });
     const handle = mcp({ db: () => db, caller: () => caller, handlers });
-    const client = await mcpClient(handle);
-    // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
-    const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
-    expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
-    const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
-    expect(result.isError).toBeUndefined();
-    expect(result.structuredContent).toEqual({ title: "Mcp" });
-    expect(result.content as unknown[]).toEqual([
-      { type: "text", text: '{"title":"Mcp"}' },
-      { type: "text", text: expect.stringMatching(/^tool version /) },
-      block,
-    ]);
-    expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
-    await client.close();
+    for (const era of ERAS) {
+      const client = await mcpClient(handle, undefined, { era });
+      // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
+      const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
+      expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
+      const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toEqual({ title: "Mcp" });
+      expect(result.content as unknown[]).toEqual([
+        { type: "text", text: '{"title":"Mcp"}' },
+        { type: "text", text: expect.stringMatching(/^tool version /) },
+        block,
+      ]);
+      expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
+      await client.close();
+    }
     expect(db.query("SELECT title FROM items ORDER BY title").all()).toEqual([
+      { title: "Mcp" },
       { title: "Mcp" },
       { title: "Rest" },
       { title: "Store" },
@@ -1630,45 +1713,57 @@ test("ToolCall.signal aborts only while the call runs; a cancel is observed, not
   });
   const logged = spyOn(console, "error");
   try {
-    const client = await mcpClient(handle);
-    // Progress: notifications on the call's SSE stream, before its result.
-    const progress: unknown[] = [];
-    const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
-    expect(done.structuredContent).toEqual({ steps: 2 });
-    expect(progress).toEqual([
-      { progress: 1, total: 2, message: "step 1" },
-      { progress: 2, total: 2, message: "step 2" },
-    ]);
-    // Without a progressToken the tool is offered no progress.
-    expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
-      progress: "undefined",
-      signal: true,
-    });
-    // A call that finished normally, with and without progress.
-    expect((await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError).toBeUndefined();
-    expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
-    // A client cancels by closing the request, which aborts the signal.
-    const cancel = new AbortController();
-    const running = new Promise<void>(resolve => (started = resolve)),
-      abort = new Promise<void>(resolve => (abortSeen = resolve)),
-      completion = new Promise<unknown>(resolve => (completed = resolve));
-    const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
-    await within(running, "the tool to start");
-    cancel.abort("stop");
-    expect(await call).toContain("stop");
-    await within(abort, "the tool's signal to abort");
-    // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure, and
-    // observed in the abort event itself, before the tool's code resumes.
-    expect(await within(completion, "the completion observation")).toMatchObject({
-      outcome: "failed",
-      code: "REQUEST_CANCELLED",
-    });
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(observedBeforeResume).toBe(true);
-    await client.close();
-    // Negative: neither finished call's signal aborted with the teardown.
-    expect(aborted).toEqual(["wait"]);
-    aborted.length = 0;
+    for (const era of ERAS) {
+      cancelled = observedBeforeResume = undefined;
+      const client = await mcpClient(handle, undefined, { era });
+      // Progress: notifications on the call's SSE stream, before its result.
+      const progress: unknown[] = [];
+      const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
+      expect(done.structuredContent).toEqual({ steps: 2 });
+      expect(progress).toEqual([
+        { progress: 1, total: 2, message: "step 1" },
+        { progress: 2, total: 2, message: "step 2" },
+      ]);
+      // Without a progressToken the tool is offered no progress.
+      expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
+        progress: "undefined",
+        signal: true,
+      });
+      // A call that finished normally, with and without progress.
+      expect(
+        (await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError,
+      ).toBeUndefined();
+      expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
+      // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
+      // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
+      // signal aborts only when that client closes its connection.
+      const cancel = new AbortController();
+      const running = new Promise<void>(resolve => (started = resolve)),
+        abort = new Promise<void>(resolve => (abortSeen = resolve)),
+        completion = new Promise<unknown>(resolve => (completed = resolve));
+      const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+      await within(running, "the tool to start");
+      cancel.abort("stop");
+      expect(await call).toContain("stop");
+      if (era === LEGACY_REVISION) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(aborted).toEqual([]);
+        await client.close();
+      }
+      await within(abort, "the tool's signal to abort");
+      // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure, and
+      // observed in the abort event itself, before the tool's code resumes.
+      expect(await within(completion, "the completion observation")).toMatchObject({
+        outcome: "failed",
+        code: "REQUEST_CANCELLED",
+      });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect([era, observedBeforeResume] as unknown[]).toEqual([era, true]);
+      await client.close();
+      // Negative: neither finished call's signal aborted with the teardown.
+      expect([era, aborted]).toEqual([era, ["wait"]]);
+      aborted.length = 0;
+    }
     expect(logged.mock.calls.filter(args => String(args[0]).includes("unhandled failure"))).toEqual([]);
   } finally {
     logged.mockRestore();
@@ -1774,5 +1869,56 @@ test("gateway: a call cancelled before it settles is recorded as cancelled once,
     ["finish", "failed", "REQUEST_CANCELLED"],
     ["stop"],
     ["stop", "failed", "REQUEST_CANCELLED"],
+  ]);
+  // The same in the 2025 form a host may forward: closing the request cancels the call, recorded once.
+  events.length = completions.length = ran.length = 0;
+  recordedBeforeResume = undefined;
+  for (const name of ["finish", "stop"]) {
+    const cancel = new AbortController(),
+      running = new Promise<void>(resolve => (started = resolve));
+    const response = handle(
+      new Request(
+        "https://app.test/mcp/admin",
+        legacyInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          { signal: cancel.signal },
+        ),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
+    await running;
+    cancel.abort("stop");
+    await response.then(answer => answer?.text()).catch(() => {});
+    await settle();
+  }
+  expect(recordedBeforeResume as boolean | undefined).toBe(true);
+  // A request already aborted runs no step of its call here either; the stateless transport still starts the
+  // invocation, so it is recorded, cancelled.
+  await handle(
+    new Request(
+      "https://app.test/mcp/admin",
+      legacyInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "never", arguments: {} } },
+        { signal: gone.signal },
+      ),
+    ),
+    {},
+    { props: { mantle: await pinned(mantleProps({}), targets, "admin:tool:never") } },
+  );
+  await settle();
+  expect(ran).toEqual(["finish"]);
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    cancelled("finish"),
+    cancelled("stop"),
+    cancelled("never"),
+  ]);
+  expect(completions).toEqual([
+    ["finish"],
+    ["finish", "failed", "REQUEST_CANCELLED"],
+    ["stop"],
+    ["stop", "failed", "REQUEST_CANCELLED"],
+    ["never"],
+    ["never", "failed", "REQUEST_CANCELLED"],
   ]);
 });

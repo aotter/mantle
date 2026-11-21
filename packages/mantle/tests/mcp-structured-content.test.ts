@@ -1,7 +1,8 @@
 /**
- * Non-object `structuredContent` (SEP-2106): a tool lists its outputSchema whatever its root type and a success sends its
- * data, any JSON value, as `structuredContent` beside the JSON text block. The official client validates it against the
- * listed schema.
+ * Non-object `structuredContent` (SEP-2106), per era. On 2026-07-28 a tool lists its outputSchema whatever its root type
+ * and a success sends its data, any JSON value, as `structuredContent` beside the JSON text block; the official client
+ * validates it against the listed schema. On a 2025 revision structured content is an object: a tool whose data is not
+ * one lists no outputSchema and sends its text block alone.
  */
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -11,6 +12,7 @@ import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { sdkFixtureCaller, fixtureCaller } from "./apps/fixtures.js";
 import { versionOf } from "../src/usecase/tool-version.js";
 import { mcpClient } from "./mcp-client.js";
+import { ERAS, LEGACY_REVISION, legacyInit } from "./mcp-wire.js";
 
 const tool = (name: string, value: () => unknown, outputSchema?: object) => ({
   name,
@@ -60,6 +62,47 @@ test("every tool lists its outputSchema whatever its root, and sends its data as
     expect([name, result.structuredContent]).toEqual([name, value]);
   }
   await client.close();
+});
+
+test("on a 2025 revision a non-object tool lists no outputSchema and sends text only, never the SDK's { result } wrap; versions match", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const objectish = tool("objectish", () => ({ id: "o" }), { anyOf: [{ type: "object" }, { properties: {} }] });
+  const tools = [...conforming, objectish];
+  const handle = mcp(tools as never, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
+  // The raw wire, so nothing a client normalises hides a wrap.
+  const raw = async (body: unknown) => {
+    const response = (await handle(new Request("https://app.test/mcp", legacyInit(body)), {}))!;
+    const text = await response.text();
+    return { text, body: JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text) };
+  };
+  const listing = await raw({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+  expect(listing.text).not.toContain('"result":{"type"');
+  const listed = Object.fromEntries(listing.body.result.tools.map((t: any) => [t.name, t.outputSchema]));
+  // Only a root the SDK lists as an object stays: an object schema, and a typeless root it proves object-shaped.
+  expect(Object.entries(listed).filter(([, schema]) => schema !== undefined)).toEqual([
+    ["record", { type: "object", properties: { id: { type: "string" } }, required: ["id"] }],
+    ["objectish", { type: "object", anyOf: [{ type: "object" }, { properties: {} }] }],
+  ]);
+  for (const { name, run } of tools) {
+    const value = await run();
+    const { body } = await raw({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } });
+    expect([name, body.result.isError]).toEqual([name, undefined]);
+    expect([name, body.result.content[0].text]).toEqual([name, JSON.stringify(value)]);
+    const object = typeof value === "object" && value !== null && !Array.isArray(value);
+    // An object is structured content as on 2026-07-28; anything else is the text block alone.
+    expect([name, body.result.structuredContent]).toEqual([name, object ? value : undefined]);
+  }
+  // The official client in its 2025 mode validates what it is given, and the tool version does not depend on the era.
+  const descriptions: Record<string, string>[] = [];
+  for (const era of ERAS) {
+    const client = await mcpClient(handle, undefined, { era });
+    const { tools: seen } = await client.listTools();
+    descriptions.push(Object.fromEntries(seen.map(t => [t.name, t.description!])));
+    for (const { name } of tools)
+      expect([era, name, (await client.callTool({ name, arguments: {} })).isError]).toEqual([era, name, undefined]);
+    await client.close();
+  }
+  expect(descriptions[0]).toEqual(descriptions[1]!);
 });
 
 test("a success the listed schema's root does not admit fails before it is recorded; a failure omits structuredContent only under a schema", async () => {
@@ -219,7 +262,22 @@ test("a ref Procedure with a non-object output lists its schema, sends its data 
     const total = await client.callTool({ name: "total", arguments: {} });
     expect(total.isError).toBeUndefined();
     expect(total.structuredContent).toBeNull();
+    const modern = (await client.listTools()).tools;
     await client.close();
+    // On a 2025 revision: the same tools and versions, no non-object schema, the text block alone.
+    const legacy = await mcpClient(mcp({ db: () => db, caller: () => caller, handlers }), undefined, {
+      era: LEGACY_REVISION,
+    });
+    const listed = (await legacy.listTools()).tools;
+    expect(listed.map(t => [t.name, t.description, t.outputSchema])).toEqual(
+      modern.map(t => [t.name, t.description, undefined]),
+    );
+    const legacyTitles = await legacy.callTool({ name: "titles", arguments: {} });
+    expect((legacyTitles.content as unknown[])[0]).toEqual({ type: "text", text: '["a","b"]' });
+    expect(legacyTitles.structuredContent).toBeUndefined();
+    expect(legacyTitles._meta).toMatchObject({ "example/count": 2 });
+    expect((await legacy.callTool({ name: "total", arguments: {} })).structuredContent).toBeUndefined();
+    await legacy.close();
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
