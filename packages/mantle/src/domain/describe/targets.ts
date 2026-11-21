@@ -36,15 +36,9 @@ export interface TargetDefinition {
 }
 
 /** Walk sealed IR, including nested statements and expanded View dependencies. */
-export function inspectSql(value: unknown): {
-  schemas: string[];
-  readSchemas: string[];
-  readOnly: boolean;
-  writes: { schema: string; operation: string }[];
-} {
+function inspectSql(value: unknown): { schemas: string[]; readSchemas: string[]; readOnly: boolean } {
   const schemas = new Set<string>(),
     readSchemas = new Set<string>();
-  const writes: { schema: string; operation: string }[] = [];
   let readOnly = true;
   const walk = (v: unknown): void => {
     if (!v || typeof v !== "object") return;
@@ -56,11 +50,6 @@ export function inspectSql(value: unknown): {
     for (const kind of ["InsertStmt", "UpdateStmt", "DeleteStmt"])
       if (n[kind]) {
         readOnly = false;
-        if (n[kind].relation?.relname)
-          writes.push({
-            schema: n[kind].relation.relname.toLowerCase(),
-            operation: kind === "InsertStmt" ? "create" : kind === "UpdateStmt" ? "update" : "delete",
-          });
         if (n[kind].relation?.relname) {
           schemas.add(n[kind].relation.relname.toLowerCase());
           if (kind !== "InsertStmt") readSchemas.add(n[kind].relation.relname.toLowerCase());
@@ -69,7 +58,7 @@ export function inspectSql(value: unknown): {
     Object.values(n).forEach(walk);
   };
   walk(value);
-  return { schemas: [...schemas].sort(), readSchemas: [...readSchemas].sort(), readOnly, writes };
+  return { schemas: [...schemas].sort(), readSchemas: [...readSchemas].sort(), readOnly };
 }
 
 /** A target's own terms merge conjunctively; dispatcher variants do not. */
@@ -106,7 +95,6 @@ function inspectBehavior(
 ) {
   const inspected = inspectSql(ir);
   if (writes) {
-    inspected.writes = [...writes];
     inspected.schemas.push(...writes.map(w => w.schema));
     inspected.readSchemas.push(...writes.filter(w => w.operation !== "create").map(w => w.schema));
   }
@@ -355,27 +343,9 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     );
     const d = out.at(-1)!;
     if (generic) {
-      const operation =
-        route === "POST /entries"
-          ? "create"
-          : route === "DELETE /entries/:id"
-            ? "delete"
-            : route.startsWith("GET ")
-              ? undefined
-              : route.endsWith("/publish")
-                ? "publish"
-                : "update";
-      const inspected = inspectBehavior(
-        plan,
-        undefined,
-        false,
-        undefined,
-        operation ? Object.keys(plan.schemas).map(schema => ({ schema, operation })) : [],
-      );
       d.schemas = Object.keys(plan.schemas).sort();
       d.readSchemas = d.schemas;
-      d.opaque = inspected.opaque;
-      d.behavior = { schemas: plan.schemas, dependencies: inspected.dependencies };
+      d.behavior = { schemas: plan.schemas, dependencies: [] };
     }
   }
   return [...new Map(out.map(d => [d.id, d])).values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
