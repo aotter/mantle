@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -147,7 +148,7 @@ try {
   }
   if (npm) {
     addNpmOverrides(join(consumer, "package.json"), tarballs);
-    install("npm", ["install", "--no-audit", "--no-fund", "--prefer-online", ...before()], consumer, env);
+    await install("npm", ["install", "--no-audit", "--no-fund", "--prefer-online", ...before()], consumer, env);
     const lock = JSON.parse(readFileSync(join(consumer, "package-lock.json"), "utf8"));
     for (const [name, tarball] of tarballs) {
       const resolved = lock.packages?.[`node_modules/${name}`]?.resolved;
@@ -161,7 +162,7 @@ try {
   } else {
     addOverrides(join(consumer, "package.json"), tarballs);
     // pnpm 10.16+ resolves only versions published MIN_RELEASE_AGE_MINUTES ago; pnpm 9 ignores the setting.
-    install("pnpm", ["install", "--no-frozen-lockfile"], consumer, {
+    await install("pnpm", ["install", "--no-frozen-lockfile"], consumer, {
       npm_config_minimum_release_age: process.env.npm_config_minimum_release_age ?? MIN_RELEASE_AGE_MINUTES,
       ...env,
     });
@@ -315,22 +316,27 @@ function before(days = Number(process.env.MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ?
   return days === 0 ? [] : [`--before=${new Date(now - days * 86_400_000).toISOString()}`];
 }
 
-function install(command, args, cwd, env) {
+async function install(command, args, cwd, env) {
   for (let attempt = 1; ; attempt++) {
-    // The output is kept to tell a registry tarball that is not there yet from any other failure.
-    const { status, stdout, stderr, error } = spawnSync(command, args, {
+    // Streamed as it arrives, so a stalled install shows progress and a killed run keeps its output, and kept to tell
+    // a registry tarball that is not there yet from any other failure.
+    const child = spawn(command, args, {
       cwd,
       env: { ...process.env, CI: "1", ...env },
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    process.stdout.write(stdout ?? "");
-    process.stderr.write(stderr ?? "");
+    let output = "";
+    for (const stream of ["stdout", "stderr"])
+      child[stream].on("data", chunk => {
+        process[stream].write(chunk);
+        output += chunk;
+      });
+    const [status] = await once(child, "close");
     if (status === 0) return;
-    const waitMs = retryWait(`${stdout}${stderr}`, attempt);
-    if (error || waitMs === undefined) throw error ?? new Error(`${command} install failed (exit ${status})`);
+    const waitMs = retryWait(output, attempt);
+    if (waitMs === undefined) throw new Error(`${command} install failed (exit ${status})`);
     console.error(`[packed-consumer] ${command} install failed (attempt ${attempt}); retrying in ${waitMs / 1000}s`);
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
   }
 }
 

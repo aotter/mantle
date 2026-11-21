@@ -146,8 +146,13 @@ export function serve<Database, E>(
       const body = found[markdown!];
       if (body == null) return notFound();
       if (typeof body !== "string") throw new TypeError("Markdown field must return text.");
-      // The Markdown names its HTML page: the canonical URL `head()` emits for the same row.
-      return respond(request, body, "text/markdown", caller, validUrl(entry!.path, found, entry!.page.view));
+      // The Markdown names its HTML page: the canonical URL `head()` emits for the same row. A row it cannot be built
+      // from (a path parameter the View does not return) gets no header, as `head()` gives it no tags.
+      let canonical: string | undefined;
+      try {
+        canonical = validUrl(entry!.path, found, entry!.page.view);
+      } catch {}
+      return respond(request, body, "text/markdown", caller, canonical);
     } catch (error) {
       return hostFailure(error, caller);
     }

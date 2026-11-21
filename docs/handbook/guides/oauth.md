@@ -96,10 +96,14 @@ application. `name` is escaped and also ends the page title. `logo` must be an
 `https:` URL or a same-origin path such as `/brand/logo.svg` (not `//host`, no
 backslash or whitespace); it is shown at most 32px high, and its origin (or
 `'self'`) becomes the page's only `img-src`. `primary` (the Connect button and
-focus ring) and `primaryForeground` (its text) must be hex colours or
-`rgb()`/`hsl()`/`oklch()`/`oklab()`/`lab()`/`lch()` of numbers; one value
-serves light and dark. `authRoutes` throws when it is built with any other
-value. Without `brand` the pages are unchanged.
+focus ring) and `primaryForeground` (its text) must be hex colours (3, 4, 6
+or 8 digits) or `rgb()`, `rgba()`, `hsl()`, `hsla()`, `lab()`, `lch()`,
+`oklab()` or `oklch()` of three numbers, percentages, angles (`deg`, `rad`,
+`grad`, `turn`) or `none`, separated by spaces with an optional `/ alpha`
+(`hsl(210deg 50% 40%)`, `oklch(0.6 0.2 240 / 90%)`) or by commas with an
+optional fourth (`rgba(15, 118, 110, 0.9)`); one value serves light and dark.
+`authRoutes` throws when it is built with any other value, since the value is
+written into the page's stylesheet. Without `brand` the pages are unchanged.
 
 `resolveCaller(request, loader, { audience, scopes })` verifies token signature,
 issuer, audience and request-bound DPoP through Better Auth, including a durable

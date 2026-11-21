@@ -43,6 +43,18 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
+metadata: {name: body-by-slug}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, minLength: 2}}
+  sql: SELECT id, body FROM posts WHERE slug = input.slug AND visible = true ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
 metadata: {name: by-visible}
 spec:
   surface: public
@@ -233,6 +245,21 @@ test("dynamic web output trusts SQL visibility, escapes output and revalidates c
     expect(await localized.head(request("/en/a|b/a%26b)"))).toContain(
       'rel="canonical" href="https://site.test/en/a|b/a%26b%29"',
     );
+    // A row without its page's path parameter has no canonical URL: the Markdown still answers, with no Link, as head
+    // gives no tags for it.
+    const unlinked = web({
+      db,
+      caller: { kind: "anonymous" },
+      origin: "https://site.test",
+      title: "x",
+      description: "y",
+      pages: { "/notes/{slug}": { view: "body-by-slug", markdown: "body" } },
+    });
+    const note = await unlinked.fetch(request("/notes/a%26b).md"));
+    expect(note.status).toBe(200);
+    expect(await note.text()).toBe("changed");
+    expect(note.headers.get("link")).toBeNull();
+    expect(await unlinked.head(request("/notes/a%26b)"))).toBe("");
     // Given the row the application already read, head reads no View: post0 is hidden from the View.
     const hidden = { id: "0", slug: "post0", body: "# body 0" };
     expect(await site.head(request("/posts/post0"), undefined, undefined, { row: hidden })).toContain(

@@ -1368,14 +1368,52 @@ describe("OAuth grant revocation and consent routes", () => {
     ])
       expect(() => authRoutes(app.loader as never, { methods: [], brand: { logo } })).toThrow("brand.logo");
     for (const primary of [
+      "#abc",
+      "#abcd",
+      "#0F766E",
+      "#0f766ecc",
+      "rgb(1,2,3)",
+      "rgba(1, 2, 3, .5)",
+      "rgb(10% 20% 30% / 50%)",
+      "hsl(210deg 50% 40%)",
+      "hsl(0.5turn, 50%, 40%)",
+      "hsla(-10 50% 40% / 0.8)",
+      "oklch(0.6 0.2 240deg)",
+      "oklch(60% 0.2 none)",
+      "oklab(0.6 -0.1 1e-1)",
+      "lab(50% 40 -20 / .5)",
+      "lch(50 30 2rad)",
+    ])
+      expect(() =>
+        authRoutes(app.loader as never, { methods: [], brand: { primary, primaryForeground: primary } }),
+      ).not.toThrow();
+    for (const primary of [
       "red",
       "#12345",
       "#0f766e;}body{display:none",
       "rgb(1 2 3);x:y",
       "url(https://evil.test)",
       "var(--x)",
+      "rgb(1,2)",
+      "rgb(1 2 3 4)",
+      "rgb(1, 2 3)",
+      "rgb(1,2,3,4,5)",
+      "hsl(-)",
+      "hsl(1 2 3 / )",
+      "rgb(1 2 3 / 4 / 5)",
+      "rgb(calc(1) 2 3)",
+      "rgb(1 2 3)}",
+      "rgb('1' 2 3)",
+      "rgb(1 2 3\\)",
+      "lab(1px 2 3)",
+      "hwb(1 2% 3%)",
     ])
-      expect(() => authRoutes(app.loader as never, { methods: [], brand: { primary } })).toThrow("brand colours");
+      expect(() => authRoutes(app.loader as never, { methods: [], brand: { primary } })).toThrow(
+        /^brand\.primary must be a hex colour \(3, 4, 6 or 8 digits\) or rgb\(\)/,
+      );
+    expect(() => authRoutes(app.loader as never, { methods: [], brand: { primaryForeground: "rgb(1,2)" } })).toThrow(
+      "brand.primaryForeground must be",
+    );
   });
   test("a refused consent POST leaves no unread body", async () => {
     const app = await makeApp();
