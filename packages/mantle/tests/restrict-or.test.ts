@@ -189,7 +189,7 @@ test("binds: a missing or empty field in a clause is an empty set; { all: true }
   }
 });
 
-test("describe lists clauses under `or`; composition carries them; changing a clause widens", async () => {
+test("describe lists clauses under `or`; composition carries them; a disjunct added widens, a uid one dropped narrows", async () => {
   const plan = async (restrict: string) => {
     const text = [
       docs(),
@@ -205,21 +205,106 @@ test("describe lists clauses under `or`; composition carries them; changing a cl
   const meta = (id: string, d = before) => d.targets.find(t => t._meta.id === id)!._meta;
   expect(meta("view:visible").restrict).toEqual({ docs: { terms: [], or: [clause] } });
   expect(meta("view:wrapper").restrict).toEqual({ docs: { terms: [], or: [clause] } });
-  // Adding a disjunct widens: the old clause is gone.
+  // Adding a disjunct widens: more rows match the clause.
   const wider = await describeApp(await plan(`${OR} OR member IN auth.user('teams')`));
   expect(diffApp(before, wider).find(c => c.id === "view:visible" && c.field === "restrict")?.direction).toBe(
     "widened",
   );
-  // Dropping a disjunct makes the clause a single term: a lost conjunct, so the diff reports a widening (a swap is one).
-  const narrower = await describeApp(await plan("author_id = auth.uid()"));
+  // Dropping the uid disjunct makes the clause a single term, listed among `terms`: the same rule, matching fewer rows
+  // (#2128). Dropping the user-field one instead is `changed` (the table below).
+  const narrower = await describeApp(await plan("org IN auth.user('ownerOrgIds')"));
   expect(diffApp(before, narrower).find(c => c.id === "view:visible" && c.field === "restrict")?.direction).toBe(
-    "widened",
+    "narrowed",
   );
   // AND-ing a clause onto a restrict narrows.
   const andMore = await describeApp(await plan(`(${OR}) AND member IN auth.user('teams')`));
   expect(diffApp(before, andMore).find(c => c.id === "view:visible" && c.field === "restrict")?.direction).toBe(
     "narrowed",
   );
+});
+
+// #2128: a restrict is an AND of OR-clauses. Rows first: a clause `after` does not imply may admit new rows (widened);
+// otherwise a clause `before` does not imply removes rows (narrowed); otherwise the rows are the same. Then the callers a
+// user-field term (`IN auth.user(...)`) refuses before SQL ({ all: true }, a host's unforwarded field): one that
+// disappears admits them, so fewer rows become `changed` and the same rows `widened`; one that appears refuses more, so
+// the same rows become `narrowed`. A single-term clause is the same rule under `terms`/`owner` or under `or`.
+const A = "author_id = auth.uid()",
+  O = "org IN auth.user('ownerOrgIds')",
+  T = "member IN auth.user('teams')",
+  L = "title IN auth.user('titles')";
+// Each row: the change, the restrict before and after, the diff's direction, and the direction of the reverse change.
+test.each([
+  ["drop the uid disjunct; the clause becomes a single term", `${A} OR ${O}`, O, "narrowed", "widened"],
+  ["drop the uid disjunct; the clause keeps two", `${A} OR ${O} OR ${T}`, `${O} OR ${T}`, "narrowed", "widened"],
+  // Fewer rows for most callers, but { all: true } and unforwarded-field callers go from refused to admitted.
+  ["drop a user-field disjunct; the clause becomes a single term", `${A} OR ${O}`, A, "changed", "widened"],
+  ["drop a user-field disjunct; the clause keeps two", `${A} OR ${O} OR ${T}`, `${A} OR ${O}`, "changed", "widened"],
+  ["remove a single-term clause", `(${A} OR ${O}) AND ${T}`, `${A} OR ${O}`, "widened", "narrowed"],
+  ["remove an OR-clause", `(${A} OR ${O}) AND ${T}`, T, "widened", "narrowed"],
+  ["remove a clause of the distributed form", `(${A} AND ${T}) OR ${O}`, `${A} OR ${O}`, "widened", "narrowed"],
+  // Mixed changes. When some clause may admit new rows the diff says widened, as a swap of terms always has; the reverse
+  // of such a change can be widened too (neither plan's rows contain the other's).
+  ["swap a disjunct", `${A} OR ${O}`, `${A} OR ${T}`, "widened", "widened"],
+  [
+    "drop a disjunct from one clause, add one to another",
+    `(${A} OR ${O}) AND (${T} OR ${L})`,
+    `${A} AND (${T} OR ${L} OR org IN auth.user('teams'))`,
+    "widened",
+    "widened",
+  ],
+  ["drop a disjunct and remove a clause", `(${A} OR ${O}) AND ${T}`, A, "widened", "widened"],
+  ["add a disjunct and add a clause", `${A} OR ${O}`, `(${A} OR ${O} OR ${T}) AND ${L}`, "widened", "widened"],
+  ["drop the uid disjunct and add a clause", `${A} OR ${O}`, `${O} AND ${T}`, "narrowed", "widened"],
+  ["drop a user-field disjunct and add a clause", `${A} OR ${O}`, `${A} AND ${T}`, "changed", "widened"],
+  [
+    "drop a user-field disjunct from each of two clauses",
+    `(${A} OR ${O}) AND (${T} OR ${L})`,
+    `${A} AND ${T}`,
+    "changed",
+    "widened",
+  ],
+  // The same rows: a clause that another implies adds only the refusals of its user-field term, and removing it only
+  // lifts them.
+  ["add a clause the plan already implies", A, `${A} AND (${A} OR ${O})`, "narrowed", "widened"],
+] as const)("describe diff: %s", async (_, from, to, direction, reverse) => {
+  const plan = async (restrict: string) => {
+    const text = [docs(), view(restrict, "SELECT id, title FROM docs", "internal")].join("\n---\n");
+    const r = await compilePlan({ sources: [{ sourceId: "d.yaml", text }] }, d1Dialect, "operational");
+    if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+    return describeApp(r.plan);
+  };
+  const [x, y] = [await plan(from), await plan(to)];
+  // One restrict record: a clause that moves between `or` and `terms` is not reported as an unrelated remove and add.
+  const restrict = (a: typeof x, b: typeof x) =>
+    diffApp(a, b)
+      .filter(c => c.id === "view:visible" && c.field === "restrict")
+      .map(c => c.direction);
+  expect(restrict(x, y)).toEqual([direction]);
+  expect(restrict(y, x)).toEqual([reverse]);
+});
+
+test("describe diff: a target's restrict is narrowed only when every Schema's is; changed outranks narrowed", async () => {
+  const text = [docs(), view(OR, "SELECT id, title FROM docs", "internal")].join("\n---\n");
+  const r = await compilePlan({ sources: [{ sourceId: "d.yaml", text }] }, d1Dialect, "operational");
+  if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+  const base = await describeApp(r.plan);
+  const org = { column: "org", field: "ownerOrgIds", type: "string" as const },
+    clause = [org, { owner: "author_id" }];
+  const described = (restrict: object) => {
+    const d = structuredClone(base);
+    d.targets.find(t => t._meta.id === "view:visible")!._meta.restrict = restrict as never;
+    return d;
+  };
+  const direction = (from: object, to: object) =>
+    diffApp(described(from), described(to)).find(c => c.id === "view:visible" && c.field === "restrict")?.direction;
+  const both = { docs: { terms: [], or: [clause] }, notes: { terms: [], or: [clause] } };
+  // `docs` drops its uid disjunct (narrowed); `notes` is unchanged, narrowed too, or only reordered (`changed`).
+  const docsNarrowed = { ...both, docs: { terms: [org] } };
+  expect(direction(both, docsNarrowed)).toBe("narrowed");
+  expect(direction(both, { ...docsNarrowed, notes: { terms: [org] } })).toBe("narrowed");
+  expect(direction(both, { ...docsNarrowed, notes: { terms: [], or: [[...clause].reverse()] } })).toBe("changed");
+  // a Schema that may admit callers (it lost a user-field term) keeps the target from reading as narrowed
+  expect(direction(both, { ...docsNarrowed, notes: { owner: "author_id", terms: [] } })).toBe("changed");
 });
 
 test("two spellings of one column are one term: an OR of them collapses, an AND of them is refused", async () => {

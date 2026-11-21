@@ -728,6 +728,150 @@ test("entry editor and translation badges do not query denied related collection
   expect(reads).toBe(2);
 });
 
+test("a 429 from authorize keeps its status and retryAfter on Admin routes; lists hide the target and never fail (#2126)", async () => {
+  let reads = 0;
+  const row = { id: "a", version: 1, title: "A", created_at: 0, updated_at: 0 };
+  const schema = (name: string): EntrySchema => ({
+    binding: compiled,
+    name,
+    descriptor: { name },
+    publishing: false,
+    readOnly: false,
+    fields: { title: "title" },
+    defaults: {},
+    query: () => ({ input: {}, order: "id:asc" }),
+    validate: d => d,
+    values: d => d,
+    row: r => r,
+  });
+  const view = (name: string): any => ({
+    name,
+    allows: () => true,
+    query: () => ({ input: {} }),
+    page: async () => {
+      reads++;
+      return { rows: [{ n: 1 }] };
+    },
+  });
+  const error = { code: "RATE_LIMITED", message: "Slow down.", path: "admin", retryAfter: 9 };
+  const fetch = adminFunction(
+    {
+      ...metadata,
+      collections: [{ name: "posts" }, { name: "notes" }],
+      views: [{ name: "busy" }, { name: "calm" }],
+    },
+    [view("busy"), view("calm")],
+    [],
+    {
+      db: () => ({}),
+      caller: () => admin,
+      routes: entries([schema("posts"), schema("notes")], {
+        ...unused,
+        read: () => {
+          reads++;
+          return [row];
+        },
+      }),
+      authorize: async target =>
+        target.name === "posts" || target.name === "busy"
+          ? Promise.reject(
+              new ContractError(error.code, error.message, error.path, { status: 429, fields: { retryAfter: 9 } }),
+            )
+          : true,
+    },
+  );
+  const ask = async (path: string) => {
+    const response = (await fetch(new Request("https://app.test/admin/api" + path), {}))!;
+    return [response.status, await response.json()];
+  };
+  // The route's own target: 429 and the error as thrown, before any read.
+  for (const path of ["/entries?collection=posts", "/entries/a?collection=posts", "/views/busy"])
+    expect(await ask(path)).toEqual([429, { error }]);
+  expect(reads).toBe(0);
+  // Lists and aggregates leave it out: navigation metadata, bootstrap's first page, a View batch.
+  const [status, bootstrap] = await ask("/bootstrap?collection=posts");
+  expect([status, bootstrap.collections, bootstrap.views, "entries" in bootstrap]).toEqual([
+    200,
+    [{ name: "notes" }],
+    [{ name: "calm" }],
+    false,
+  ]);
+  expect(await ask("/view-batch?names=busy,calm")).toEqual([
+    200,
+    { views: { busy: { error: true }, calm: { rows: [{ n: 1 }] } } },
+  ]);
+  expect((await ask("/entries?collection=notes"))[0]).toBe(200);
+});
+
+test("an entry read is authorized once by its route; a committed write whose read check answers 429 still answers 200 (#2126)", async () => {
+  const row = { id: "a", version: 1, title: "A", created_at: 0, updated_at: 0 };
+  const schema: EntrySchema = {
+    binding: compiled,
+    name: "posts",
+    descriptor: { name: "posts" },
+    publishing: false,
+    readOnly: false,
+    fields: { title: "title" },
+    defaults: {},
+    query: () => ({ input: {}, order: "id:asc" }),
+    validate: d => d,
+    values: d => d,
+    row: r => r,
+  };
+  let writes = 0,
+    reads = 0;
+  const seen: string[] = [];
+  const limited = () =>
+    Promise.reject(
+      new ContractError("RATE_LIMITED", "Slow down.", "admin", { status: 429, fields: { retryAfter: 9 } }),
+    );
+  const fetch = (authorize: (target: Target) => Promise<boolean>) =>
+    adminFunction(metadata, [], [], {
+      db: () => ({}),
+      caller: () => admin,
+      routes: entries([schema], {
+        ...unused,
+        read: () => (reads++, [row]),
+        procedure: async () => (writes++, [[{ ...row, title: "B", version: 2 }]]),
+      }),
+      authorize: async target => {
+        seen.push(`${target.name}:${target.action}`);
+        return authorize(target);
+      },
+    });
+  const ask = async (f: ReturnType<typeof fetch>, path: string, method = "GET", body?: unknown) => {
+    const response = (await f(
+      new Request("https://app.test/admin/api" + path, {
+        method,
+        headers: { origin: "https://app.test" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+      {},
+    ))!;
+    return [response.status, await response.json()] as const;
+  };
+  // A read: the route's target is the Schema's read, asked once; a limiter that answers 429 on a second ask cannot
+  // turn the 200 into one without data.
+  let asked = 0;
+  const once = fetch(async () => (++asked > 1 ? limited() : true));
+  const [status, read] = await ask(once, "/entries/a?collection=posts");
+  expect([status, read.entry.data, seen]).toEqual([200, { title: "A" }, ["posts:read"]]);
+  // A write: create and update are allowed, the read check of the response answers 429. The write committed, so the
+  // response is 200 with the row's id and version and no data, as for a caller who may write but not read.
+  seen.length = 0;
+  const writeOnly = fetch(async target => (target.action === "read" ? limited() : true));
+  for (const [path, method, body] of [
+    ["/entries", "POST", { collection: "posts", data: { title: "B" } }],
+    ["/entries/a?collection=posts", "PATCH", { expectedVersion: 1, data: { title: "B" } }],
+  ] as const) {
+    const before = writes;
+    const [code, written] = await ask(writeOnly, path, method, body);
+    expect([code, written.entry, writes - before]).toEqual([200, { id: "a", version: 2 }, 1]);
+  }
+  expect(seen).toEqual(["posts:create", "posts:read", "posts:update", "posts:read"]);
+  expect(reads).toBe(2);
+});
+
 test("view-batch runs each View as the caller; a refused, missing or authorize-denied View is the same unavailable and cannot fail the batch", async () => {
   const seen: string[] = [];
   const view = (

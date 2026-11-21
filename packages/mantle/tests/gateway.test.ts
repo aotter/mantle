@@ -7,7 +7,7 @@ import { hostCaller } from "../src/kernel/host-caller.js";
 import { fieldsOf, hasRole } from "../src/kernel/caller-identity.js";
 import { isAll, modeOf } from "../src/kernel/user-fields.js";
 import { binds } from "../src/kernel/binds.js";
-import { isAdmin, type Caller } from "../src/kernel/contracts.js";
+import { ContractError, isAdmin, type Caller } from "../src/kernel/contracts.js";
 import { generateOrThrow, writeGenerated } from "./apps/link.js";
 import { gatewaySource, mantleProps, invalidProps, pinned } from "./gateway-fixture.js";
 import { mcpInit } from "./mcp-wire.js";
@@ -481,7 +481,8 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
   const events: any[] = [];
   let acquired = 0,
     touched = 0,
-    allow = true;
+    allow = true,
+    limit = false;
   try {
     await writeGenerated(dir, files);
     db.exec(files["schema.sql"]!);
@@ -505,7 +506,15 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
           return {};
         },
       },
-      authorize: () => allow,
+      authorize: () =>
+        limit
+          ? Promise.reject(
+              new ContractError("RATE_LIMITED", "Too many reads.", "views/public-records", {
+                status: 429,
+                fields: { retryAfter: 30 },
+              }),
+            )
+          : allow,
       onAccess: (e: any) => {
         events.push(e);
       },
@@ -634,6 +643,16 @@ test("forwarded pinning, dry runs and access decisions share one boundary", asyn
     allow = false;
     expect((await call(await pinned(mantleProps(), targets, readId))).status).toBe(403);
     expect(events.at(-1)).toMatchObject({ outcome: "deny", reason: "AUTH_DENIED" });
+    // A 429 from authorize (#2126) answers 429 in the host envelope, which carries code, message and target only, as for
+    // a handler's 429; the access event records it as an error with its code, not as a denial.
+    limit = true;
+    const limited = await call(await pinned(mantleProps(), targets, readId));
+    expect([limited.status, await limited.json()]).toEqual([
+      429,
+      { error: { code: "RATE_LIMITED", message: "Too many reads.", target: "views/public-records" } },
+    ]);
+    expect(events.at(-1)).toMatchObject({ target: readId, outcome: "error", reason: "RATE_LIMITED" });
+    limit = false;
     allow = true;
     expect((await call({ ...writeProps, authenticatedAs: "snapshot" }, "/api/write", raw)).status).toBe(403);
     expect(events.at(-1)).toMatchObject({ outcome: "deny", reason: "STALE_CALLER" });

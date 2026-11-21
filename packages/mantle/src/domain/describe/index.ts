@@ -142,21 +142,47 @@ const combine = (directions: Direction[]): Direction =>
     : directions.length && directions.every(d => d === "narrowed")
       ? "narrowed"
       : "changed";
-const terms = (p: PlanRestrict[string]) => [
-  ...(p.owner ? [canonical({ owner: p.owner })] : []),
-  ...p.terms.map(canonical),
-  // An OR-clause is one conjunct: losing or changing it widens, adding it narrows.
-  ...(p.or ?? []).map(canonical),
-];
+/** A policy as an AND of OR-clauses, each a list of terms; a single-term clause (`owner`, `terms`) is a clause of one. */
+const clauses = (p: PlanRestrict[string] | undefined): string[][] =>
+  p
+    ? [
+        ...(p.owner ? [[canonical({ owner: p.owner })]] : []),
+        ...p.terms.map(t => [canonical(t)]),
+        ...(p.or ?? []).map(c => c.map(canonical)),
+      ]
+    : [];
+// Clause `c` follows from clause `d` when every disjunct of `d` is one of `c`'s.
+const implied = (c: string[], by: string[][]) => by.some(d => d.every(t => c.includes(t)));
+// A clause of `before` that `after` does not imply may admit new rows: widened, even when another clause narrows (a swap
+// is still a widening). Otherwise a clause of `after` that `before` does not imply narrows; else the rows are the same.
+const clauseDirection = (before: string[][], after: string[][]): Direction =>
+  before.some(c => !implied(c, after)) ? "widened" : after.some(c => !implied(c, before)) ? "narrowed" : "changed";
+/** The `IN auth.user(...)` terms, wherever they stand: each refuses some callers before SQL (`{ all: true }`, a host
+ *  that did not forward the field), whatever rows the rest of the policy matches. */
+const fieldTerms = (p: PlanRestrict[string] | undefined): string[] =>
+  p ? [...p.terms, ...(p.or ?? []).flat().filter(t => !("owner" in t))].map(canonical) : [];
+/**
+ * A Schema's direction: its rows, then the callers refused before SQL (#2128). Widened rows stay widened. A user-field term
+ * that disappears admits callers it refused: with fewer rows for the rest, or with a term that refuses others added, no
+ * direction holds (`changed`); with the same rows it widens. A user-field term that appears only refuses more callers.
+ */
+function schemaDirection(x: PlanRestrict[string] | undefined, y: PlanRestrict[string] | undefined): Direction {
+  const rows = clauseDirection(clauses(x), clauses(y));
+  if (rows === "widened") return rows;
+  const before = fieldTerms(x),
+    after = fieldTerms(y),
+    admits = before.some(t => !after.includes(t)),
+    refuses = after.some(t => !before.includes(t));
+  if (rows === "narrowed") return admits ? "changed" : "narrowed";
+  return admits ? (refuses ? "changed" : "widened") : refuses ? "narrowed" : "changed";
+}
 function policyDirection(before: PlanRestrict, after: PlanRestrict, scope: boolean): Direction {
   const directions: Direction[] = [];
   for (const schema of new Set([...Object.keys(before), ...Object.keys(after)])) {
     const x = before[schema],
       y = after[schema];
     if (canonical(x) === canonical(y)) continue;
-    directions.push(
-      scope && (!x || !y) ? (x ? "narrowed" : "widened") : inclusion(x ? terms(x) : [], y ? terms(y) : []),
-    );
+    directions.push(scope && (!x || !y) ? (x ? "narrowed" : "widened") : schemaDirection(x, y));
   }
   return combine(directions);
 }

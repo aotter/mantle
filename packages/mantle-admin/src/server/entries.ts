@@ -265,12 +265,16 @@ export function entries<Env, DB>(
     }
     return out;
   };
-  /** After a committed write, related reads are best effort: a failed read must not turn a committed write into an error. */
+  /**
+   * After a committed write, related reads are best effort: a failed read must not turn a committed write into an error.
+   * A write's response shows the row's data only when the caller may also read the Schema; a read (`written` false) was
+   * authorized as that read by its route, so it is not asked again (#2126: a second answer, such as a 429, would hide it).
+   */
   const editor = async (schema: EntrySchema<DB>, row: Row, ctx: Context<Env, DB>, written = false): Promise<any> => {
     const inherited = descriptor(schema).translates?.parent;
     if (
       ctx.authorize &&
-      (!(await ctx.authorize({ kind: "schema", name: schema.name, action: "read" })) ||
+      ((written && !(await ctx.authorize({ kind: "schema", name: schema.name, action: "read" }))) ||
         (inherited && !(await ctx.authorize({ kind: "schema", name: inherited, action: "read" }))))
     )
       return {

@@ -273,8 +273,10 @@ call time. Prefer it when a caller's grant can change during a conversation, for
 example a role switched in a directory: a host keeps the tool list it saved, and a
 filtered list would leave it naming tools that are gone or missing ones the caller
 now has. An `authorize` that rejects with `new ContractError("AUTH_DENIED", message)`
-returns that message, so a refusal can name the role that may call the tool; a
-plain `false` or any other rejection answers "Target is not authorized."
+returns that message, so a refusal can name the role that may call the tool; one
+with `status: 429` is answered 429 with its own code, message and `retryAfter`
+([limits and authorize](authorization.md#limits-and-authorize)); a plain `false` or
+any other rejection answers "Target is not authorized."
 
 `toolsPageSize` pages `tools/list`: each page holds at most that many tools and
 carries an opaque `nextCursor` while more remain; pass it back as `cursor`. A
