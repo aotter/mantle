@@ -47,13 +47,13 @@ const message = (e: unknown) => (e instanceof Error ? e.message.split("\n")[0]! 
 const printer = (dialect: MantleDialect) => dialect.print!.bind(dialect);
 
 /** One View under one mode, printed, with its paged statements for the default shapes (no cursor, and a cursor whose every key is non-null). Undefined when the runtime would refuse the View. */
-export function lowerView(
+function lowerView(
   env: Env,
   p: Lowerable,
   mode: Mode,
-  columns = schemaColumns(env.schemas),
-  warn?: Warn,
-  at = "",
+  columns: ReturnType<typeof schemaColumns>,
+  warn: Warn | undefined,
+  at: string,
   project?: Project,
   pageQuery?: (ast: N) => N,
 ): LoweredView | undefined {
@@ -94,13 +94,13 @@ export function lowerView(
 }
 
 /** One inline Procedure under one mode, printed. Undefined when the runtime would refuse it. */
-export function lowerProcedure(
+function lowerProcedure(
   env: Env,
   p: Lowerable,
   mode: Mode,
-  columns = schemaColumns(env.schemas),
-  warn?: Warn,
-  at = "",
+  columns: ReturnType<typeof schemaColumns>,
+  warn: Warn | undefined,
+  at: string,
   project?: Project,
 ): LoweredStatement[] | undefined {
   try {

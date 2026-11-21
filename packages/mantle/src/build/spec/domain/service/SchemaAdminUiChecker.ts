@@ -64,8 +64,7 @@ export function checkSchemaAdminUi(schema: SchemaManifest): {
       );
     }
   }
-  const filterResult =
-    list === undefined ? {} : checkListFilter(schema, config);
+  const filterResult = list === undefined ? {} : checkListFilter(schema, config);
   if (filterResult.problem) return invalid(filterResult.problem);
 
   const primaryField = config["primaryField"];

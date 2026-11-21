@@ -10,8 +10,6 @@ import type { StorageSchema } from "../core/dialect.js";
 import { S, paren, parenthesized } from "../core/sql/ast.js";
 import { cast } from "./lower.js";
 
-
-
 class PgDeparser extends NativeDeparser {
   override A_Expr(n: N, ctx: any) {
     return super.A_Expr(parenthesized("A_Expr", n) as never, ctx);
@@ -28,7 +26,6 @@ class PgDeparser extends NativeDeparser {
       return super.FuncCall(n, ctx);
     return `(${super.FuncCall({ ...n, args: n.args?.map(paren) } as never, ctx)})`;
   }
-
 }
 
 export function print(ast: N): string {

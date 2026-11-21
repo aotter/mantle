@@ -50,12 +50,12 @@ export function checkViewAdminUi(view: ViewManifest): {
   if (nav !== undefined) {
     if (!nav || typeof nav !== "object" || Array.isArray(nav))
       return {
-          problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")],
+        problems: [problem("/spec/uiSchema/nav", nav, "an object", "View.spec.uiSchema.nav must be an object.")],
       };
     const bad = navPlacementProblems(nav as Record<string, unknown>);
     if (bad)
       return {
-          problems: [
+        problems: [
           problem(
             `/spec/uiSchema/nav/${bad[0]}`,
             (nav as Record<string, unknown>)[bad[0]],
@@ -95,7 +95,7 @@ export function checkViewAdminUi(view: ViewManifest): {
       !raw.every(field => typeof field === "string" && field.length > 0 && !/["\\\0]/.test(field))
     ) {
       return {
-          problems: [
+        problems: [
           problem(
             `/spec/uiSchema/list/${key}`,
             raw,
@@ -107,7 +107,7 @@ export function checkViewAdminUi(view: ViewManifest): {
     }
     if (new Set(raw).size !== raw.length) {
       return {
-          problems: [
+        problems: [
           problem(
             `/spec/uiSchema/list/${key}`,
             raw,

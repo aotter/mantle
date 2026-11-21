@@ -44,8 +44,6 @@ const TRUNC: Record<string, string> = {
 };
 const EXTRACT: Record<string, string> = { year: "%Y", month: "%m", day: "%d", hour: "%H", dow: "%w" };
 
-
-
 function lowerFunc(f: string, n: N, scope: LoweringScope): N | undefined {
   const args: N[] = n.args ?? [];
   switch (f) {

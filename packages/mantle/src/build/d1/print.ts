@@ -10,7 +10,6 @@ import { parenthesized } from "../core/sql/ast.js";
 
 /** A pre-lowered SQLite expression: strings print as they are, nodes print as the deparser would, always in parentheses. */
 
-
 export class SqliteDeparser extends NativeDeparser {
   /** PostgreSQL prints $n; SQLite reads $n as a NAMED parameter numbered by first appearance, so binds would shift silently. */
   override ParamRef(n: SqlNode) {
@@ -44,8 +43,6 @@ export class SqliteDeparser extends NativeDeparser {
       return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
     return super.A_Expr(n, ctx);
   }
-
-
 }
 
 export function print(ast: SqlNode): string {

@@ -37,7 +37,6 @@ const json = (text: string): N => ({ TypeCast: { arg: str(text), typeName: { nam
 
 /** Great-circle meters between the row's point and (__lat, __lng): the haversine D1 computes, in PostgreSQL's functions. */
 
-
 /** PostgreSQL text with sub-ASTs spliced in for `__name`, printed in parentheses (the same device as D1's lowering). */
 const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -140,15 +139,17 @@ export function pgLowering(timeZone: string): PolicyLowering {
           const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
           const b = (box: string) =>
             scope.param({ k: "dialect", box, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters });
-          return sql(`${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${haversine("least", la, ln)} <= ${meters}`, {
-            ...sub,
-            __b0: b("minLat"),
-            __b1: b("maxLat"),
-            __b2: b("minLng"),
-            __b3: b("maxLng"),
-          });
+          return sql(
+            `${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${haversine("least", la, ln)} <= ${meters}`,
+            {
+              ...sub,
+              __b0: b("minLat"),
+              __b1: b("maxLat"),
+              __b2: b("minLng"),
+              __b3: b("maxLng"),
+            },
+          );
         }
-
       }
       return undefined;
     },
