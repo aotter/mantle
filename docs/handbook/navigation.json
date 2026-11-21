@@ -107,6 +107,10 @@
           "link": "/concepts/four-atoms"
         },
         {
+          "text": "What Core does, and what it does not",
+          "link": "/concepts/core-boundary"
+        },
+        {
           "text": "Lifecycle and locales",
           "link": "/concepts/lifecycle-and-locales"
         },
