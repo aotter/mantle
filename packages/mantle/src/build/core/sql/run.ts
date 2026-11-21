@@ -84,7 +84,7 @@ function notNullIn(schemas: RunEnv["schemas"], sel: N, qual: string | undefined,
   const sub = node.RangeSubselect;
   if (!sub || sub.alias?.colnames?.length || sub.lateral) return false;
   const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter(
-    (t: N) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name,
+    (t: N) => outName(t) === name,
   );
   const f = outs.length === 1 ? outs[0].ResTarget.val?.ColumnRef?.fields : undefined;
   if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
@@ -163,13 +163,12 @@ export function pagedOf(
   cursor: readonly unknown[] | undefined,
   match: ViewMatch | undefined,
 ): Paged {
-  const opts = { cursor, match };
   const sel = structuredClone(c.ast.SelectStmt) as N;
   const keys: N[] = sel.sortClause ?? [];
-  if (opts.cursor && !keys.length)
+  if (cursor && !keys.length)
     throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
   const visible: (string | undefined)[] = sel.targetList.map(outName);
-  if (!keys.length && !opts.match?.search?.text && !opts.match?.eq?.length) {
+  if (!keys.length && !match?.search?.text && !match?.eq?.length) {
     // nothing to wrap: the View's own statement, one row past the page to tell whether it fits
     return {
       ast: {
@@ -225,8 +224,8 @@ export function pagedOf(
   const col = (n: string): N => ref("_p", n);
   const isNull = (n: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg: n, nulltesttype: t } });
   const conditions: N[] = [];
-  if (opts.cursor) {
-    const cur = opts.cursor;
+  if (cursor) {
+    const cur = cursor;
     const notNull = hidden.map(h => {
       const f = h.ResTarget.val?.ColumnRef?.fields;
       return (
@@ -280,7 +279,7 @@ export function pagedOf(
   // an output by the name SQL gave it: an unquoted alias or column folds to lower case
   const output = (name: string) =>
     names.find(n => n === name) ?? names.find(n => n === name.toLowerCase()) ?? refuseOutput(name);
-  const search = opts.match?.search;
+  const search = match?.search;
   if (search?.text) {
     conditions.push({
       BoolExpr: {
@@ -302,7 +301,7 @@ export function pagedOf(
       },
     });
   }
-  (opts.match?.eq ?? []).forEach(({ column }, k) => conditions.push(op("=", col(output(column)), param({ eq: k }))));
+  (match?.eq ?? []).forEach(({ column }, k) => conditions.push(op("=", col(output(column)), param({ eq: k }))));
   const limitCount = param({ limit: true }); // last, so it follows every other extra bind
   const outer: N = {
     SelectStmt: {

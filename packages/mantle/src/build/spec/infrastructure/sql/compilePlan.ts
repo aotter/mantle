@@ -41,6 +41,7 @@ import { compileSql, relationNames, statementCount, type SqlDialect } from "./co
 import { parseRestrict, parseRowTemplate, type UserFieldSpec, type UserScope } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
+import { outName } from "../../../core/sql/run.js";
 import { protectedColumns } from "../../domain/service/SqlRowPolicy.js";
 
 export type CompilePlanResult =
@@ -289,7 +290,7 @@ export function tableOutputs(
     } else if (node.RangeSubselect && !node.RangeSubselect.lateral && !node.RangeSubselect.alias?.colnames?.length) {
       const inner = node.RangeSubselect.subquery?.SelectStmt;
       const outs = (inner?.targetList ?? []).filter(
-        (t: SqlNode) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name,
+        (t: SqlNode) => outName(t) === name,
       );
       found = outs.length === 1 ? typed(inner, outs[0].ResTarget.val) : undefined;
     }
