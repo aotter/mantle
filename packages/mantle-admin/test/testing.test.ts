@@ -232,8 +232,7 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   it("finds the host script from a path with a space in it", async () => {
     const copy = join(temp, "with space", "dist");
     mkdirSync(copy, { recursive: true });
-    for (const dir of ["testing", "build", "app"])
-      cpSync(resolve(pkg, "dist", dir), join(copy, dir), { recursive: true });
+    cpSync(resolve(pkg, "dist"), copy, { recursive: true });
     const { checkMcpApp: spaced } = (await import(
       pathToFileURL(join(copy, "testing/index.js")).href
     )) as typeof import("../src/testing/index.js");
