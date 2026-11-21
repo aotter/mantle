@@ -70,7 +70,7 @@ export interface LoweringScope {
 
 /** The pieces of a physical statement only the dialect can spell. Each takes the node already rewritten by Core, except where noted. */
 export interface PolicyLowering {
-  anyOf?(x: N, set: N, type: "string" | "number"): N;
+  anyOf(x: N, set: N, type: "string" | "number"): N;
   /** `input.<name>`: the bind, as the engine reads a value of this Mantle type */
   input(param: N, type: string): N;
   /** A function call, before rewriting (`f` is its name without `pg_catalog.`): its lowering, or undefined to keep it a call. */
@@ -163,7 +163,7 @@ function param$(c: C, spec: BindSpec): N {
 function term(c: C, a: string, t: RowTerm): N {
   if (t[1] === "in") {
     const value = t[2];
-    if (value.k !== "user" || !c.lower.anyOf)
+    if (value.k !== "user")
       throw new Refused("SQL_UNSUPPORTED", "User scope needs native set lowering.");
     const kept = c.lower.anyOf(col(a, t[0]), param$(c, value), value.type);
     // Both scope forms read the same parameter, preserving numbering and PostgreSQL type.
