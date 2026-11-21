@@ -16,7 +16,6 @@ import type { BetterAuthOptions } from "@better-auth/core";
 import { APIError } from "@better-auth/core/error";
 import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
-import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError, type Postgres, type Unsafe } from "../kernel/contracts.js";
 import { adminOptionsOf } from "./caller.js";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -334,6 +333,16 @@ function customAdapter(
       },
     };
   };
+}
+
+/** Keep runtime inputs while disabling the provider's eager and bulk lazy seeding. No schema or database work. */
+// OAuth provider 1.7.7 shares plugin.options with its eager/lazy seed closures; its seedResources/checkIdentifier helpers are not exported.
+const seeds = new WeakMap<object, readonly unknown[]>();
+function resourceSeeds<T>(options: { resources?: T[] }): readonly T[] {
+  const inputs = (seeds.get(options) ?? options.resources ?? []) as readonly T[];
+  if (!seeds.has(options)) seeds.set(options, [...inputs]);
+  options.resources = [];
+  return inputs;
 }
 
 function build(
