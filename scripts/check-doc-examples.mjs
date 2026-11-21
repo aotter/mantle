@@ -21,6 +21,7 @@ const HANDBOOK = [
   "cloudflare/postgres-hyperdrive.md",
   "cloudflare/sign-in-methods.md",
   "cloudflare/deploy-and-operate.md",
+  "guides/migrations.md",
 ];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));

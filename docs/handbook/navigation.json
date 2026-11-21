@@ -66,6 +66,10 @@
           "link": "/guides/native-execution"
         },
         {
+          "text": "Schema migrations",
+          "link": "/guides/migrations"
+        },
+        {
           "text": "PostgreSQL adapters",
           "link": "/guides/postgres-adapters"
         },
