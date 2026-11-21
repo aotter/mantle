@@ -164,6 +164,35 @@ test.each(["cloudflare-d1", "cloudflare-postgres"])(
   30_000,
 );
 
+test("generate --auth under Node loads the PostgreSQL handbook's src/auth.ts, which imports ./db.js", async () => {
+  // Under the gitignored .generated directory: the page's imports (@aotter/mantle, better-auth, postgres) resolve here.
+  await mkdir(join(base, "tests/apps/.generated"), { recursive: true });
+  const dir = await mkdtemp(join(base, "tests/apps/.generated/auth-node-"));
+  try {
+    const page = await readFile(join(base, "../../docs/handbook/cloudflare/postgres-hyperdrive.md"), "utf8");
+    await mkdir(join(dir, "src"));
+    for (const [, code, name] of page.matchAll(/^```ts\n(\/\/ (src\/(?:db|auth)\.ts)[\s\S]*?)^```$/gm))
+      await writeFile(join(dir, name!), code!);
+    expect(await readFile(join(dir, "src/auth.ts"), "utf8")).toContain('import { requestDb } from "./db.js";');
+    const run = (auth: string) =>
+      spawnSync("node", [cli, "generate", "cloudflare-postgres", "generated", manifest, "--auth", auth], {
+        cwd: dir,
+        encoding: "utf8",
+      });
+    const generated = run("src/auth.ts");
+    expect(generated.stderr).not.toContain("Cannot find module");
+    expect(generated.status).toBe(0);
+    expect(await readFile(join(dir, "generated/schema.sql"), "utf8")).toContain('CREATE TABLE IF NOT EXISTS "user"');
+    // A sibling that exists under neither extension still fails with the specifier the module wrote.
+    await writeFile(join(dir, "src/missing.ts"), 'import "./nope.js";\nexport const authOptions = () => ({});\n');
+    const missing = run("src/missing.ts");
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain("src/nope.js");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
 test("explicit private fetch routing survives without OAuth and conflicts fail without rewriting config", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-private-fetch-"));
   try {
