@@ -117,4 +117,4 @@ export const userRefs = (sqlite: boolean, version: number) => {
   };
 };
 
-export { roleName, rolesFrom } from "./user-caller.js";
+export { roleName } from "./user-caller.js";
