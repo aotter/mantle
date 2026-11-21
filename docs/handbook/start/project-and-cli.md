@@ -70,7 +70,7 @@ through `userOf(caller)` or `readIdentity(auth)` instead) and for Better Auth ro
 
 `generated.ts` exports typed queries and Store. Direct `views/<encoded-name>.ts` and `procedures/<encoded-name>.ts` entries export an operation and its types. Proved pageable Views also have `paged/views/*`; boundary checks live in `validation/*`. `admin-descriptors.ts`, `rest.ts`, `mcp.ts` and `web.ts` are always emitted; manifest exposure fills `mcp.ts`'s `tools` table; `admin-bindings.ts`, `admin-client.ts` (browser-side types and hooks for `admin.tsx`) and `admin/*` require `--admin`. Auth and site are explicit options.
 
-Apply `schema.sql` only to an empty database. Later changes require [explicit migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations); generation and runtime do not inspect the database. Ref declarations print the `Handlers` keys to implement.
+Apply `schema.sql` only to an empty database. Later changes require [explicit migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations); generation and runtime do not inspect the database. Diff `schema.sql` between the two generations and write the migration from it: [schema migrations](../guides/migrations.md). Ref declarations print the `Handlers` keys to implement.
 
 Never edit generated output by hand. Merge manifests/options, regenerate with the same command, then review TypeScript and SQL diffs. Use that exact command with `--check` in CI. Unmarked app files are preserved. Imported option modules must be pure; generation does not make their side effects safe.
 

@@ -123,7 +123,8 @@ the same number of round trips as before and one that repeats a statement makes 
   names `prepare: false` as a reason queries are not cached. Mantle already requires a Hyperdrive configuration with
   caching disabled; one that left caching on was, in effect, uncached for Mantle's reads before, and is not now.
   Check the configuration (`wrangler hyperdrive get <id>`) before upgrading.
-- **Schema changes.** A migration that changes a prepared statement's result columns can invalidate it. In
+- **Schema changes.** A migration that changes a prepared statement's result columns can invalidate it (an
+  `ALTER TABLE … ADD COLUMN` does, for Mantle's `RETURNING *` writes on that table). In
   [#2029](https://github.com/aotter/mantle/issues/2029), reusing the statement inside a transaction on the same
   postgres.js client after such a migration returned PostgreSQL `0A000` over a direct connection. Hyperdrive closed
   the connection instead in all six runs. Both transactions rolled back in those tests. The caller can receive a
