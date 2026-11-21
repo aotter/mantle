@@ -98,7 +98,7 @@ interface Pending {
   readonly createdAt: number;
 }
 
-export const obj = (v: unknown): Record<string, unknown> =>
+const obj = (v: unknown): Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 const MAX_TEXT = 1000;
 const MAX_FILENAME = 255;

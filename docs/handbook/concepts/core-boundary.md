@@ -11,7 +11,7 @@ missing Core feature are the application's to do, with a documented pattern.
 **Core** compiles manifests (Schemas, Views, Procedures, Triggers) into native SQL and typed TypeScript for four
 targets, enforces row policy where it compiles SQL (scope, `restrict`, publishing, TTL, locks, optimistic versions),
 and keeps the manifest grammar closed: a key or value it does not know is an error, never ignored
-([CONTRIBUTING](https://github.com/aotter/mantle/blob/v0.2.2-alpha.8/CONTRIBUTING.md#product-and-architecture-contract),
+([CONTRIBUTING](https://github.com/aotter/mantle/blob/v0.2.2-alpha.9/CONTRIBUTING.md#product-and-architecture-contract),
 ADR-0045, ADR-0002).
 
 **The application** owns its entry and routing, its auth configuration and how it resolves a Caller, its database
@@ -63,4 +63,4 @@ File an "Extension point request" (the issue template of that name) with:
 
 What Core opens is the smallest seam that removes the workaround: an option, a hook, a closed value, a passed-through
 field. Not a subsystem: no tables, no runtime DDL, no new lifecycle. Repeated requests for one need decide its design
-([CONTRIBUTING](https://github.com/aotter/mantle/blob/v0.2.2-alpha.8/CONTRIBUTING.md#product-and-architecture-contract)).
+([CONTRIBUTING](https://github.com/aotter/mantle/blob/v0.2.2-alpha.9/CONTRIBUTING.md#product-and-architecture-contract)).
