@@ -148,13 +148,7 @@ export function pgLowering(timeZone: string): PolicyLowering {
             __b3: b("maxLng"),
           });
         }
-        case "typeof":
-        case "hex":
-        case "json_extract":
-        case "json_set":
-        case "json_insert":
-        case "json_remove":
-          throw new Refused("SQL_FUNCTION", `${f} is not supported by the PostgreSQL dialect`);
+
       }
       return undefined;
     },
