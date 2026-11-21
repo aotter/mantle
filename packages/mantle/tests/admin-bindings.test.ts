@@ -1,3 +1,4 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { sdkFixtureCaller as fixtureCaller } from "./apps/fixtures.js";
 import { test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -5,7 +6,6 @@ import { SQL } from "bun";
 import postgres from "postgres";
 import ts from "typescript";
 import { execFileSync, spawn } from "node:child_process";
-import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { mkdtemp, rm, readFile, writeFile, open } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -857,7 +857,7 @@ admin(b.metadata,b.views,b.operations,{db:()=>null!,caller:()=>({kind:'anonymous
       dir = await mkdtemp(join(base, "tests/apps/.admin-d1-")),
       state = await mkdtemp(join(tmpdir(), "mantle-admin-d1-")),
       port = process.env.MANTLE_NEXT_ADMIN_PORT ?? "8994";
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       const result = await generateFromSources({
         target: "cloudflare-d1",
@@ -930,36 +930,8 @@ INSERT INTO ordered(id,version,created_at,updated_at,ownerid,kind,rank,label,at)
         ],
         { cwd: base, env, stdio: "pipe" },
       );
-      log = await open(join(state, "wrangler.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          wrangler,
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          port,
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          persist,
-        ],
-        { cwd: base, detached: true, env, stdio: ["ignore", log.fd, log.fd] },
-      );
-      let ready = false;
-      for (let i = 0; i < 60; i++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      expect(ready).toBe(true);
+      const running = await startLocalD1(config, port, state);
+      stop = running.stop;
       const post = async (args: unknown) =>
         (await (
           await fetch(`http://127.0.0.1:${port}/check`, { method: "POST", body: JSON.stringify(args) })
@@ -1154,14 +1126,7 @@ INSERT INTO ordered(id,version,created_at,updated_at,ownerid,kind,rank,label,at)
         }),
       ).toMatchObject({ calls: 2 });
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(state, { recursive: true, force: true });
     }

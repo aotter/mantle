@@ -1,9 +1,8 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { test, expect } from "bun:test";
-import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import { mcpInit } from "./mcp-wire.js";
@@ -27,7 +26,7 @@ spec: {surface: public, sql: 'SELECT id FROM entries ORDER BY id'}
       state = await mkdtemp(join(tmpdir(), "mantle-mcp-r2-"));
     const port = process.env.MANTLE_NEXT_MCP_MEDIA_PORT ?? "9131",
       origin = "http://127.0.0.1:" + port;
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       const generated = await generateFromSources({
         target: "cloudflare-d1",
@@ -75,46 +74,8 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
           r2_buckets: [{ binding: "MEDIA", bucket_name: "mantle-mcp-r2-local" }],
         }),
       );
-      log = await open(join(state, "worker.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          port,
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(state, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let n = 0; n < 45; n++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(state, "worker.log"), "utf8"));
-        try {
-          ready = (await fetch(origin + "/health", { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      if (!ready) throw Error(await readFile(join(state, "worker.log"), "utf8"));
+      const running = await startLocalD1(config, port, state);
+      stop = running.stop;
       expect((await fetch(origin + "/setup")).status).toBe(204);
       const counts = async () =>
         (await (await fetch(origin + "/counts")).json()) as { reads: number; objects: string[] };
@@ -236,14 +197,7 @@ export default{async fetch(request,env){const url=new URL(request.url),key=url.p
         JSON.parse((await call("get_media_asset", { id: committed.id })).content[0].text).diagnostics[0],
       ).toMatchObject({ code: "MEDIA_ASSET_NOT_FOUND", path: "media" });
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(state, { recursive: true, force: true });
     }

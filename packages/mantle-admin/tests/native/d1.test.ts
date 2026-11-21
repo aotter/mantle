@@ -1,9 +1,8 @@
+import { startLocalD1 } from "../../../mantle/tests/apps/local-d1.js";
 import { test, expect } from "bun:test";
-import { mkdtemp, mkdir, writeFile, readFile, open, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { generateAdmin, writeAdminFixture } from "./generated-fixture.js";
 import { refManifest } from "./server-native-scenarios.js";
 (process.env.MANTLE_ADMIN_LOCAL_D1 ? test : test.skip)(
@@ -13,7 +12,7 @@ import { refManifest } from "./server-native-scenarios.js";
       dir = await mkdtemp(join(base, "tests/apps/.thin-admin-d1-")),
       privateDir = await mkdtemp(join(tmpdir(), "thin-admin-d1-")),
       port = process.env.MANTLE_ADMIN_D1_PORT ?? "9126";
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       const files = await generateAdmin("cloudflare-d1", refManifest);
       await writeAdminFixture(dir, files);
@@ -43,58 +42,13 @@ export default{async fetch(request,env){if(new URL(request.url).pathname==='/hea
           ],
         }),
       );
-      log = await open(join(privateDir, "worker.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          port,
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(privateDir, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let n = 0; n < 45; n++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(privateDir, "worker.log"), "utf8"));
-        try {
-          ready = (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(r => setTimeout(r, 1000));
-      }
-      if (!ready) throw Error(await readFile(join(privateDir, "worker.log"), "utf8"));
+      const running = await startLocalD1(config, port, privateDir);
+      stop = running.stop;
       const response = await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) });
       expect(await response.json()).toEqual({ ok: true, checks: 14 });
       expect(response.status).toBe(200);
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(privateDir, { recursive: true, force: true });
     }

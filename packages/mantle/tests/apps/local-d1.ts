@@ -23,6 +23,19 @@ export async function verifyOnLocalD1(dir: string, worker: string, port: string)
       ],
     }),
   );
+  let stop: (() => Promise<void>) | undefined;
+  try {
+    const running = await startLocalD1(config, port, state);
+    stop = running.stop;
+    return await (await fetch(running.origin + "/verify", { signal: AbortSignal.timeout(30000) })).json();
+  } finally {
+    await stop?.();
+    await rm(state, { recursive: true, force: true });
+  }
+}
+
+/** Starts an already-configured local Worker; callers own its DDL and temporary directory. */
+export async function startLocalD1(config: string, port: string, state: string) {
   const log = await open(join(state, "wrangler.log"), "w");
   const child = spawn(
     "node",
@@ -53,17 +66,7 @@ export async function verifyOnLocalD1(dir: string, worker: string, port: string)
       stdio: ["ignore", log.fd, log.fd],
     },
   );
-  try {
-    for (let i = 0; i < 60; i++) {
-      if (child.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-      try {
-        if ((await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok)
-          return await (await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) })).json();
-      } catch {}
-      await new Promise(done => setTimeout(done, 1000));
-    }
-    throw Error(`local D1 Worker did not start on port ${port}`);
-  } finally {
+  const stop = async () => {
     if (child.exitCode === null) {
       const ended = once(child, "exit");
       try {
@@ -72,6 +75,21 @@ export async function verifyOnLocalD1(dir: string, worker: string, port: string)
       await ended;
     }
     await log.close();
-    await rm(state, { recursive: true, force: true });
+  };
+  const origin = `http://127.0.0.1:${port}`;
+  try {
+    for (let i = 0; i < 60; i++) {
+      if (child.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
+      let ready = false;
+      try {
+        ready = (await fetch(origin + "/health", { signal: AbortSignal.timeout(1000) })).ok;
+      } catch {}
+      if (ready) return { origin, stop };
+      await new Promise(done => setTimeout(done, 1000));
+    }
+    throw Error(`local D1 Worker did not start on port ${port}`);
+  } catch (error) {
+    await stop();
+    throw error;
   }
 }

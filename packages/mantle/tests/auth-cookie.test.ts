@@ -1,3 +1,4 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
@@ -68,16 +69,15 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
 (process.env.MANTLE_NEXT_AUTH_D1 ? test : test.skip)(
   "real Better Auth cookie oracle on actual local D1",
   async () => {
-    const { mkdtemp, writeFile, open, readFile, rm } = await import("node:fs/promises");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
     const { spawn } = await import("node:child_process"),
-      { once } = await import("node:events"),
       { join, resolve } = await import("node:path"),
       { tmpdir } = await import("node:os");
     const base = resolve(import.meta.dir, ".."),
       dir = await mkdtemp(join(base, "tests/apps/.auth-cookie-")),
       state = await mkdtemp(join(tmpdir(), "mantle-auth-cookie-"));
     const port = process.env.MANTLE_NEXT_AUTH_PORT ?? "8994";
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       await writeFile(
         join(dir, "worker.ts"),
@@ -100,46 +100,8 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
           ],
         }),
       );
-      log = await open(join(state, "wrangler.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          port,
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(state, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let attempt = 0; attempt < 60; attempt++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      expect(ready).toBe(true);
+      const running = await startLocalD1(config, port, state);
+      stop = running.stop;
       const response = await fetch(`http://127.0.0.1:${port}/verify`, { signal: AbortSignal.timeout(30000) }),
         result = (await response.json()) as { ok: boolean; counts: Record<string, number> };
       expect(result).toMatchObject({ ok: true });
@@ -150,14 +112,7 @@ const url = process.env.MANTLE_NEXT_BUN_PG_URL;
       expect(result.counts["renamed:refresh"]).toBe(2);
       expect(result.counts["secondary:refresh"]).toBe(2);
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(state, { recursive: true, force: true });
     }
