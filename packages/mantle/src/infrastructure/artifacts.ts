@@ -2,12 +2,15 @@ import { readFile, readdir, mkdir, rm, writeFile, lstat } from "node:fs/promises
 import { dirname, join, resolve, relative, sep, isAbsolute } from "node:path";
 import { GENERATED } from "../domain/entry.js";
 
+/** A `.catch` for reads where a missing path means none. */
+const missing = (error: NodeJS.ErrnoException): undefined => {
+  if (error.code === "ENOENT") return undefined;
+  throw error;
+};
+
 /** Only marked generated files (and pre-header operation entries) can be removed. */
 async function ownedFiles(directory: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(join(directory, prefix), { withFileTypes: true }).catch(error => {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  });
+  const entries = (await readdir(join(directory, prefix), { withFileTypes: true }).catch(missing)) ?? [];
   const files: string[] = [];
   for (const entry of entries) {
     const name = join(prefix, entry.name);
@@ -35,10 +38,7 @@ export async function writeArtifacts(
   check = false,
 ): Promise<string[]> {
   const root = resolve(directory);
-  const rootStat = await lstat(root).catch(error => {
-    if (error.code === "ENOENT") return undefined;
-    throw error;
-  });
+  const rootStat = await lstat(root).catch(missing);
   if (rootStat?.isSymbolicLink())
     throw new Error(`Generated output cannot follow an application-owned symlink: ${root}`);
   // Preflight all destinations before writing any: a symlink belongs to the app,
@@ -50,10 +50,7 @@ export async function writeArtifacts(
     let path = root;
     for (const part of child.split(sep)) {
       path = join(path, part);
-      const stat = await lstat(path).catch(error => {
-        if (error.code === "ENOENT") return undefined;
-        throw error;
-      });
+      const stat = await lstat(path).catch(missing);
       if (stat?.isSymbolicLink())
         throw new Error(`Generated output cannot follow an application-owned symlink: ${path}`);
     }
@@ -61,10 +58,7 @@ export async function writeArtifacts(
   const changed: string[] = [];
   for (const [name, source] of Object.entries(files)) {
     const path = join(directory, name);
-    const previous = await readFile(path, "utf8").catch(error => {
-      if (error.code === "ENOENT") return undefined;
-      throw error;
-    });
+    const previous = await readFile(path, "utf8").catch(missing);
     if (previous === source) continue;
     changed.push(path);
     if (!check) {
