@@ -6,7 +6,7 @@ Temporary directory on a work branch. **Delete `.handoff/` before any PR into `d
 
 - `develop` is at `9977936f`. Released: `0.2.2-alpha.8` (tag `v0.2.2-alpha.8`, npm `alpha`).
 - Merged into `develop` after alpha.8, unreleased, intended for `0.2.2-alpha.9`: #2065 (pgsql-deparser 18.4.3, generated output byte-identical), #2132 (authorize keeps a 429; describe diff direction; Admin entry read authorized once), #2133 (host contract: `dryRun` removed).
-- This branch (`claude/dazzling-goodall-15duxc`) = `develop` + two slimming commits + this directory. Nothing here has been through `pnpm check:pg` or Full checks.
+- This branch (`claude/dazzling-goodall-15duxc`) = `develop` + the finished app-area commits + one Admin commit + this directory. The combined branch has not been through `pnpm check:pg` or Full checks.
 
 ## The task
 
@@ -16,23 +16,23 @@ The maintainer asked to slim Core in the spirit of `.agents/skills/ponytail/SKIL
 |---|---|---|---|
 | `packages/mantle/src/kernel` | `audit/kernel.md` | `briefs/kernel.md` | ~52 |
 | `packages/mantle/src/build` | `audit/build.md` | `briefs/build.md` | ~271 |
-| `src/{usecase,infrastructure,domain,auth}`, `package.json` | `audit/app.md` | `briefs/app.md` | ~151 |
+| `src/{usecase,infrastructure,domain,auth}`, `package.json` | `audit/app.md` | `briefs/app.md` | done: net -124 lines |
 | Admin src, repo tooling, tests | `audit/admin-tooling-tests.md` | `briefs/tools-implement.md` | ~1,700 |
 
 Each audit classes its findings SAFE, BREAKING or DECISION. **Only SAFE items are approved.** The briefs say which SAFE items to do and which to skip, and why. Paths in the briefs that point at a scratchpad directory no longer exist: the output-dump script they mention is `dump-generated-output.ts` in this directory, and "create your own worktree" just means work on a branch.
 
-## Done so far (both unverified beyond the author's local run)
+## Done so far
 
-- `refactor(describe): assign generic Admin route behavior directly` (app item 1).
-- `refactor(admin): reuse Core's OAuth consent types` (admin part A item 1).
+- **The app area is finished** (`src/{usecase,infrastructure,domain,auth}`, `package.json`): 13 commits, 14 of 18 items in full, 2 in part, 2 dropped. Verified by its author on the commits as they stood alone on `9977936f`: generated output byte-identical (6,810 files plus 228 printer outputs), `describeApp` JSON and 2,652 pairwise `diffApp` results identical, `pnpm check:pg` green, startup budgets unchanged, touched tests green on Bun 1.3.14. Not yet re-run on this combined branch, and Full checks has not run.
+  - Dropped, with reasons worth keeping: `readdir({ recursive: true })` in `artifacts.ts` (Bun 1.3.14 follows symlinked directories, Node 22 does not, so generation could delete marked files through an application-owned symlink); the `getSetCookie` fallback in `auth/routes.ts` (a test pins it); importing `OAUTH_GRANT_REVOCATION` into `generateAuth.ts` (pulls auth runtime into the build-time generator); the `check:package` script (the handbook names it).
+- `refactor(admin): reuse Core's OAuth consent types` (admin part A item 1). Unverified beyond typecheck.
 
 ## Interrupted mid-item
 
-`wip-patches/*.patch` are uncommitted diffs from four agents stopped mid-edit, against `9977936f`. They may not compile. Treat them as hints, not as work to apply:
+`wip-patches/*.patch` are uncommitted diffs from three agents stopped mid-edit, against `9977936f`. They may not compile. Treat them as hints, not as work to apply:
 
 - `kernel-uncommitted.patch`: kernel items 1 and 2 in progress (`json-body.ts`, `media-fetch.ts`, `web-index.ts`).
 - `build-uncommitted.patch`: build item 1 in progress (`ViewAdminUiChecker.ts`, `ProcedureViewSpecChecks.ts`).
-- `app-uncommitted.patch`: app item 2 in progress (`cursorKind` in `domain/columns.ts`).
 - `tools-uncommitted.patch`: admin part A item 2 in progress (`server/index.ts`).
 
 ## The bar for every item
