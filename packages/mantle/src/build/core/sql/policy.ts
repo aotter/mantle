@@ -454,11 +454,6 @@ function lowerFunc(n: N, c: C): N {
   switch (f) {
     case "auth.uid":
       return param$(c, { k: "uid" });
-    case "auth.role":
-      throw new Refused(
-        "AUTH_ROLE_REMOVED",
-        "auth.role() is removed; decide per-target permission in the application's authorize(target, caller) seam.",
-      );
     case "now": {
       const p = param$(c, { k: "now" });
       return c.lower.system?.(p, "timestamptz") ?? p;

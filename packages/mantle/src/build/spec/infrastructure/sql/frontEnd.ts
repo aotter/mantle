@@ -15,7 +15,6 @@ const MANTLE_FUNCTIONS = new Set([
   "mantle.near",
   "mantle.distance",
   "auth.uid",
-  "auth.hasrole",
   "auth.user",
 ]);
 /** Functions that change session or server state, reach outside the database, or run SQL text the front end cannot see. */
