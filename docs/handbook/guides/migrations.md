@@ -282,6 +282,10 @@ starting point to copy and adapt; Mantle does not ship them. They share four rul
 4. Pending migrations run in id order, each in the same transaction as its ledger row, under a lock, so two callers (two
    deploys, two requests opening the same lazily created database) apply each one once.
 
+On bun:sqlite, pass `db.exec()` the migration text trimmed (`db.exec(sql.trim())`). On Bun 1.3.14 (not on 1.4.4),
+`exec()` drops the error of the last statement when whitespace follows its semicolon, as a file's final newline
+does, so a failed last statement (a unique index over duplicate rows) reports nothing.
+
 ### PostgreSQL
 
 One transaction under a transaction-scoped advisory lock. `Postgres` is the handle generated code takes (Bun.SQL, or
