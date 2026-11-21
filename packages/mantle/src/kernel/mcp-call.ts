@@ -3,16 +3,6 @@ import { convert, invalid } from "./surface.js";
 import { checkPageLimit } from "./paging.js";
 import type { Tool, ToolCall } from "./mcp.js";
 
-export async function callTool<Database, Handlers>(
-  tool: Tool<Database, Handlers>,
-  raw: Record<string, unknown>,
-  db: Database,
-  caller: Caller,
-  handlers: Handlers,
-  call?: ToolCall,
-): Promise<unknown> {
-  return callToolLazy(tool, raw, () => db, caller, handlers, call);
-}
 /** Transport input is checked before acquiring an application-owned native handle. */
 export async function callToolLazy<Database, Handlers>(
   tool: Tool<Database, Handlers>,
