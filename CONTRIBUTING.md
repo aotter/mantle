@@ -47,6 +47,10 @@ Extension points are opened on evidence. An application that works around the SD
 (re-implementing its logic, patching a package, importing an undocumented entry)
 files an "Extension point request" and marks the workaround
 `drop when aotter/mantle#N`. Repeated requests for one need decide the design.
+Before filing, or before proposing any Core change, check
+[what Core does, and what it does not](docs/handbook/concepts/core-boundary.md): the tests a request must pass and the
+needs Core has decided are the application's, each with its pattern. A request answered there is not filed again
+without the evidence its decision names.
 Values the SDK returns are in one normal form; accept unions only in parameters,
 so wrapping a returned value never needs the SDK's own normalisation.
 

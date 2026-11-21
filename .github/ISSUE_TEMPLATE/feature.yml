@@ -3,6 +3,14 @@ description: Request a concrete new capability.
 title: "[Feature] "
 labels: ["enhancement"]
 body:
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Core's boundary
+      description: "Many requests are the application's to solve with a documented pattern: [what Core does, and what it does not](https://github.com/aotter/mantle/blob/develop/docs/handbook/concepts/core-boundary.md) (also `mantle help core-boundary`)."
+      options:
+        - label: I read the boundary page and its "what Core does not do" table. This request is not on it, or I am supplying the evidence its decision says would reopen it.
+          required: true
   - type: textarea
     id: problem
     attributes:
@@ -15,6 +23,20 @@ body:
     attributes:
       label: Proposed behavior
       description: What should mantle do?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence from application code
+      description: "A link to (or excerpt of) the application code that works around this today, marked `drop when aotter/mantle#<issue>`, and why the documented patterns do not fit. Write \"none\" only for a defect in an existing contract."
+    validations:
+      required: true
+  - type: textarea
+    id: boundary_tests
+    attributes:
+      label: Which boundary tests it passes
+      description: "For each of the four tests on the boundary page: must it be enforced where SQL is compiled, or is it a closed value the generator must know? Does it avoid Core-owned storage and runtime DDL? Does it avoid coupling Core to one auth plugin's tables, and work for an application behind a gateway? What real application code shows the need?"
     validations:
       required: true
   - type: dropdown
