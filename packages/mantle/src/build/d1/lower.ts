@@ -1,3 +1,4 @@
+import { q, lit } from "../core/sql/ast.js";
 // The D1 dialect's lowering (ADR-0034 decision 8, ADR-0035 decision 6): what Core's policy rewriter hands a dialect to spell
 // in SQLite. Casts become the storage encodings, Mantle's functions become FTS5, R*Tree and `_mantle_tz` lookups, and a
 // surviving function prints as a plain call. Runs only at build time: AST in, AST out, no parser.
@@ -28,7 +29,6 @@ const clone = <T>(x: T): T => structuredClone(x);
  * A lowering written as SQLite text. `__name` splices a (cloned) sub-AST, in parentheses; everything else is
  * emitted as written. The printer prints a `Raw` node as a parenthesized expression, so the runtime parses nothing.
  */
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 
 const OFF = (x: string) =>
   `coalesce((SELECT offset_us FROM _mantle_tz WHERE from_us <= ${x} ORDER BY from_us DESC LIMIT 1), 0)`;

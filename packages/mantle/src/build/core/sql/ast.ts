@@ -56,3 +56,6 @@ export function writeTarget(ast: N): string | undefined {
   const stmt = node.InsertStmt ?? node.UpdateStmt ?? node.DeleteStmt;
   return stmt?.relation?.relname?.toLowerCase();
 }
+
+export const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
+export const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;

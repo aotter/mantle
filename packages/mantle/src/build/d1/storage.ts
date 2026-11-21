@@ -1,3 +1,4 @@
+import { q, lit } from "../core/sql/ast.js";
 /** Build-time initial SQLite DDL; applications own migrations. */
 import {
   ftsTableName,
@@ -13,8 +14,6 @@ import { print } from "./print.js";
 
 export type { StorageSchema };
 
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
-const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
 function checkText(expr: SqlNode, s: StorageSchema): string {

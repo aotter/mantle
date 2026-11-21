@@ -1,3 +1,4 @@
+import { q, lit } from "../core/sql/ast.js";
 // The PostgreSQL dialect's lowering (ADR-0035 decision 3): what Core's policy rewriter hands a dialect to spell. Mantle SQL on
 // PostgreSQL is PostgreSQL (ADR-0039), so this is short: casts and binds typed, the few Mantle-defined functions spelled, and
 // the site time zone made explicit. AST in, AST out, no parser.
@@ -38,8 +39,6 @@ const json = (text: string): N => ({ TypeCast: { arg: str(text), typeName: { nam
 /** Great-circle meters between the row's point and (__lat, __lng): the haversine D1 computes, in PostgreSQL's functions. */
 
 /** PostgreSQL text with sub-ASTs spliced in for `__name`, printed in parentheses (the same device as D1's lowering). */
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
-const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 export function pgLowering(timeZone: string): PolicyLowering {
   const zone = str(timeZone);

@@ -1,3 +1,4 @@
+import { q } from "../core/sql/ast.js";
 /** Build-time initial PostgreSQL DDL; applications own migrations. */
 import { checkShapeProblem, notNullColumns, storageColumns, type SqlNode } from "../spec/domain/index.js";
 import type { StorageSchema } from "../core/dialect.js";
@@ -5,7 +6,6 @@ import { pgType } from "./codec.js";
 import { print, typed } from "./print.js";
 import { fnv } from "../spec/domain/service/PlanFingerprint.js";
 
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
 // PostgreSQL identifiers are limited to 63 bytes; retain the existing deterministic names.
 const ident = (n: string) => (new TextEncoder().encode(n).length <= 63 ? n : `${n.slice(0, 50)}_${fnv(n)}`);
 interface Column {
