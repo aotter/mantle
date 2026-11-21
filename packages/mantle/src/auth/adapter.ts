@@ -428,14 +428,13 @@ function build(
   };
   const factory = createAdapterFactory({ config, adapter: customAdapter(d, exec, seed, false, options) });
   // Both native adapters implement joins; Better Auth otherwise emulates each joined read with another statement.
-  return (options: BetterAuthOptions) =>
-    factory({
-      ...options,
-      advanced: {
-        ...options.advanced,
-        database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true },
-      },
-    });
+  return factory({
+    ...options,
+    advanced: {
+      ...options.advanced,
+      database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true },
+    },
+  });
 }
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
@@ -447,8 +446,7 @@ export function d1Adapter(db: D1Like) {
       .all();
     return { rows: results, changes: meta.changes };
   };
-  const factory = (options: BetterAuthOptions) =>
-    build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false, options)(options);
+  const factory = (options: BetterAuthOptions) => build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false, options);
   nativeReaders.set(factory, { exec, param: sqlite.param, now: ms => new Date(ms).toISOString() });
   return factory;
 }
@@ -469,10 +467,10 @@ export function postgresAdapter(sql: Postgres) {
       };
       return protectAdmin && handle === sql ? sql.begin("read write", tx => run(tx)) : run(handle);
     };
-  const make = (handle: Unsafe, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) =>
-    build(postgres, true, "postgres", "Mantle PostgreSQL Adapter", executor(handle), transaction, options)(options);
+  const make = (handle: Unsafe, transaction: DBAdapterFactoryConfig["transaction"], options: BetterAuthOptions) =>
+    build(postgres, true, "postgres", "Mantle PostgreSQL Adapter", executor(handle), transaction, options);
   const factory = (options: BetterAuthOptions) =>
-    make(sql, async cb => sql.begin("read write", tx => cb(make(tx, false)(options))))(options);
+    make(sql, async cb => sql.begin("read write", tx => cb(make(tx, false, options))), options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
 }
