@@ -1,3 +1,4 @@
+import { escapeJsonPointerSegment } from "./ManifestFieldChecks.js";
 /** Authored YAML spans: where a parsed semantic path came from, for diagnostics. */
 import { LineCounter, isMap, isNode, isScalar, isSeq, type Document, type Node } from "yaml";
 import type { SourceLocation, SourceSpan } from "../../kernel/diagnostic.js";
@@ -29,7 +30,7 @@ export function collectSourceSpans(root: Node | null, lineCounter: LineCounter):
     if (isMap(node)) {
       for (const pair of node.items) {
         if (!isScalar(pair.key)) continue;
-        const key = String(pair.key.value).replace(/~/g, "~0").replace(/\//g, "~1");
+        const key = escapeJsonPointerSegment(String(pair.key.value));
         visit(isNode(pair.value) ? pair.value : null, path === "/" ? `/${key}` : `${path}/${key}`);
       }
     } else if (isSeq(node)) {

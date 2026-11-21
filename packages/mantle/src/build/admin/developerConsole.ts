@@ -1,3 +1,4 @@
+import { escapeJsonPointerSegment as pointer } from "../spec/domain/service/ManifestFieldChecks.js";
 /**
  * The Developer console's snapshot (`GET {base}/api/developer-console`), derived from the plan alone: the data model, the logic, the
  * interfaces a caller reaches and the graph between them. Views and inline Procedures show their SQL as authored; the graph reads the
@@ -37,14 +38,12 @@ export function relationsOf(stmts: readonly SqlNode[]): { reads: Set<string>; wr
       // a write's target is a RangeVar without its type key, under `relation`
       if ((k === "RangeVar" || k === "relation") && n && typeof n.relname === "string" && n.mantle !== "cte")
         (write && k === "relation" ? writes : reads).add(n.relname.toLowerCase());
-      walk(c, k === "InsertStmt" || k === "UpdateStmt" || k === "DeleteStmt" || k === "MergeStmt");
+      walk(c, k === "InsertStmt" || k === "UpdateStmt" || k === "DeleteStmt");
     }
   };
   walk(stmts, false);
   return { reads, writes };
 }
-
-const pointer = (s: string) => s.replace(/~/g, "~0").replace(/\//g, "~1");
 
 export function developerConsole(plan: RuntimePlan) {
   const schemaName = (key: string) => plan.schemas[key]?.name;

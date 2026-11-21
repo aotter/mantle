@@ -1,7 +1,7 @@
 import { userReferences } from "../domain/userReferences.js";
 /** Selected View boundary: Core prints keyset SQL once; bare operations retain native rows. */
-import { parseNumeric, type RuntimePlan, type PlanLowered } from "../build/compiler.js";
-import { outputConversions } from "../domain/columns.js";
+import type { RuntimePlan, PlanLowered } from "../build/compiler.js";
+import { cursorKind, outputConversions } from "../domain/columns.js";
 import type { Target } from "../domain/model.js";
 import { authLines } from "../domain/input.js";
 import { driverFor, databaseImport, isSqlite, q, driverModule } from "../domain/entry.js";
@@ -61,21 +61,7 @@ export function emitPaging(
     const values = new Set<string>();
     const kinds = proof.types.map(type => {
       if (type === "date" || type === "timestamptz") values.add(type === "date" ? "date" : "timestamp");
-      return type === "bool"
-        ? "bool"
-        : type === "int4"
-          ? "int4"
-          : ["integer", "int8"].includes(type)
-            ? "int"
-            : parseNumeric(type)
-              ? "numeric"
-              : ["real", "float8"].includes(type)
-                ? "float"
-                : type === "date"
-                  ? "date"
-                  : type === "timestamptz"
-                    ? "timestamp"
-                    : "text";
+      return cursorKind(type) ?? "text";
     });
     const variants = [c, ...(trusted ? [trusted] : [])].map(v => {
       const pages = Object.values(v.paged);

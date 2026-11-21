@@ -72,7 +72,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
           : "SCHEMA_SEARCH_INVALID",
     );
   }
-  const adminUiProblem = checkSchemaAdminUi(m).problems[0];
+  const adminUiProblem = checkSchemaAdminUi(m).problem;
   if (adminUiProblem) {
     throw new ManifestParseError(adminUiProblem.message, idx, adminUiProblem.pointer, "SCHEMA_UI_INVALID");
   }

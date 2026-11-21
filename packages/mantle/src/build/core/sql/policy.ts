@@ -1,7 +1,7 @@
 // The policy rewriter (ADR-0034 decision 8, ADR-0035 decision 3): validated IR -> physical AST with visibility, scope,
 // system columns and deterministic order injected. A dialect whose policy is "inject" supplies a PolicyLowering for what
 // only it can spell (casts, Mantle's functions, generated ids). The result is still libpg-query's shape.
-import { AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from "../../spec/domain/index.js";
+import { starCols, AGGREGATES, SqlRefusal as Refused, type SqlNode as N } from "../../spec/domain/index.js";
 import type { RelationPosition } from "./positions.js";
 import type { StorageSchema as SchemaDef } from "../dialect.js";
 import {
@@ -70,7 +70,7 @@ export interface LoweringScope {
 
 /** The pieces of a physical statement only the dialect can spell. Each takes the node already rewritten by Core, except where noted. */
 export interface PolicyLowering {
-  anyOf?(x: N, set: N, type: "string" | "number"): N;
+  anyOf(x: N, set: N, type: "string" | "number"): N;
   /** `input.<name>`: the bind, as the engine reads a value of this Mantle type */
   input(param: N, type: string): N;
   /** A function call, before rewriting (`f` is its name without `pg_catalog.`): its lowering, or undefined to keep it a call. */
@@ -110,11 +110,6 @@ const sort = (node: N, dir = "SORTBY_DEFAULT"): N => ({
 });
 
 // ---- Schema helpers -------------------------------------------------------------------------------
-// the scope column is never read back, not even by `SELECT *`: it is the caller's own subject key
-const declaredCols = (s: SchemaDef) =>
-  Object.entries(s.fields)
-    .filter(([f]) => f !== s.scope)
-    .flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
 /** what the wrapper exposes: the declared fields plus the columns policy reads */
 const readable = (s: SchemaDef) => [
   "id",
@@ -123,11 +118,8 @@ const readable = (s: SchemaDef) => [
   "updated_at",
   "author_id",
   ...(s.publishing ? ["status", "published_at"] : []),
-  ...declaredCols(s),
+  ...starCols(s),
 ];
-/** what `SELECT *` and `RETURNING *` expand to: declared fields only, never scope or system columns */
-const starCols = (s: SchemaDef) => declaredCols(s);
-
 // ---- policy ---------------------------------------------------------------------------------------
 type SelInfo = {
   container: RelationPosition;
@@ -163,8 +155,7 @@ function param$(c: C, spec: BindSpec): N {
 function term(c: C, a: string, t: RowTerm): N {
   if (t[1] === "in") {
     const value = t[2];
-    if (value.k !== "user" || !c.lower.anyOf)
-      throw new Refused("SQL_UNSUPPORTED", "User scope needs native set lowering.");
+    if (value.k !== "user") throw new Refused("SQL_UNSUPPORTED", "User scope needs native set lowering.");
     const kept = c.lower.anyOf(col(a, t[0]), param$(c, value), value.type);
     // Both scope forms read the same parameter, preserving numbering and PostgreSQL type.
     return value.scope
@@ -454,11 +445,6 @@ function lowerFunc(n: N, c: C): N {
   switch (f) {
     case "auth.uid":
       return param$(c, { k: "uid" });
-    case "auth.role":
-      throw new Refused(
-        "AUTH_ROLE_REMOVED",
-        "auth.role() is removed; decide per-target permission in the application's authorize(target, caller) seam.",
-      );
     case "now": {
       const p = param$(c, { k: "now" });
       return c.lower.system?.(p, "timestamptz") ?? p;

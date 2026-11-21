@@ -1,3 +1,4 @@
+import { q, lit } from "../core/sql/ast.js";
 // The PostgreSQL dialect's lowering (ADR-0035 decision 3): what Core's policy rewriter hands a dialect to spell. Mantle SQL on
 // PostgreSQL is PostgreSQL (ADR-0039), so this is short: casts and binds typed, the few Mantle-defined functions spelled, and
 // the site time zone made explicit. AST in, AST out, no parser.
@@ -7,7 +8,7 @@ import type { LoweringScope, PolicyLowering } from "../core/sql/policy.js";
 import { encodeNumeric, decodeNumeric, isoDate, isoTimestamptz } from "../d1/codec.js";
 import { parseNumeric } from "../spec/domain/index.js";
 import { pgType } from "./codec.js";
-import type { RawExpr } from "./print.js";
+import { sql, strConst, argOf, haversine, type Arg } from "../core/sql/lowering.js";
 import { searchLike } from "../../kernel/search.js";
 
 const fn = (f: string, args: N[], extra: Record<string, unknown> = {}): N => ({
@@ -35,35 +36,9 @@ const by = (node: N): N => ({
 /** `'[]'::json`: json, not jsonb, so it matches json_agg's type. */
 const json = (text: string): N => ({ TypeCast: { arg: str(text), typeName: { names: [S("json")], typemod: -1 } } });
 
-type Arg = { input: string; type: string } | { const: number };
-const argOf = (n: N, scope: LoweringScope): Arg => {
-  const k = n.ColumnRef?.fields?.length === 2 ? n.ColumnRef.fields[1].String.sval : undefined;
-  if (k) return { input: k, type: scope.inputs[k]! };
-  return { const: Number(n.A_Const?.ival?.ival ?? n.A_Const?.fval?.fval) };
-};
 /** Great-circle meters between the row's point and (__lat, __lng): the haversine D1 computes, in PostgreSQL's functions. */
-const HAV = (lat1: string, lng1: string) =>
-  `(2 * 6371008.8 * asin(least(1.0, sqrt(sin(radians(__lat - ${lat1}) / 2) * sin(radians(__lat - ${lat1}) / 2) + cos(radians(${lat1})) * cos(radians(__lat)) * sin(radians(__lng - ${lng1}) / 2) * sin(radians(__lng - ${lng1}) / 2)))))`;
 
 /** PostgreSQL text with sub-ASTs spliced in for `__name`, printed in parentheses (the same device as D1's lowering). */
-const TOKEN = /"(?:[^"]|"")*"|'(?:[^']|'')*'|__\w+/g;
-function sql(text: string, subst: Record<string, N> = {}): N {
-  const parts: (string | N)[] = [];
-  let last = 0;
-  for (const m of text.matchAll(TOKEN)) {
-    if (!m[0].startsWith("__")) continue;
-    const node = subst[m[0]];
-    if (!node) throw new Error(`lowering template names ${m[0]} but was not given it`);
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push("(", structuredClone(node), ")");
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return { Raw: { parts } satisfies RawExpr };
-}
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
-const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
-const strConst = (n: N | undefined) => n?.A_Const?.sval?.sval as string | undefined;
 
 export function pgLowering(timeZone: string): PolicyLowering {
   const zone = str(timeZone);
@@ -157,27 +132,23 @@ export function pgLowering(timeZone: string): PolicyLowering {
           const la = `${q(alias)}.${q(`${fld}_lat`)}`,
             ln = `${q(alias)}.${q(`${fld}_lng`)}`;
           const sub = { __lat: scope.tx(latN), __lng: scope.tx(lngN) };
-          if (f === "mantle.distance") return sql(HAV(la, ln), sub);
+          if (f === "mantle.distance") return sql(haversine("least", la, ln), sub);
           scope.seen("near");
           // ponytail: the box D1 reads from its R*Tree, here a plain range over the two columns; a GiST index is the upgrade
           const meters = Number(args[3]!.A_Const.ival?.ival ?? args[3]!.A_Const.fval?.fval);
           const b = (box: string) =>
             scope.param({ k: "dialect", box, lat: argOf(latN!, scope), lng: argOf(lngN!, scope), meters });
-          return sql(`${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${HAV(la, ln)} <= ${meters}`, {
-            ...sub,
-            __b0: b("minLat"),
-            __b1: b("maxLat"),
-            __b2: b("minLng"),
-            __b3: b("maxLng"),
-          });
+          return sql(
+            `${la} BETWEEN __b0 AND __b1 AND ${ln} BETWEEN __b2 AND __b3 AND ${haversine("least", la, ln)} <= ${meters}`,
+            {
+              ...sub,
+              __b0: b("minLat"),
+              __b1: b("maxLat"),
+              __b2: b("minLng"),
+              __b3: b("maxLng"),
+            },
+          );
         }
-        case "typeof":
-        case "hex":
-        case "json_extract":
-        case "json_set":
-        case "json_insert":
-        case "json_remove":
-          throw new Refused("SQL_FUNCTION", `${f} is not supported by the PostgreSQL dialect`);
       }
       return undefined;
     },

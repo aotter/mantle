@@ -6,14 +6,11 @@
  * Column names, value types, writable columns and `orderBy` are TypeScript types only: nothing at runtime knows them.
  */
 import { NATIVE_NOT_NULL, notNullColumns, rowPolicy, writePolicy, type RuntimePlan } from "../build/compiler.js";
-import { declaredType, inputType, nativeType } from "../domain/columns.js";
+import { declaredType, inputType, nativeType, SCALAR } from "../domain/columns.js";
 import { q } from "../domain/entry.js";
 import { expand, SCOPE, TTL, type Fact, type Lock, type Rules } from "../kernel/store-rules.js";
 import { refChecks, userScopeTerm } from "../build/compiler.js";
 import { publishRequired } from "./publishing.js";
-
-// Types the typed Store compares and writes as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns.
-const SCALAR = new Set(["text", "real", "float8", "integer", "int4", "int8", "bool", "timestamptz", "date"]);
 
 /** Core's own rules for a Schema, in the shape of `Rules` without the id expression (a delete's lock is compared separately). */
 const core = (s: Parameters<typeof rowPolicy>[0], schemas?: RuntimePlan["schemas"]) => {

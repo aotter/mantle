@@ -1,7 +1,31 @@
 /** What a column's Mantle type means to generated code, in one place: Views, Stores and wire forms all read it here. */
-import { jsonOutputs, viewOutputs, type RuntimePlan } from "../build/compiler.js";
+import { jsonOutputs, parseNumeric, viewOutputs, type RuntimePlan } from "../build/compiler.js";
 import type { Target } from "./model.js";
 import type { WireColumns } from "../kernel/contracts.js";
+import type { CursorKind } from "../kernel/paging.js";
+
+/** Types compared and written as plain bind values. Fixed numerics are scaled integers on SQLite; geo is two columns. */
+export const SCALAR = new Set(["text", "integer", "int4", "int8", "real", "float8", "bool", "date", "timestamptz"]);
+
+/** The keyset cursor kind of a column type; undefined for a type a cursor does not order by (callers default to text). */
+export const cursorKind = (type: string): CursorKind | undefined =>
+  type === "text"
+    ? "text"
+    : type === "bool"
+      ? "bool"
+      : type === "int4"
+        ? "int4"
+        : type === "integer" || type === "int8"
+          ? "int"
+          : parseNumeric(type)
+            ? "numeric"
+            : type === "real" || type === "float8"
+              ? "float"
+              : type === "date"
+                ? "date"
+                : type === "timestamptz"
+                  ? "timestamp"
+                  : undefined;
 
 /** A column's declared type, including the system version and timestamps. @internal */
 /** A JSON Schema `readOnly` property is server-maintained (counters, totals): Admin's generic writes never set it. */

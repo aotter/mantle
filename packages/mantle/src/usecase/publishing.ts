@@ -6,8 +6,7 @@ import { renderTerm, type Lock } from "../kernel/store-rules.js";
 import { publishedParent } from "./translations.js";
 import { entry, exportName, q } from "../domain/entry.js";
 
-import { publishingAnnotations, publishingInput, publishingTransitions } from "../domain/generated-tools.js";
-export { publishingAnnotations, publishingInput, publishingTransitions };
+import { publishingTransitions } from "../domain/generated-tools.js";
 /** The columns `publish` requires non-null, each with its declared field (a geo field is its two columns); a Store update of a published row cannot clear one (#1822). */
 export const publishRequired = (s: RuntimePlan["schemas"][string]): [column: string, field: string][] =>
   (s.schema.required ?? []).flatMap(field =>

@@ -998,39 +998,6 @@
       true
     ]
   },
-  "rest HOST_CONTRACT dryRun false": {
-    "answer": {
-      "status": 412,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "error": {
-          "code": "HOST_CONTRACT",
-          "message": "Unknown key 'dryRun'.",
-          "field": "dryRun"
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "rest:POST /api/write",
-        "targetHash": "<hash:rest:POST /api/write>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "field": "dryRun"
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
   "rest deny member write": {
     "answer": {
       "status": 403,
@@ -1677,72 +1644,6 @@
     ]
   },
   "mcp HOST_CONTRACT dryRun true (2026-07-28)": {
-    "answer": {
-      "status": 412,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "error": {
-          "code": "HOST_CONTRACT",
-          "message": "Unknown key 'dryRun'.",
-          "field": "dryRun"
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "procedure:write",
-        "targetHash": "<hash:procedure:write>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "field": "dryRun"
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp HOST_CONTRACT dryRun false": {
-    "answer": {
-      "status": 412,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "error": {
-          "code": "HOST_CONTRACT",
-          "message": "Unknown key 'dryRun'.",
-          "field": "dryRun"
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "procedure:write",
-        "targetHash": "<hash:procedure:write>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "field": "dryRun"
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "mcp HOST_CONTRACT dryRun false (2026-07-28)": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,
@@ -2727,39 +2628,6 @@
     ]
   },
   "web HOST_CONTRACT dryRun true": {
-    "answer": {
-      "status": 412,
-      "wwwAuthenticate": null,
-      "cacheControl": "private, no-store",
-      "body": {
-        "error": {
-          "code": "HOST_CONTRACT",
-          "message": "Unknown key 'dryRun'.",
-          "field": "dryRun"
-        }
-      }
-    },
-    "events": [
-      {
-        "v": 1,
-        "requestId": "request-1",
-        "target": "view:public-records",
-        "targetHash": "<hash:view:public-records>",
-        "caller": {
-          "kind": "host",
-          "subject": "host:person",
-          "layer": "admin"
-        },
-        "outcome": "error",
-        "reason": "HOST_CONTRACT",
-        "field": "dryRun"
-      }
-    ],
-    "frozen": [
-      true
-    ]
-  },
-  "web HOST_CONTRACT dryRun false": {
     "answer": {
       "status": 412,
       "wwwAuthenticate": null,

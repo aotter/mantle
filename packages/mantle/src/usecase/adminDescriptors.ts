@@ -14,23 +14,23 @@ import {
 import type { GenerateDiagnostic, GenerateInput } from "../domain/model.js";
 import { q } from "../domain/entry.js";
 import { advertised } from "./validation.js";
-import { publishingAnnotations, publishingInput, publishingTransitions } from "./publishing.js";
+import { publishingAnnotations, publishingInput, publishingTransitions } from "../domain/generated-tools.js";
 import { versioned } from "./tool-version.js";
 
 export function emitAdminDescriptors(
   { plan, admin = false }: Pick<GenerateInput, "plan" | "admin">,
   diagnostics: GenerateDiagnostic[],
 ): Record<string, string> {
-  const schemaList = Object.values(plan.schemas);
+  const schemas = Object.values(plan.schemas);
   const placed = [
-    ...schemaList.map(s => ["schemas/" + s.name, s.uiSchema, s] as const),
+    ...schemas.map(s => ["schemas/" + s.name, s.uiSchema, s] as const),
     ...Object.entries(plan.views).map(([name, v]) => ["views/" + name, v.uiSchema, null] as const),
   ];
   for (const [path, ui, s] of placed) {
     const nav = (ui?.["nav"] ?? {}) as Record<string, unknown>;
     // a child folded under its parent, or a translation on its parent's language tabs, has no sidebar entry to place;
     // `hidden: true` keeps it out of a sidebar it is not in, so it is accepted and changes nothing (#1977)
-    if (s && !isPrimaryCollection(s, schemaList))
+    if (s && !isPrimaryCollection(s, schemas))
       for (const key of ["group", "order", "hidden"])
         if (nav[key] !== undefined && !(key === "hidden" && nav[key] === true))
           diagnostics.push({
@@ -38,11 +38,10 @@ export function emitAdminDescriptors(
             path: `${path}/uiSchema/nav/${key}`,
             message: s.translates
               ? `Schema '${s.name}' has no sidebar entry to place: it is a translation, shown on its parent's language tabs.`
-              : `Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s, schemaList).parent?.parentField === "id" ? "; nav.standalone: true lists it in the sidebar." : " and opens from its parent's workbench (standalone needs a required id reference)."}`,
+              : `Schema '${s.name}' has no sidebar entry to place: it is folded under its parent${collectionOf(s, schemas).parent?.parentField === "id" ? "; nav.standalone: true lists it in the sidebar." : " and opens from its parent's workbench (standalone needs a required id reference)."}`,
           });
   }
   if (diagnostics.length) return {};
-  const schemas = Object.values(plan.schemas);
   const allCollections = Object.fromEntries(
     schemas.map(s => [
       s.name,

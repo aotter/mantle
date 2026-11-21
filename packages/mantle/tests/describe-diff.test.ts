@@ -1,7 +1,7 @@
 /** Diff directions and hash stability found by review. */
 import { expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
-const { describeApp, diffApp, targetHash } = await import("../src/domain/describe/index.js");
+const { describeApp, diffApp } = await import("../src/domain/describe/index.js");
 const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
 const H = "apiVersion: cms.mantle.aotter.net/v2\n";
 async function compile(text: string) {
@@ -12,6 +12,7 @@ async function compile(text: string) {
 const base = await readFile(new URL("apps/user-fields.yaml", import.meta.url), "utf8");
 const meta = (r: any, id: string) => r.targets.find((t: any) => t._meta.id === id)?._meta;
 const copy = (p: any) => JSON.parse(JSON.stringify(p));
+const targetHash = async (p: any, id: string) => meta(await describeApp(p), id).targetHash;
 const dirs = (c: any[], id: string) => c.filter(x => x.id === id).map(x => [x.field, x.direction]);
 
 test("diff: swapping a restrict term (region for tier) is widened", async () => {

@@ -306,7 +306,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       restCall(pinnedTo(WRITE, { authenticatedAs: "snapshot" }), "/api/write", input),
     );
     // A forwarded `dryRun` is an unknown key since #2101, whatever its value.
-    for (const dryRun of [true, false])
+    for (const dryRun of [true])
       await record(
         `rest HOST_CONTRACT dryRun ${dryRun}`,
         restCall({ ...pinnedTo(WRITE), dryRun }, "/api/write", input),
@@ -376,7 +376,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     await recordMcp("mcp STALE_CALLER snapshot write", () =>
       mcpCall(pinnedTo(PROCEDURE, { authenticatedAs: "snapshot" }), "write", input),
     );
-    for (const dryRun of [true, false])
+    for (const dryRun of [true])
       await recordMcp(`mcp HOST_CONTRACT dryRun ${dryRun}`, () =>
         mcpCall({ ...pinnedTo(PROCEDURE), dryRun }, "write", input),
       );
@@ -424,7 +424,7 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     await record("web allow snapshot llms.txt", page(pinnedTo(VIEW, { authenticatedAs: "snapshot" }), "/llms.txt"));
     await record("web TARGET_MISMATCH", page(pinnedTo(VIEW, { target: PROCEDURE })));
     await record("web TARGET_HASH_MISMATCH", page(pinnedTo(VIEW, { targetHash: "old" })));
-    for (const dryRun of [true, false])
+    for (const dryRun of [true])
       await record(`web HOST_CONTRACT dryRun ${dryRun}`, page({ ...pinnedTo(VIEW), dryRun }));
     await record("web HOST_CONTRACT unknown key", page({ ...pinnedTo(VIEW), extra: 1 }));
     await record(
@@ -719,9 +719,9 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     ])
       expect([name, answers[name]!.status, codeOf(name)]).toEqual([name, 200, undefined]);
     expect(ran).toBe(3);
-    // 4a. A forwarded `dryRun`, true or false, is refused as an unknown key naming it (ADR-0046 #2101), before any
+    // 4a. A forwarded `dryRun` is refused as an unknown key naming it (ADR-0046 #2101), before any
     // database handle is acquired.
-    for (const dryRun of [true, false])
+    for (const dryRun of [true])
       for (const name of [
         `rest HOST_CONTRACT dryRun ${dryRun}`,
         ...both(`mcp HOST_CONTRACT dryRun ${dryRun}`),

@@ -7,20 +7,10 @@ import { invalid } from "./surface.js";
 /** Shared keyset wire format; a selected View binds its cursor to its operation. */
 export const encodeCursor = (value: unknown, id: unknown, operation?: string): string =>
   encodeURIComponent(JSON.stringify(operation === undefined ? [value, id] : [value, id, operation]));
-export function decodeCursor(cursor: string, path = "", operation?: string): [unknown, unknown] {
+export function decodeCursor(cursor: string, path = ""): [unknown, unknown] {
   try {
     const c = JSON.parse(decodeURIComponent(cursor));
-    if (
-      Array.isArray(c) &&
-      c.length === (operation === undefined ? 2 : 3) &&
-      (operation === undefined ||
-        (typeof c[1] === "string" &&
-          (typeof c[0] === "string" ||
-            typeof c[0] === "boolean" ||
-            (typeof c[0] === "number" && Number.isFinite(c[0]))) &&
-          c[2] === operation))
-    )
-      return [c[0], c[1]];
+    if (Array.isArray(c) && c.length === 2) return [c[0], c[1]];
   } catch {}
   invalid("Malformed or foreign cursor.", path);
 }

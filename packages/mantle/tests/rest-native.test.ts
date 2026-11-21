@@ -1,10 +1,9 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { test, expect } from "bun:test";
 import { SQL } from "bun";
-import { mkdtemp, readFile, writeFile, rm, open } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, open } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { generateOrThrow, writeGenerated, loadFixtureSources } from "./apps/link.js";
 import { verifyRest } from "./rest-scenarios.js";
 const base = resolve(import.meta.dir, ".."),
@@ -64,7 +63,7 @@ async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") 
     const { unstable_splitSqlQuery } = await import("wrangler"),
       { dir, files } = await fixture("cloudflare-d1"),
       privateDir = await mkdtemp(join(tmpdir(), "mantle-rest-d1-"));
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       await writeFile(
         join(dir, "worker.ts"),
@@ -83,58 +82,13 @@ async function fixture(target: "bun-sqlite" | "bun-postgres" | "cloudflare-d1") 
           ],
         }),
       );
-      log = await open(join(privateDir, "wrangler.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          "8998",
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(privateDir, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let i = 0; i < 60; i++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(privateDir, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch("http://127.0.0.1:8998/health", { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      expect(ready).toBe(true);
+      const running = await startLocalD1(config, "8998", privateDir);
+      stop = running.stop;
       const response = await fetch("http://127.0.0.1:8998/verify", { signal: AbortSignal.timeout(30000) });
       expect(await response.json()).toEqual({ ok: true });
       expect(response.status).toBe(200);
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(privateDir, { recursive: true, force: true });
     }

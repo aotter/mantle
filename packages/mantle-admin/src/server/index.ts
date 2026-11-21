@@ -295,7 +295,7 @@ export function admin<Env, Database, Handlers = never>(
   };
   const runRoute = (route: Route<Env, Database>, c: Context<Env, Database>) =>
     options.authorize && route.target ? checkTarget(c, route.target(c)).then(() => route.run(c)) : route.run(c);
-  const viewPage = async (
+  const resolveView = async (
     c: Context<Env, Database>,
     preview = false,
     name = c.params.name,
@@ -313,6 +313,17 @@ export function admin<Env, Database, Handlers = never>(
     const { input: raw, ...paging } = view.query(search),
       input = { ...raw };
     convert(input, view.convert);
+    return { view, input, paging };
+  };
+  const viewPage = async (
+    c: Context<Env, Database>,
+    preview = false,
+    name = c.params.name,
+    search = c.url.searchParams,
+  ) => {
+    const resolved = await resolveView(c, preview, name, search);
+    if ("unavailable" in resolved) return resolved;
+    const { view, input, paging } = resolved;
     const page = await view.page(c.db, c.caller, input as never, paging);
     return view.row ? { ...page, rows: page.rows.map(view.row) } : page;
   };
@@ -390,16 +401,12 @@ export function admin<Env, Database, Handlers = never>(
       method: "GET",
       path: "/views/{name}/export",
       run: async c => {
-        const view = views.find(v => v.name === c.params.name && (options.authorize || v.allows(c.caller)));
-        if (view && options.authorize) deny(c.caller, view.allows(c.caller), "views/" + view.name);
-        if (!view) throw missing();
-        if (options.authorize) await checkTarget(c, { kind: "view", name: view.name });
         const params = new URLSearchParams(c.url.searchParams);
         params.delete("cursor");
         params.set("limit", "500");
-        const { input: raw, ...paging } = view.query(params),
-          input = { ...raw };
-        convert(input, view.convert);
+        const resolved = await resolveView(c, false, c.params.name, params);
+        if ("unavailable" in resolved) throw missing();
+        const { view, input, paging } = resolved;
         const descriptor = metadata.views.find(v => v.name === view.name);
         const columns = (descriptor?.list as { columns?: readonly string[] } | undefined)?.columns;
         return csv(
@@ -448,6 +455,12 @@ export function admin<Env, Database, Handlers = never>(
             path: "/developer/views/{name}",
             run: (c: Context<Env, Database>) => viewPage(c, true),
           },
+          {
+            method: "GET" as const,
+            path: "/developer-console",
+            run: (c: Context<Env, Database>) =>
+              options.authorize ? visibleMetadata(c, true).then(m => m.developerConsole) : developerConsole(),
+          },
         ]),
     {
       method: "POST",
@@ -468,16 +481,6 @@ export function admin<Env, Database, Handlers = never>(
         return { ok: true, output: resultData(output) };
       },
     },
-    ...(metadata.developerConsole === undefined
-      ? []
-      : [
-          {
-            method: "GET",
-            path: "/developer-console",
-            run: (c: Context<Env, Database>) =>
-              options.authorize ? visibleMetadata(c, true).then(m => m.developerConsole) : developerConsole(),
-          },
-        ]),
     ...(options.routes ?? []),
   ];
   const context = (

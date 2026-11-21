@@ -5,7 +5,16 @@ import { linkApps, linkSurface, resourcesOf, type McpAppsSource } from "./mcp-ap
 // ponytail: a lazy forwarder keeps the public export without pulling paging and call code into every Worker's startup graph.
 type Call = typeof import("./mcp-call.js");
 // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
-export const callTool: Call["callTool"] = async (...args) => (await import("./mcp-call.js")).callTool(...args);
+export async function callTool<Database, Handlers>(
+  tool: Tool<Database, Handlers>,
+  raw: Record<string, unknown>,
+  db: Database,
+  caller: Caller,
+  handlers: Handlers,
+  call?: ToolCall,
+): Promise<unknown> {
+  return (await import("./mcp-call.js")).callToolLazy(tool, raw, () => db, caller, handlers, call);
+}
 export const callToolLazy: Call["callToolLazy"] = async (...args) =>
   (await import("./mcp-call.js")).callToolLazy(...args);
 export type {
@@ -97,7 +106,7 @@ export type McpObservation =
           readonly code?: string;
         }
     ));
-type LocalizedText = string | Readonly<Record<string, string>>;
+import type { LocalizedText } from "./localized-schema.js";
 type Paging = { limit?: number; cursor?: string };
 /** One tool: a paged View (`page`) or a Procedure (`run`, a write), on the public or admin surface. */
 export interface Tool<Database, Handlers = never> {

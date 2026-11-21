@@ -1,3 +1,4 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { test, expect, spyOn } from "bun:test";
 import { Database } from "bun:sqlite";
 import { SQL } from "bun";
@@ -124,16 +125,14 @@ test("selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
 (process.env.MANTLE_NEXT_D1_REST ? test : test.skip)(
   "local D1 uses the same exact REST/MCP wire and one-query oracle",
   async () => {
-    const { readFile, writeFile, open } = await import("node:fs/promises"),
+    const { writeFile, open } = await import("node:fs/promises"),
       { join } = await import("node:path"),
       { tmpdir } = await import("node:os"),
-      { spawn } = await import("node:child_process"),
-      { once } = await import("node:events"),
       { unstable_splitSqlQuery } = await import("wrangler");
     const base = resolve(import.meta.dir, ".."),
       dir = await mkdtemp(join(base, "tests/apps/.wire-d1-")),
       privateDir = await mkdtemp(join(tmpdir(), "mantle-wire-d1-"));
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       const files = await generateOrThrow("cloudflare-d1", [{ sourceId: "wire.yaml", text: source }]);
       await writeGenerated(dir, files);
@@ -154,58 +153,13 @@ test("selected REST/MCP wire preserves aliases, JSON primitives/nulls and boolea
           ],
         }),
       );
-      log = await open(join(privateDir, "wrangler.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(base, "node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          "8998",
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(privateDir, "state"),
-        ],
-        {
-          cwd: base,
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let i = 0; i < 60; i++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(privateDir, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch("http://127.0.0.1:8998/health", { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      expect(ready).toBe(true);
+      const running = await startLocalD1(config, "8998", privateDir);
+      stop = running.stop;
       const response = await fetch("http://127.0.0.1:8998/verify", { signal: AbortSignal.timeout(30000) });
       expect(await response.json()).toEqual({ ok: true });
       expect(response.status).toBe(200);
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(privateDir, { recursive: true, force: true });
     }

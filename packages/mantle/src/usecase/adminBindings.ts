@@ -6,13 +6,11 @@ import type { GenerateInput } from "../domain/model.js";
 import { databaseImport, isSqlite, literal as q, driverModule } from "../domain/entry.js";
 import { conversions, authLines } from "../domain/input.js";
 import { recipesOf } from "../domain/recipes.js";
-import { boundaryType, conversion, serverOwned } from "../domain/columns.js";
+import { boundaryType, conversion, cursorKind, SCALAR, serverOwned } from "../domain/columns.js";
 import { adminOrder } from "../domain/adminOrder.js";
 import { emitValidation } from "./validation.js";
 
 type Schema = GenerateInput["plan"]["schemas"][string];
-const scalar = (type: string | undefined) =>
-  ["text", "integer", "int4", "int8", "real", "float8", "bool", "date", "timestamptz"].includes(type ?? "");
 const wire = (fields: readonly (readonly [string, string | undefined])[], sqlite: boolean): string => {
   const columns = fields.flatMap(([name, type]) => conversion(name, type, sqlite));
   const geo = fields
@@ -160,7 +158,7 @@ export function emitAdminBindings(
   for (const [n, s] of Object.values(plan.schemas).entries()) {
     const schemaPath = `schemas/${s.name}/admin`,
       declared = Object.keys(s.fields).filter(f => f !== s.scope),
-      writable = declared.filter(f => scalar(s.fields[f]) || s.fields[f] === "json");
+      writable = declared.filter(f => SCALAR.has(s.fields[f] ?? "") || s.fields[f] === "json");
     // readOnly properties are server-maintained: values() pins them to their default, and they have no Admin UPDATE.
     const server = Object.fromEntries(
       writable
@@ -202,7 +200,7 @@ export function emitAdminBindings(
       ? ""
       : `for(const key of ${q(temporal)})if(typeof data[key]==="string"&&/^0000-/.test(data[key].trim()))invalid("PostgreSQL dates require a nonzero year.",${q(schemaPath)});`;
     const coercers = Object.entries(allNames)
-      .filter(([, f]) => scalar(s.fields[f] ?? (f === "version" ? "integer" : "text")))
+      .filter(([, f]) => SCALAR.has(s.fields[f] ?? (f === "version" ? "integer" : "text")))
       .map(([name, f]) => {
         const type = s.fields[f] ?? (f === "version" ? "integer" : "text");
         const value =
@@ -342,23 +340,7 @@ export function emitAdminBindings(
       const type = [s.type].flat().find(t => t && t !== "null");
       return `if(params.has(${q("filter." + field)})&&params.get(${q("filter." + field)})!=="")filters[${q(field)}]=${type === "boolean" ? `params.get(${q("filter." + field)})==="true"?true:params.get(${q("filter." + field)})==="false"?false:invalid("Expected true or false.",${q("views/" + name)})` : ["number", "integer"].includes(type ?? "") ? `Number(params.get(${q("filter." + field)}))` : `params.get(${q("filter." + field)})!`};`;
     });
-    const cursorKinds = (input.paging?.[name]?.types ?? []).map(type =>
-      type === "bool"
-        ? "bool"
-        : type === "integer" || type === "int8"
-          ? "int"
-          : type === "int4"
-            ? "int4"
-            : type.startsWith("numeric(")
-              ? "numeric"
-              : type === "real" || type === "float8"
-                ? "float"
-                : type === "date"
-                  ? "date"
-                  : type === "timestamptz"
-                    ? "timestamp"
-                    : "text",
-    );
+    const cursorKinds = (input.paging?.[name]?.types ?? []).map(type => cursorKind(type) ?? "text");
     const modes = Object.fromEntries(
       Object.entries({ caller: pageData.caller, trusted: pageData.trusted }).map(([mode, p]) => [
         mode,

@@ -16,7 +16,6 @@ import type { BetterAuthOptions } from "@better-auth/core";
 import { APIError } from "@better-auth/core/error";
 import { getAuthTables } from "@better-auth/core/db";
 import type { OAuthOptions } from "@better-auth/oauth-provider";
-import { resourceSeeds } from "./resource-seeds.js";
 import { ContractError, type Postgres, type Unsafe } from "../kernel/contracts.js";
 import { adminOptionsOf } from "./caller.js";
 import type { Dialect } from "../kernel/dialect/common.js";
@@ -336,6 +335,16 @@ function customAdapter(
   };
 }
 
+/** Keep runtime inputs while disabling the provider's eager and bulk lazy seeding. No schema or database work. */
+// OAuth provider 1.7.7 shares plugin.options with its eager/lazy seed closures; its seedResources/checkIdentifier helpers are not exported.
+const seeds = new WeakMap<object, readonly unknown[]>();
+function resourceSeeds<T>(options: { resources?: T[] }): readonly T[] {
+  const inputs = (seeds.get(options) ?? options.resources ?? []) as readonly T[];
+  if (!seeds.has(options)) seeds.set(options, [...inputs]);
+  options.resources = [];
+  return inputs;
+}
+
 function build(
   d: Spelling,
   native: boolean,
@@ -428,14 +437,13 @@ function build(
   };
   const factory = createAdapterFactory({ config, adapter: customAdapter(d, exec, seed, false, options) });
   // Both native adapters implement joins; Better Auth otherwise emulates each joined read with another statement.
-  return (options: BetterAuthOptions) =>
-    factory({
-      ...options,
-      advanced: {
-        ...options.advanced,
-        database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true },
-      },
-    });
+  return factory({
+    ...options,
+    advanced: {
+      ...options.advanced,
+      database: { ...options.advanced?.database, joins: options.advanced?.database?.joins ?? true },
+    },
+  });
 }
 
 /** Cloudflare D1 (SQLite). D1 has no interactive transactions, so `transaction` is off and the atomic operations are single statements. */
@@ -447,8 +455,7 @@ export function d1Adapter(db: D1Like) {
       .all();
     return { rows: results, changes: meta.changes };
   };
-  const factory = (options: BetterAuthOptions) =>
-    build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false, options)(options);
+  const factory = (options: BetterAuthOptions) => build(sqlite, false, "d1", "Mantle D1 Adapter", exec, false, options);
   nativeReaders.set(factory, { exec, param: sqlite.param, now: ms => new Date(ms).toISOString() });
   return factory;
 }
@@ -469,10 +476,10 @@ export function postgresAdapter(sql: Postgres) {
       };
       return protectAdmin && handle === sql ? sql.begin("read write", tx => run(tx)) : run(handle);
     };
-  const make = (handle: Unsafe, transaction: DBAdapterFactoryConfig["transaction"]) => (options: BetterAuthOptions) =>
-    build(postgres, true, "postgres", "Mantle PostgreSQL Adapter", executor(handle), transaction, options)(options);
+  const make = (handle: Unsafe, transaction: DBAdapterFactoryConfig["transaction"], options: BetterAuthOptions) =>
+    build(postgres, true, "postgres", "Mantle PostgreSQL Adapter", executor(handle), transaction, options);
   const factory = (options: BetterAuthOptions) =>
-    make(sql, async cb => sql.begin("read write", tx => cb(make(tx, false)(options))))(options);
+    make(sql, async cb => sql.begin("read write", tx => cb(make(tx, false, options))), options);
   nativeReaders.set(factory, { exec: executor(sql), param: postgres.param, now: postgres.now });
   return factory;
 }

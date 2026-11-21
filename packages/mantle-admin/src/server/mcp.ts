@@ -1,5 +1,5 @@
 /** The Admin App is an ordinary contributor to the SDK's public MCP Apps hook. */
-import { insertAppHead } from "../app-head.js";
+import { insertAppHead, catalogueScript } from "../app-head.js";
 import { ContractError } from "@aotter/mantle/contracts";
 import { declaredMeta } from "../app/declared-meta.js";
 import type {
@@ -11,6 +11,7 @@ import type {
   NormalMcpApps,
 } from "@aotter/mantle/mcp";
 import type { MediaStorage } from "@aotter/mantle/site";
+const APP_URI = /^ui:\/\/mantle-admin\/[^\s?#]+$/;
 /** An archived resources/read page, including its embedded catalogue; application-owned, never caller rows or credentials. */
 export interface AdminMcpSnapshot extends McpAppPage, Pick<McpAppResource, "prefersBorder" | "meta"> {
   readonly uri: string;
@@ -134,7 +135,7 @@ export type AdminMcpAppsLoader = (context: Pick<McpAppRender, "env" | "request">
 export function adminMcpApps(options: AdminMcpOptions & { readonly uri: string }): NormalMcpApps;
 export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcpAppsLoader;
 export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcpAppsLoader {
-  if (options.uri !== undefined && !/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(options.uri))
+  if (options.uri !== undefined && !APP_URI.test(options.uri))
     throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
   const views = options.renders ?? Object.keys(options.catalogue.views);
   for (const view of views)
@@ -145,13 +146,8 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
         "mcp/apps",
       );
   const renders = options.tools?.length ? [...new Set([...views, ...options.tools])] : views;
-  const embed = (html: string, render: McpAppRender, catalogue = options.catalogue) => {
-    const script =
-      '<script type="application/json" id="mantle-catalog">' +
-      JSON.stringify(visibleCatalogue(catalogue, render.tools)).replace(/</g, "\\u003c") +
-      "</script>";
-    return insertAppHead(html, script);
-  };
+  const embed = (html: string, render: McpAppRender, catalogue = options.catalogue) =>
+    insertAppHead(html, catalogueScript(visibleCatalogue(catalogue, render.tools)));
   const previousUris = new Set<string>();
   const previous = (options.previous ?? []).map((snapshot, index): NormalMcpAppResource => {
     const script = /<script type="application\/json" id="mantle-catalog">([\s\S]*?)<\/script>/;
@@ -161,12 +157,7 @@ export function adminMcpApps(options: AdminMcpOptions): NormalMcpApps | AdminMcp
       catalogue = found ? JSON.parse(found[1]!) : undefined;
     } catch {}
     const object = (value: unknown) => value !== null && typeof value === "object" && !Array.isArray(value);
-    if (
-      !/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(snapshot.uri) ||
-      !catalogue ||
-      !object(catalogue.views) ||
-      !object(catalogue.actions)
-    )
+    if (!APP_URI.test(snapshot.uri) || !catalogue || !object(catalogue.views) || !object(catalogue.actions))
       throw new ContractError(
         "INPUT_VALIDATION_FAILED",
         "A retained Admin App needs its original ui://mantle-admin/… URI and embedded catalogue from resources/read.",
@@ -328,7 +319,7 @@ export function mediaUploadCard<Env = never>(options: MediaUploadCardOptions<Env
     tool === "open_media_upload" && !forward.length
       ? ""
       : `<script type="application/json" id="mantle-upload-config">${JSON.stringify({ tool, forward, inputTimeoutMs }).replace(/</g, "\\u003c")}</script>`;
-  if (!/^ui:\/\/mantle-admin\/[^\s?#]+$/.test(uri))
+  if (!APP_URI.test(uri))
     throw new ContractError("INPUT_VALIDATION_FAILED", "Admin App resources use ui://mantle-admin/….", "mcp/apps");
   return {
     resources: [

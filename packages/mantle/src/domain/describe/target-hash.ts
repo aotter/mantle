@@ -1,5 +1,5 @@
 import type { RuntimePlan } from "../../build/compiler.js";
-import { targetDefinitions, type TargetDefinition } from "./targets.js";
+import type { TargetDefinition } from "./targets.js";
 
 import { canonical } from "../../build/spec/domain/service/PlanFingerprint.js";
 export { canonical };
@@ -25,10 +25,4 @@ export function hashDefinition(plan: RuntimePlan, d: TargetDefinition): Promise<
     ...(d.nativeDatabase ? { nativeDatabase: true } : {}),
     trustedOnly: d.trustedOnly,
   });
-}
-/** Opt-in runtime export. No compiler, parser, database or Node API is loaded. */
-export async function targetHash(plan: RuntimePlan, targetId: string): Promise<string> {
-  const target = targetDefinitions(plan).find(d => d.id === targetId);
-  if (!target) throw new TypeError(`Unknown target '${targetId}'.`);
-  return hashDefinition(plan, target);
 }

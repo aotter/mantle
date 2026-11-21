@@ -20,6 +20,7 @@ import { refChecks } from "../../domain/service/SqlRowPolicy.js";
 import { fieldTypes as typesOf } from "../../domain/service/SqlTypes.js";
 import {
   AGGREGATES,
+  starCols,
   NATIVE_COLUMNS,
   NATIVE_NOT_NULL,
   notNullColumns,
@@ -41,6 +42,7 @@ import { compileSql, relationNames, statementCount, type SqlDialect } from "./co
 import { parseRestrict, parseRowTemplate, type UserFieldSpec, type UserScope } from "../../domain/model/UserFields.js";
 import { registerUserField } from "../../domain/service/UserReferences.js";
 import { SqlRefusal } from "../../domain/service/SqlRefusal.js";
+import { outName } from "../../../core/sql/run.js";
 import { protectedColumns } from "../../domain/service/SqlRowPolicy.js";
 
 export type CompilePlanResult =
@@ -51,26 +53,24 @@ export type CompilePlanResult =
 const indexColumn = (field: string) =>
   Object.hasOwn(NATIVE_COLUMNS, field) ? NATIVE_COLUMNS[field]! : field.toLowerCase();
 
+const atSource = (source: SourceLocation, pointer: string) => ({
+  path: `${source.sourceId}#/${source.documentIndex}${pointer}`,
+  source: { ...source, path: pointer },
+});
+
 function toDiagnostic(d: SqlDiagnostic, source: SourceLocation, pointer: string): Diagnostic {
   const at =
     d.line === undefined ? undefined : { line: d.line, column: d.column, ...(d.token ? { token: d.token } : {}) };
   return validateDiagnostic({
     code: d.code,
     severity: "error",
-    path: `${source.sourceId}#/${source.documentIndex}${pointer}`,
-    source: { ...source, path: pointer },
+    ...atSource(source, pointer),
     ...(at ? { value: at } : {}),
     message: at
       ? `SQL ${at.line}:${at.column}${at.token ? ` near ${JSON.stringify(at.token)}` : ""}: ${d.message}`
       : d.message,
   });
 }
-
-/** What `SELECT *` expands to (the policy's `starCols`): the declared fields but the scope field, a geo field as its two columns. */
-const starCols = (s: PlanSchema) =>
-  Object.entries(s.fields)
-    .filter(([f]) => f !== s.scope)
-    .flatMap(([f, t]) => (t === "geo" ? [`${f}_lat`, `${f}_lng`] : [f]));
 
 type Columns = Record<string, { schema: string; field: string }>;
 
@@ -284,9 +284,7 @@ export function tableOutputs(
         };
     } else if (node.RangeSubselect && !node.RangeSubselect.lateral && !node.RangeSubselect.alias?.colnames?.length) {
       const inner = node.RangeSubselect.subquery?.SelectStmt;
-      const outs = (inner?.targetList ?? []).filter(
-        (t: SqlNode) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name,
-      );
+      const outs = (inner?.targetList ?? []).filter((t: SqlNode) => outName(t) === name);
       found = outs.length === 1 ? typed(inner, outs[0].ResTarget.val) : undefined;
     }
     return found && { type: found.type, notNull: found.notNull && !nullable };
@@ -438,6 +436,12 @@ export async function compileLinkedPlan(
     else diagnostics.push(toDiagnostic(d, source, pointer));
   };
 
+  const whereOf = (name: string, text: string) =>
+    compileSql(
+      `SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`,
+      { schemas, inputs: {}, kind: "view" },
+      dialect,
+    );
   // a check is compiled as the WHERE of a read of its own Schema, so its columns resolve against that Schema
   for (const { manifest: m, source } of linked.schemas) {
     const name = m.metadata.name.toLowerCase();
@@ -456,11 +460,7 @@ export async function compileLinkedPlan(
     const checks: SqlNode[] = [];
     for (const [i, text] of (m.spec.checks ?? []).entries()) {
       const pointer = `/spec/checks/${i}`;
-      const res = await compileSql(
-        `SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${text}`,
-        { schemas, inputs: {}, kind: "view" },
-        dialect,
-      );
+      const res = await whereOf(name, text);
       if (!res.ok) {
         diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
         continue;
@@ -486,11 +486,7 @@ export async function compileLinkedPlan(
       locks: NonNullable<PlanSchema["locks"]>[number][] = [];
     for (const [i, lock] of (m.spec.lock ?? []).entries()) {
       const pointer = `/spec/lock/${i}/when`;
-      const res = await compileSql(
-        `SELECT 1 FROM "${name.replace(/"/g, '""')}" WHERE ${lock.when}`,
-        { schemas, inputs: {}, kind: "view" },
-        dialect,
-      );
+      const res = await whereOf(name, lock.when);
       if (!res.ok) {
         diagnostics.push(toDiagnostic(res.diagnostic, source, pointer));
         continue;
@@ -518,8 +514,7 @@ export async function compileLinkedPlan(
           validateDiagnostic({
             code: "LOCK_INDEX_MISSING",
             severity: "error",
-            path: `${source.sourceId}#/${source.documentIndex}${pointer}`,
-            source: { ...source, path: pointer },
+            ...atSource(source, pointer),
             message: `Schema '${m.metadata.name}' lock '${lock.name}': no index serves its EXISTS on '${target}', which every guarded write runs. ${columns.length ? `Declare indexes: [[${columns.join(", ")}]] on Schema '${target}'` : unindexed.or ? "OR is not index-proven: split it into separate locks, each with an equality on an indexed column" : `Correlate the subquery to the locked row by an equality on one of '${target}''s columns (e.g. ${target}.<field> = ${name}.id), then index that column`} (handbook: reference/schema.md#locks).`,
           }),
         );
@@ -619,8 +614,7 @@ export async function compileLinkedPlan(
         validateDiagnostic({
           code: "VIEW_CACHE_INVALID",
           severity: "error",
-          path: `${source.sourceId}#/${source.documentIndex}/spec/cache`,
-          source: { ...source, path: "/spec/cache" },
+          ...atSource(source, "/spec/cache"),
           message: `View '${v.metadata.name}': ${cacheProblem}.`,
         }),
       );
@@ -635,8 +629,7 @@ export async function compileLinkedPlan(
           validateDiagnostic({
             code: "VIEW_UI_INVALID",
             severity: "error",
-            path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/${key}/${i}`,
-            source: { ...source, path: `/spec/uiSchema/list/${key}/${i}` },
+            ...atSource(source, `/spec/uiSchema/list/${key}/${i}`),
             value: f,
             expected: `one of the View's outputs: ${outputs.keys.join(", ")}`,
             message: `View '${v.metadata.name}' uiSchema.list.${key} names '${f}', which the View's SELECT does not output.`,
@@ -654,8 +647,7 @@ export async function compileLinkedPlan(
         validateDiagnostic({
           code: "VIEW_UI_INVALID",
           severity: "error",
-          path: `${source.sourceId}#/${source.documentIndex}/spec/uiSchema/list/columns/${i}`,
-          source: { ...source, path: `/spec/uiSchema/list/columns/${i}` },
+          ...atSource(source, `/spec/uiSchema/list/columns/${i}`),
           value: f,
           expected: `one of the View's outputs: ${wire.join(", ")}`,
           message: folded
@@ -782,8 +774,7 @@ export async function compileLinkedPlan(
         validateDiagnostic({
           code: "SQL_SHAPE",
           severity: "error",
-          path: `${source.sourceId}#/${source.documentIndex}${at}`,
-          source: { ...source, path: at },
+          ...atSource(source, at),
           value: step.onNoRows,
           message: `Procedure '${p.metadata.name}' handler.steps[${i}].onNoRows applies to a set-op write; this step is a row op (one-row INSERT … VALUES, or UPDATE/DELETE with WHERE id = …), which already must change exactly one row.`,
         }),
@@ -1047,7 +1038,7 @@ export async function compileLinkedPlan(
       views,
       procedures,
       triggers,
-      ...(Object.keys(userFields).length ? { access: { roles: [], userFields, warnings } } : {}),
+      ...(Object.keys(userFields).length ? { access: { userFields, warnings } } : {}),
     },
   };
 }

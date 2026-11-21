@@ -3,7 +3,7 @@ import { readFile, mkdtemp, rm, writeFile, readdir } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describeApp, diffApp, targetHash } from "../dist/domain/describe/index.js";
+import { describeApp, diffApp } from "../dist/domain/describe/index.js";
 import { compilePlan, d1Dialect, type RuntimePlan } from "../src/build/compiler.js";
 import { mediaDefinitions } from "../src/domain/generated-tools.js";
 
@@ -16,6 +16,7 @@ async function fixture(): Promise<RuntimePlan> {
 const target = (report: Awaited<ReturnType<typeof describeApp>>, id: string) =>
   report.targets.find(t => t._meta.id === id)!._meta;
 const copy = (plan: RuntimePlan) => JSON.parse(JSON.stringify(plan));
+const targetHash = async (plan: RuntimePlan, id: string) => target(await describeApp(plan), id).targetHash;
 
 test("describe retains built-in media tool metadata and real descriptions", async () => {
   const report = await describeApp(await fixture());
@@ -54,7 +55,6 @@ test("hash is stable and binds restrictions, scope, input, requirements and SQL 
     id = "view:regional-orders",
     h = await targetHash(plan, id);
   expect(await targetHash(copy(plan), id)).toBe(h);
-  expect(target(await describeApp(plan), id).targetHash).toBe(h);
   const mutations = [
     (p: any) => {
       p.views["regional-orders"].restrict.orders.terms[0].field = "other";
@@ -77,7 +77,7 @@ test("hash is stable and binds restrictions, scope, input, requirements and SQL 
     mutate(p);
     expect(await targetHash(p, id)).not.toBe(h);
   }
-  await expect(targetHash(plan, "view:missing")).rejects.toThrow("Unknown target");
+  expect((await describeApp(plan)).targets.some(t => t._meta.id === "view:missing")).toBe(false);
 });
 
 test("readOnly is derived from nested IR and refuses ref-handler claims", async () => {
@@ -454,9 +454,12 @@ test("target hashes normalize optional lowering away for all targets", async () 
     views: { "regional-orders": { caller: { sql: "cached", binds: [] } } },
     procedures: { "rename-order": { caller: [{ sql: "cached", binds: [] }] } },
   };
-  const report = await describeApp(a);
-  for (const t of report.targets) expect(await targetHash(a, t._meta.id)).toBe(await targetHash(b, t._meta.id));
-  expect(diffApp(report, await describeApp(b))).toEqual([]);
+  const report = await describeApp(a),
+    other = await describeApp(b);
+  expect(report.targets.map(t => [t._meta.id, t._meta.targetHash])).toEqual(
+    other.targets.map(t => [t._meta.id, t._meta.targetHash]),
+  );
+  expect(diffApp(report, other)).toEqual([]);
 });
 
 test("a dispatcher reports widening in one variant even when aggregate flags stay unchanged", async () => {

@@ -1,7 +1,7 @@
 /**
  * The shared front end (ADR-0035 decision 4): SQL text to IR. The parser reads the text and every relation is tagged;
  * the dialect's `accepts` runs on the raw AST (so a refusal has a source offset); then locations are stripped.
- * The dialect is D1 unless the caller passes another (`mantle.config.json`'s `dialect`, ADR-0035 decision 5). Nothing in a Worker imports this module.
+ * The caller selects the dialect; D1 is the default (ADR-0035 decision 5).
  */
 import type { SqlContext, SqlDiagnostic, SqlNode, SqlPlan } from "../../domain/model/SqlIr.js";
 import { PG_GRAMMAR } from "../../domain/model/SqlIr.js";

@@ -83,9 +83,7 @@ function notNullIn(schemas: RunEnv["schemas"], sel: N, qual: string | undefined,
   }
   const sub = node.RangeSubselect;
   if (!sub || sub.alias?.colnames?.length || sub.lateral) return false;
-  const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter(
-    (t: N) => (t.ResTarget.name ?? t.ResTarget.val?.ColumnRef?.fields?.at(-1)?.String?.sval) === name,
-  );
+  const outs = (sub.subquery.SelectStmt?.targetList ?? []).filter((t: N) => outName(t) === name);
   const f = outs.length === 1 ? outs[0].ResTarget.val?.ColumnRef?.fields : undefined;
   if (!f || f.length > 2 || f.some((x: N) => !x.String)) return false;
   return notNullIn(
@@ -115,14 +113,6 @@ function rowComparable(env: Pick<RunEnv, "dialect">, keys: readonly N[], notNull
   });
 }
 
-/**
- * Keyset pagination over a View. The sort keys (the author's plus the compiler's appended id or group key)
- * become hidden `_k<i>` columns; the cursor is the last row's keys and the next page filters on them. A NULL key
- * sorts by the dialect's own NULLS rule (stated on every key, so the cursor and the order agree).
- *
- * A View's own LIMIT bounds every page together. A View without ORDER BY (a DISTINCT, a GROUP BY or an aggregate) cannot
- * be paged: it returns its rows when they fit one page and is refused when they do not.
- */
 /** Where a paged statement's extra bind comes from on a later request: a cursor key, the search pattern, an equality value, or the page size + 1 (the LIMIT is a bind, so one statement serves every page size). */
 export type Source =
   | { readonly cursor: number }
@@ -156,20 +146,19 @@ export function pageShape(nkeys: number, cursor: readonly unknown[] | undefined,
   return JSON.stringify([cursorShape, search?.columns ?? null, (match?.eq ?? []).map(e => e.column)]);
 }
 
-/** The paged statement for one request shape (see `runView`): the View wrapped with its cursor condition, search and equality filters. */
+/** The paged statement for one request shape: the View wrapped with its cursor condition, search and equality filters. */
 export function pagedOf(
   env: Pick<RunEnv, "schemas" | "dialect">,
   c: Compiled,
   cursor: readonly unknown[] | undefined,
   match: ViewMatch | undefined,
 ): Paged {
-  const opts = { cursor, match };
   const sel = structuredClone(c.ast.SelectStmt) as N;
   const keys: N[] = sel.sortClause ?? [];
-  if (opts.cursor && !keys.length)
+  if (cursor && !keys.length)
     throw refuse("SQL_SHAPE: this View has no ORDER BY, so it is one page and takes no cursor");
   const visible: (string | undefined)[] = sel.targetList.map(outName);
-  if (!keys.length && !opts.match?.search?.text && !opts.match?.eq?.length) {
+  if (!keys.length && !match?.search?.text && !match?.eq?.length) {
     // nothing to wrap: the View's own statement, one row past the page to tell whether it fits
     return {
       ast: {
@@ -225,8 +214,8 @@ export function pagedOf(
   const col = (n: string): N => ref("_p", n);
   const isNull = (n: N, t: "IS_NULL" | "IS_NOT_NULL"): N => ({ NullTest: { arg: n, nulltesttype: t } });
   const conditions: N[] = [];
-  if (opts.cursor) {
-    const cur = opts.cursor;
+  if (cursor) {
+    const cur = cursor;
     const notNull = hidden.map(h => {
       const f = h.ResTarget.val?.ColumnRef?.fields;
       return (
@@ -280,7 +269,7 @@ export function pagedOf(
   // an output by the name SQL gave it: an unquoted alias or column folds to lower case
   const output = (name: string) =>
     names.find(n => n === name) ?? names.find(n => n === name.toLowerCase()) ?? refuseOutput(name);
-  const search = opts.match?.search;
+  const search = match?.search;
   if (search?.text) {
     conditions.push({
       BoolExpr: {
@@ -302,7 +291,7 @@ export function pagedOf(
       },
     });
   }
-  (opts.match?.eq ?? []).forEach(({ column }, k) => conditions.push(op("=", col(output(column)), param({ eq: k }))));
+  (match?.eq ?? []).forEach(({ column }, k) => conditions.push(op("=", col(output(column)), param({ eq: k }))));
   const limitCount = param({ limit: true }); // last, so it follows every other extra bind
   const outer: N = {
     SelectStmt: {

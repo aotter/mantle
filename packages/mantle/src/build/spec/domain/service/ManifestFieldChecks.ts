@@ -85,10 +85,6 @@ export function validateLocalizedText(
  * Diagnostics emitted here are intentionally narrow: bad envelope or
  * structurally malformed shipped grammar.
  *
- * The canonical API withholds its value when any document fails. The legacy
- * `{ manifests, diagnostics }` adapter below therefore returns no manifests
- * on failure rather than exposing a partial graph.
- *
  * Each caller-owned source may contain multiple YAML documents separated by
  * `---`; source identities and document indexes remain intact.
  */
@@ -96,9 +92,7 @@ export function validateLocalizedText(
 /**
  * Throwable carrier used by the envelope-shape validators below
  * (`validateEnvelope`, kind-specific `validate*Spec`). Each throw
- * carries a JSON Pointer + diagnostic code; the top-level
- * The source parser catches the throw and converts it to a Diagnostic
- * for the public `{ manifests, diagnostics }` return shape.
+ * carries a JSON Pointer and diagnostic code. The source parser converts it to a Diagnostic.
  */
 export class ManifestParseError extends Error {
   constructor(

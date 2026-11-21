@@ -1,12 +1,5 @@
-/**
- * Mantle SQL's allowlist (ADR-0034 decisions 2 and 3, ADR-0037 decision 1): one walker and two profiles. `base` is what every
- * dialect runs (D1 runs exactly this); `reference` is base plus ADR-0037 decision 2, and the PostgreSQL dialect runs it.
- * Shared by the CLI (run on the raw AST, so a refusal carries a source offset) and by the runtime (run on the stripped IR of
- * every program). An unknown node type, key or enum value is refused, never skipped: a printer that skipped keys would
- * silently drop OFFSET or FOR UPDATE.
- *
- * Pure JavaScript. This file must never import the parser: the runtime imports it, and the parser
- * declares a 128 MiB WASM memory, which is a Worker's whole isolate limit.
+/** Build-time SQL allowlist: one walker with base (SQLite) and reference (PostgreSQL) profiles.
+ * Unknown nodes, keys and enum values are refused, never silently omitted by the printer.
  */
 import type {
   SchemaColumns,
@@ -17,7 +10,7 @@ import type {
   SqlPlan,
   SqlSchemaDef,
 } from "../../spec/domain/model/SqlIr.js";
-import { PG_GRAMMAR } from "../../spec/domain/model/SqlIr.js";
+import { PG_GRAMMAR, AGGREGATES } from "../../spec/domain/model/SqlIr.js";
 import { SqlRefusal } from "../../spec/domain/service/SqlRefusal.js";
 import { intervalMicros, parseNumeric } from "../../spec/domain/service/SqlTypes.js";
 
@@ -235,7 +228,8 @@ export const FUNCS = new Set([
 const WINDOW = new Set(["row_number", "rank", "sum", "count"]);
 /** functions that exist only with OVER */
 const WINDOW_ONLY = new Set(["row_number", "rank", "dense_rank", "lag", "lead", "first_value", "last_value"]);
-const AGG = new Set(["count", "sum", "min", "max", "avg", "json_group_array", "json_group_object"]);
+const MORE_AGG = ["string_agg", "jsonb_agg", "jsonb_object_agg"];
+const AGG = new Set([...AGGREGATES].filter(name => !MORE_AGG.includes(name)));
 export const TRUNC_UNITS = new Set(["hour", "day", "week", "month", "year"]);
 export const EXTRACT_FIELDS = new Set(["year", "month", "day", "dow", "hour"]);
 const CAST_TYPES = new Set(["text", "int4", "int8", "float8", "bool", "timestamptz", "date", "numeric", "interval"]);
@@ -275,9 +269,8 @@ const BASE_PROFILE: Profile = {
 
 // ---- ADR-0037 decision 2: the reference profile's additions --------------------------------------------------------------
 const MORE_KEYS: Record<string, string> = {
-  SelectStmt: "withClause larg rarg all",
+  SelectStmt: "larg rarg all",
   WithClause: "ctes recursive",
-  CommonTableExpr: "ctename ctequery aliascolnames ctematerialized",
   RangeSubselect: "lateral",
   RangeFunction: "ordinality",
   Alias: "colnames",
@@ -293,7 +286,6 @@ const MORE_ENUM: Record<string, (string | number | boolean)[]> = {
 };
 const MORE_OPS = ["->", "#>", "#>>", "@>", "<@", "?", "?|", "?&", "~", "~*", "!~", "!~*", "~~*", "!~~*"];
 const MORE_WINDOW = ["avg", "min", "max", "lag", "lead", "first_value", "last_value", "dense_rank"];
-const MORE_AGG = ["string_agg", "jsonb_agg", "jsonb_object_agg"];
 const MORE_FUNCS = [
   ...MORE_WINDOW,
   ...MORE_AGG,
@@ -329,7 +321,7 @@ const REFERENCE_PROFILE: Profile = {
   ops: union(OPS, MORE_OPS),
   funcs: union(FUNCS, MORE_FUNCS),
   window: union(WINDOW, MORE_WINDOW),
-  agg: union(AGG, MORE_AGG),
+  agg: AGGREGATES,
   trunc: union(TRUNC_UNITS, ["minute", "quarter"]),
   extract: union(EXTRACT_FIELDS, ["minute", "quarter", "week", "isoyear", "isodow", "doy", "epoch"]),
   casts: union(CAST_TYPES, ["jsonb"]),
@@ -372,7 +364,6 @@ function no(code: Code, message: string, offset?: number, keyword?: RegExp): nev
 
 /** structural refusals name a key or an enum value; these find the keyword in the source text (the AST carries no location for them) */
 const KEYWORD: Record<string, RegExp> = {
-  "SelectStmt.withClause": /\bWITH\b/i,
   "InsertStmt.withClause": /\bWITH\b/i,
   "UpdateStmt.withClause": /\bWITH\b/i,
   "DeleteStmt.withClause": /\bWITH\b/i,

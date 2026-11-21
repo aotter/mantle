@@ -1,8 +1,7 @@
 /** Compile the media tool inputs once; the generated module binds the existing site. */
 import type { JsonSchema } from "../build/compiler.js";
 import { emitValidation } from "./validation.js";
-import { mediaDefinitions } from "../domain/generated-tools.js";
-export { mediaDefinitions };
+import type { mediaDefinitions } from "../domain/generated-tools.js";
 
 const library = "site(db,caller).media(storage())";
 const invoke = {

@@ -126,7 +126,7 @@ export function checkMcpApp(
   html: string,
   csp: McpCsp | undefined,
   sources: readonly Source[],
-  { libraries = [] }: { readonly libraries?: readonly string[] } = {},
+  { libraries }: { readonly libraries: readonly string[] },
 ): { readonly errors: string[]; readonly warnings: string[] } {
   const library = (module: string | undefined) => !!module && libraries.some(dir => module.startsWith(dir));
   const same = (a: Hit, b: Hit) => a.rule === b.rule && (a.rule !== "remote" || (b as typeof a).url === a.url);

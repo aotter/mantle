@@ -1,9 +1,8 @@
+import { startLocalD1 } from "./apps/local-d1.js";
 import { test, expect } from "bun:test";
-import { mkdtemp, rm, writeFile, readFile, open } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, open } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { loadFixtureSources, writeGenerated } from "./apps/link.js";
 (process.env.MANTLE_NEXT_SITE_D1 ? test : test.skip)(
@@ -11,7 +10,7 @@ import { loadFixtureSources, writeGenerated } from "./apps/link.js";
   async () => {
     const dir = await mkdtemp(join(import.meta.dir, "apps/.site-d1-")),
       state = await mkdtemp(join(tmpdir(), "mantle-site-d1-"));
-    let worker: ReturnType<typeof spawn> | undefined, log: Awaited<ReturnType<typeof open>> | undefined;
+    let stop: (() => Promise<void>) | undefined;
     try {
       const generated = await generateFromSources({
         target: "cloudflare-d1",
@@ -43,46 +42,8 @@ import { loadFixtureSources, writeGenerated } from "./apps/link.js";
           ],
         }),
       );
-      log = await open(join(state, "wrangler.log"), "w");
-      worker = spawn(
-        "node",
-        [
-          join(import.meta.dir, "../node_modules/wrangler/bin/wrangler.js"),
-          "dev",
-          "--local",
-          "--config",
-          config,
-          "--ip",
-          "127.0.0.1",
-          "--port",
-          "9001",
-          "--inspector-port",
-          "0",
-          "--persist-to",
-          join(state, "state"),
-        ],
-        {
-          cwd: join(import.meta.dir, ".."),
-          detached: true,
-          env: {
-            ...process.env,
-            WRANGLER_SEND_METRICS: "false",
-            NO_PROXY: "127.0.0.1,localhost",
-            no_proxy: "127.0.0.1,localhost",
-          },
-          stdio: ["ignore", log.fd, log.fd],
-        },
-      );
-      let ready = false;
-      for (let i = 0; i < 60; i++) {
-        if (worker.exitCode !== null) throw Error(await readFile(join(state, "wrangler.log"), "utf8"));
-        try {
-          ready = (await fetch("http://127.0.0.1:9001/health", { signal: AbortSignal.timeout(1000) })).ok;
-        } catch {}
-        if (ready) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-      expect(ready).toBe(true);
+      const running = await startLocalD1(config, "9001", state);
+      stop = running.stop;
       const response = await fetch("http://127.0.0.1:9001/verify");
       expect(await response.json()).toEqual({
         title: "Durable D1",
@@ -95,14 +56,7 @@ import { loadFixtureSources, writeGenerated } from "./apps/link.js";
       });
       expect(response.status).toBe(200);
     } finally {
-      if (worker && worker.exitCode === null) {
-        const ended = once(worker, "exit");
-        try {
-          process.kill(-worker.pid!, "SIGTERM");
-        } catch {}
-        await ended;
-      }
-      await log?.close();
+      await stop?.();
       await rm(dir, { recursive: true, force: true });
       await rm(state, { recursive: true, force: true });
     }

@@ -135,7 +135,7 @@ const NATIVE: Record<string, string> = {
  * the browser's `/admin/api` transport is not reachable, and the result is checked (`checkMcpApp`): a build that a host would
  * break fails here, naming the module.
  */
-async function buildMcpApp(entry: string | undefined, outDir: string, explicitEntry = false): Promise<void> {
+async function buildMcpApp(entry: string | undefined, outDir: string, explicitEntry: boolean): Promise<void> {
   const [{ build, normalizePath }, { viteSingleFile }] = await Promise.all([
     import("vite"),
     import("vite-plugin-singlefile"),

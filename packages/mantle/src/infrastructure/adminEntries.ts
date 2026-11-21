@@ -4,8 +4,8 @@ import type { MantleDialect } from "../build/compiler.js";
 import { parsePgSql } from "../build/compiler.js";
 import { compileProgram } from "../build/compiler.js";
 import { adminOrder } from "../domain/adminOrder.js";
-import { declaredType, serverOwned } from "../domain/columns.js";
-import { wireScalars, wireReturning } from "../domain/wireScalars.js";
+import { declaredType, SCALAR, serverOwned } from "../domain/columns.js";
+import { printExpression, wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
@@ -31,6 +31,19 @@ const fields = (s: Schema) =>
   Object.keys(s.fields)
     .filter(f => f !== s.scope)
     .flatMap(f => (s.fields[f] === "geo" ? [f + "_lat", f + "_lng"] : [f]));
+/** A name not in `used` (case-insensitively), then reserved there: `base` with `_` appended until free. */
+const fresh = (used: Set<string>, base: string) => {
+  let name = base;
+  while (used.has(name.toLowerCase())) name += "_";
+  used.add(name.toLowerCase());
+  return name;
+};
+/** A parameter number from 32767 up that the authored text does not contain, so the printed marker cannot collide. */
+export const freeMarker = (text: string) => {
+  let marker = 32767;
+  while (text.includes(String(marker))) marker++;
+  return marker;
+};
 export async function adminEntries(
   plan: RuntimePlan,
   dialect: MantleDialect,
@@ -40,8 +53,7 @@ export async function adminEntries(
   const result: Record<string, unknown> = Object.create(null),
     postgres = !!dialect.nativeOrder;
   const tableNames = new Set(Object.keys(plan.schemas).map(name => name.toLowerCase()));
-  let rowsName = "_mantle_admin_rows";
-  while (tableNames.has(rowsName.toLowerCase())) rowsName += "_";
+  const rowsName = fresh(tableNames, "_mantle_admin_rows");
   const rowsAlias = { name: rowsName, sql: wire.ident(rowsName) };
   const parse = async (sql: string) => {
     const { stmts } = await parsePgSql(sql);
@@ -54,23 +66,14 @@ export async function adminEntries(
     return stmts;
   };
   const print = (ast: SqlNode) => dialect.print!(ast, plan.schemas);
-  const expr = (value: SqlNode) =>
-    print({
-      SelectStmt: {
-        targetList: [{ ResTarget: { val: value } }],
-        op: "SETOP_NONE",
-        limitOption: "LIMIT_OPTION_DEFAULT",
-      },
-    }).replace(/^SELECT /, "");
+  const expr = (value: SqlNode) => printExpression(dialect, value, plan.schemas);
   for (const s of Object.values(plan.schemas))
     try {
       const columns = [...system(s), ...fields(s)],
         writable = Object.keys(s.fields).filter(f => f !== s.scope && s.fields[f] !== "geo");
       const parent = s.translates && plan.schemas[s.translates.parent.toLowerCase()];
       const types = columns.map(
-        f =>
-          declaredType(s.fields, f) ??
-          (f === "version" ? "integer" : f.endsWith("_lat") || f.endsWith("_lng") ? "real" : "text"),
+        f => declaredType(s.fields, f) ?? (f.endsWith("_lat") || f.endsWith("_lng") ? "real" : "text"),
       );
       // Compiler scope names belong only to relations this generated query can reference.
       const schemas: Record<string, Schema> = Object.create(null);
@@ -130,23 +133,17 @@ export async function adminEntries(
         if (typeof projected === "string") throw Error(projected);
         return projected;
       };
-      let marker = 32767;
-      const authored = JSON.stringify([plan.schemas, s]);
-      while (authored.includes(String(marker))) marker++;
+      const marker = freeMarker(JSON.stringify([plan.schemas, s]));
       const markerText = wire.param(marker);
       const usedNames = new Set([...columns, ...(parent ? fields(parent) : [])].map(name => name.toLowerCase()));
       const cursorAliases = [0, 1].map(i => {
-        let name = "_mantle_admin_key" + i;
-        while (usedNames.has(name.toLowerCase())) name += "_";
-        usedNames.add(name.toLowerCase());
+        const name = fresh(usedNames, "_mantle_admin_key" + i);
         return { name, sql: wire.ident(name) };
       });
       // #1822: per verb, the first lock that holds for the row as the probe reads it (NULL holds), else NULL; caller reads only
       const lockColumns = s.locks?.length
         ? (["update", "delete"] as const).map(verb => {
-            let name = "_mantle_admin_lock_" + verb;
-            while (usedNames.has(name.toLowerCase())) name += "_";
-            usedNames.add(name.toLowerCase());
+            const name = fresh(usedNames, "_mantle_admin_lock_" + verb);
             const qualify = (n: unknown): void => {
               if (!n || typeof n !== "object") return;
               const f = (n as SqlNode).ColumnRef?.fields;
@@ -179,9 +176,8 @@ export async function adminEntries(
       const ordered = adminOrder(s),
         fieldFacts: Record<string, unknown> = Object.create(null);
       for (const column of [...system(s), ...writable]) {
-        const type = declaredType(s.fields, column) ?? (column === "version" ? "integer" : "text");
-        if (!["text", "integer", "int4", "int8", "real", "float8", "bool", "date", "timestamptz"].includes(type))
-          continue;
+        const type = declaredType(s.fields, column) ?? "text";
+        if (!SCALAR.has(type)) continue;
         const expression = wire.ident(s.name) + "." + wire.ident(column),
           [kind, nullable] = (Object.hasOwn(ordered, column) ? ordered[column] : undefined) ?? [];
         fieldFacts[column] = {
