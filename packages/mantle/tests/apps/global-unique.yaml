@@ -1,0 +1,103 @@
+# The manifest in docs/handbook/reference/schema.md#a-value-unique-across-all-owners, plus REST Triggers for the tests.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: domains }
+spec:
+  title: Domains
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, hostname]]
+  indexes: [[owner, hostname, id]]
+  schema:
+    type: object
+    required: [owner, hostname]
+    properties:
+      owner: { type: string }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: hostnames }
+spec:
+  title: Hostname registry
+  lifecycle: operational
+  uniqueIndexes: [[hostname], [domainId]]
+  schema:
+    type: object
+    required: [hostname, domainId]
+    properties:
+      hostname: { type: string, maxLength: 253 }
+      domainId: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: claim-hostname }
+spec:
+  description: Add a hostname. Refused (409) when anyone already holds it.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [hostname]
+    properties:
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO domains (hostname) VALUES (input.hostname) RETURNING id;
+      INSERT INTO hostnames (hostname, domainId) SELECT d.hostname, d.id FROM domains d WHERE d.hostname = input.hostname
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rename-hostname }
+spec:
+  description: Change a domain's hostname at the version you read. Refused (409) when anyone holds the new one.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, hostname]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE hostnames SET hostname = input.hostname
+        WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id AND d.version = input.expectedVersion);
+      UPDATE domains SET hostname = input.hostname WHERE id = input.id AND version = input.expectedVersion
+        RETURNING id, version
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: release-hostname }
+spec:
+  description: Remove a domain and free its hostname for anyone.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      DELETE FROM hostnames WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id);
+      DELETE FROM domains WHERE id = input.id RETURNING id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: claim-hostname-http }
+spec: { source: { kind: http, method: POST, path: /api/domains }, target: { procedure: claim-hostname } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: rename-hostname-http }
+spec: { source: { kind: http, method: POST, path: /api/domains/rename }, target: { procedure: rename-hostname } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: release-hostname-http }
+spec: { source: { kind: http, method: POST, path: /api/domains/release }, target: { procedure: release-hostname } }

@@ -1,5 +1,5 @@
 ---
-description: Eight SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses.
+description: SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses; also retries by operation id, and how a handler answers 429.
 ---
 # SQL patterns
 
@@ -343,3 +343,91 @@ spec:
       FROM orders o
     ) x WHERE x.n = 1 ORDER BY x.productId
 ```
+
+## Retry safely: the row is the replay record
+
+A client that timed out sends the same create again, with the same `operationId`. Mantle keeps no idempotency table
+and adds no write to every call (ADR-0040 §2–3); the business row is the
+record. `uniqueIndexes: [[owner, operationId]]` makes the id unique per caller (a scoped Schema's unique index starts
+with its scope column), and the insert's conflict branch decides the retry in the same statement:
+
+- The first request inserts and returns the new invoice.
+- The same request again matches the stored row in the `DO UPDATE … WHERE`, so it returns that row: the same `id`.
+- The same `operationId` with other values matches nothing; the statement returns no row and `onNoRows: conflict`
+  makes it `CONFLICT` (409) with `kind: "row"` and `step: "replay"`. Another caller's `operationId` is its own.
+- Two first requests at once: PostgreSQL makes the second wait on the unique index until the first commits, then takes
+  the conflict branch, so both get the same `id` and one row exists. D1 and SQLite run writes one at a time.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: invoices }
+spec:
+  title: Invoices
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, operationId]]
+  indexes: [[owner, createdAt]]
+  schema:
+    type: object
+    required: [owner, operationId, customer, amount]
+    properties:
+      owner: { type: string }
+      operationId: { type: string, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-invoice }
+spec:
+  description: Create an invoice. Sending the same operationId again returns the same invoice; reusing it for a different invoice is refused (409).
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [operationId, customer, amount]
+    properties:
+      operationId: { type: string, minLength: 1, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    steps:
+      - name: replay
+        sql: |
+          INSERT INTO invoices (operationId, customer, amount) VALUES (input.operationId, input.customer, input.amount)
+            ON CONFLICT (operationId) DO UPDATE SET amount = invoices.amount
+              WHERE invoices.customer = excluded.customer AND invoices.amount = excluded.amount
+            RETURNING id, amount
+        onNoRows: conflict
+```
+
+The conflict branch is an UPDATE, so a replay raises the row's `version` and `updated_at` and changes nothing else. The
+`WHERE` compares the stored columns, which here hold the whole request. A Procedure cannot `SELECT`, so a pure
+read-back without that update needs a ref handler.
+
+## Per-caller quotas: a handler answers 429
+
+A quota that counts the caller's own rows ("at most 20 transfers an hour") is decided in the Procedure that writes the
+next row; Core keeps no counter table. A ref handler refuses with a `ContractError` that carries `status: 429` and
+`fields: { retryAfter }`:
+
+```ts
+import { ContractError } from "@aotter/mantle/contracts";
+
+throw new ContractError("RATE_LIMITED", "At most 20 transfers an hour.", "procedures/send-transfer", {
+  status: 429,
+  fields: { retryAfter: 3600 },
+});
+```
+
+- REST answers HTTP 429 with `{ "error": { "code", "message", "path", "retryAfter" } }`.
+- MCP answers the `tools/call` with an error result (`isError: true`) whose text is
+  `{ "diagnostics": [{ "code", "message", "path", "retryAfter" }] }`.
+
+A handler cannot set response headers: an application that sends `Retry-After` adds it in its route, from the error
+body. The same error thrown from `authorize` becomes 403 `AUTH_DENIED` and loses `retryAfter`
+([limits and authorize](../reference/authorization.md#limits-and-authorize)). Limits on the request rate itself (per
+client address or credential, before any database work) belong to the platform, in the application's route before the
+generated surface.

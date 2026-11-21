@@ -208,7 +208,9 @@ only the desired generated `sweepExpired` entry in `scheduled()`, pass a system
 Caller with a reason, and choose an application-owned page budget for each
 invocation; see the [TTL contract](../guides/native-execution.md#ttl-maintenance). Configure `triggers.crons` yourself;
 `toCloudflareCron` converts POSIX schedules without adding a dispatcher. Keep
-larger sweeps' cursors for a later invocation instead of scanning without a bound.
+larger sweeps' cursors for a later invocation instead of scanning without a bound. A checked cron map, a `scheduled()`
+that reports each job, and the test that keeps `triggers.crons` equal to the map are in
+[scheduled work](deploy-and-operate.md#scheduled-work).
 
 On Bun, reuse a process-owned `Database` or `SQL` pool and call the same generated
 surfaces from `Bun.serve({fetch})`. Bun runs the server as TypeScript, so

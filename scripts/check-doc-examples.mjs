@@ -20,6 +20,8 @@ const HANDBOOK = [
   "guides/revisions.md",
   "cloudflare/postgres-hyperdrive.md",
   "cloudflare/sign-in-methods.md",
+  "cloudflare/deploy-and-operate.md",
+  "guides/migrations.md",
 ];
 const requested = process.argv.slice(2).map(path => resolve(path));
 const nativePages = requested.length ? requested : HANDBOOK.map(page => join(root, "docs/handbook", page));
@@ -40,6 +42,8 @@ for (const page of nativePages) {
     symlinkSync(nativeSdk, join(project, "node_modules/@aotter/mantle"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/better-auth"), join(project, "node_modules/better-auth"), "dir");
     symlinkSync(join(nativeSdk, "node_modules/postgres"), join(project, "node_modules/postgres"), "dir");
+    // An application pins wrangler; a test may read its wrangler.jsonc with `unstable_readConfig`.
+    symlinkSync(join(nativeSdk, "node_modules/wrangler"), join(project, "node_modules/wrangler"), "dir");
     mkdirSync(join(project, "node_modules/@types"), { recursive: true });
     symlinkSync(join(nativeSdk, "node_modules/@types/node"), join(project, "node_modules/@types/node"), "dir");
     symlinkSync(

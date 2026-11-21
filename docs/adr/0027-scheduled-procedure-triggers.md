@@ -2,7 +2,8 @@
 
 **Status:** Accepted for 0.1.5 (#1087). Revises the closed Trigger-source grammar from ADR-0001 and the host-only cron guidance of #322. Cron dialect and host requirement amended by [ADR-0032](0032-store-centric-core-and-service-contract.md). Superseded for 0.2.0 by the native Core handbook (#1566); see the amendment below.
 
-> **Amended 2026-10-19.** No ADR records the 0.2.0 decision; the 0.2.0 native
+> **Amended 2026-10-19.** No ADR recorded the 0.2.0 decision (since recorded in
+> [ADR-lite #2111](adr-lite-2111-scheduling-is-application-owned.md)); the 0.2.0 native
 > Core handbook (#1566) superseded this one. Mantle is no longer the schedule
 > host: `mantle generate` rejects every `schedule` Trigger source, including
 > disabled ones, and every `lifecycle` source with `GENERATE_UNSUPPORTED`, so

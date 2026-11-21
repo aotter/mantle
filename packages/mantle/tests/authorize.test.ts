@@ -324,3 +324,97 @@ test("generated MCP authorizes calls and filters lists using requires and manife
       message: "Target is not authorized.",
     });
   }));
+
+test("a handler's 429 keeps its status and retryAfter; from authorize it is 403 AUTH_DENIED; handlers' own calls skip authorize", async () =>
+  fixture(async (dir, db) => {
+    const { rest } = await import(join(dir, "rest.ts"));
+    const { mcp } = await import(join(dir, "mcp.ts"));
+    const limited = () =>
+      new ContractError("RATE_LIMITED", "Too many notes.", "procedures/echo-notes", {
+        status: 429,
+        fields: { retryAfter: 60 },
+      });
+    const viaRest = async (options: object) => {
+      const response = (await rest({ db: () => db, caller: () => admin, ...options })(
+        new Request("https://app.test/api/echo", { method: "POST", body: "{}" }),
+        {},
+      ))!;
+      return { status: response.status, retryAfter: response.headers.get("retry-after"), body: await response.json() };
+    };
+    const viaMcp = async (options: object, method = "tools/call") => {
+      const response = await mcp({ db: () => db, caller: () => admin, ...options })(
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method,
+              params: method === "tools/call" ? { name: "echo_notes", arguments: {} } : {},
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
+        {},
+      );
+      const text = await response.text();
+      return {
+        status: response.status,
+        data: JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text),
+      };
+    };
+    const error = { code: "RATE_LIMITED", message: "Too many notes.", path: "procedures/echo-notes", retryAfter: 60 };
+
+    // From a ref handler: REST answers 429 with retryAfter in the body and sets no header; MCP an error result.
+    const throwing = {
+      handlers: {
+        "echo-notes": () => {
+          throw limited();
+        },
+      },
+    };
+    expect(await viaRest(throwing)).toEqual({ status: 429, retryAfter: null, body: { error } });
+    const tool = await viaMcp(throwing);
+    expect([tool.data.result.isError, JSON.parse(tool.data.result.content[0].text)]).toEqual([
+      true,
+      { diagnostics: [error] },
+    ]);
+
+    // From authorize: 403 AUTH_DENIED with the generic message, retryAfter dropped, on REST and MCP.
+    const refusing = {
+      handlers: { "echo-notes": () => ({ ok: true }) },
+      authorize: async () => Promise.reject(limited()),
+    };
+    const denied = { code: "AUTH_DENIED", message: "Target is not authorized.", path: "procedure/echo-notes" };
+    expect(await viaRest(refusing)).toEqual({ status: 403, retryAfter: null, body: { error: denied } });
+    const refused = await viaMcp(refusing);
+    expect([refused.status, refused.data.error]).toEqual([403, denied]);
+
+    // An AUTH_DENIED ContractError keeps its message on REST too.
+    const reason = new ContractError("AUTH_DENIED", "Only a manager may call echo-notes.", "procedure/echo-notes");
+    expect(await viaRest({ handlers: {}, authorize: async () => Promise.reject(reason) })).toEqual({
+      status: 403,
+      retryAfter: null,
+      body: { error: { code: "AUTH_DENIED", message: reason.message, path: "procedure/echo-notes" } },
+    });
+
+    // A View the handler calls through its store is application code: authorize, which refuses that View, is not asked.
+    const seen: Target[] = [];
+    const nested = await viaRest({
+      handlers: { "echo-notes": async ({ store }: any) => ({ notes: (await store.views["list-notes"]({})).length }) },
+      authorize: (target: Target) => {
+        seen.push(target);
+        return target.name !== "list-notes";
+      },
+    });
+    expect([nested.status, nested.body, seen]).toEqual([
+      200,
+      { notes: 0 },
+      [{ kind: "procedure", name: "echo-notes" }],
+    ]);
+
+    // tools/list asks authorize once per tool.
+    seen.length = 0;
+    await viaMcp({ handlers: {}, authorize: (target: Target) => seen.push(target) > 0 }, "tools/list");
+    expect(seen.map(target => target.name)).toEqual(["list-notes", "open-notes", "echo-notes"]);
+  }));

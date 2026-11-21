@@ -19,13 +19,40 @@ requires:
 
 Selected REST, MCP and Admin boundaries accept an optional `authorize(target, caller)` callback. `Target`, exported by `@aotter/mantle/contracts`, contains `kind` (`view`, `procedure` or `schema`) and the manifest `name`; Admin generic entry routes also supply `action` (`read`, `create`, `update` or `delete`). The callback runs after credentials and `requires` pass, before execution and row policy. A false result or rejected promise returns `AUTH_DENIED` (HTTP 403); a rejection with an `AUTH_DENIED` `ContractError` keeps its message (for example the role that may call the target), and a synchronous exception is an internal error. MCP tool lists and Admin navigation metadata hide denied targets. Omitting the callback preserves existing behavior; direct generated typed functions do not invoke it.
 
-An impersonated session exposes `caller.impersonatedBy`, the real actor’s subject, only on the original branded Caller; applications decide impersonation policy in `authorize(target, caller)`.
+An impersonated session exposes `caller.impersonatedBy`, the real actor’s subject, only on the original branded Caller; applications decide impersonation policy in `authorize(target, caller)` ([caller conditions](#caller-conditions)).
 
 All predicates must hold. Anonymous/system callers satisfy none of these predicates. Without `requires`, the invocation is ungated, while Schema row policy still applies. A Caller from the application's own credential (`resolveCredential`, an API key or personal token) is the exception: generated REST, MCP and web surfaces admit it only to a target whose `requires` names a `ctx.auth.scope`, and refuse it elsewhere with `AUTH_DENIED`, ungated targets included. Role lists such as `{ ctx.admin: [editor] }` are refused: decide per-target roles in application code. Role names match `^[a-z][a-zA-Z0-9_-]{0,62}$`; an invalid name in a verified user's role fails identity resolution and names the role. Better Auth’s admin plugin `adminRoles` (trimmed, default `["admin"]`) and `adminUserIds` determine the admin layer; Mantle has no role setting of its own.
 
-`requires` accepts only `auth`; a `requires.guard` fails validation with `INVALID_MANIFEST_ENVELOPE`. Implement custom checks in app-owned handlers before executing queries. Generated TypeScript does not validate arbitrary external input; selected boundaries validate inputs, and direct callers must do so themselves.
+`requires` accepts only `auth`; a `requires.guard` fails validation with `INVALID_MANIFEST_ENVELOPE`. Implement custom checks in app-owned handlers before executing queries, or for every target at once in `authorize` ([caller conditions](#caller-conditions); why `requires` stays closed: [Core's boundary](../concepts/core-boundary.md)). Generated TypeScript does not validate arbitrary external input; selected boundaries validate inputs, and direct callers must do so themselves.
 
 Predicate failure is `UNAUTHENTICATED` for a non-user or `AUTH_DENIED` for a user. Scope, TTL and publishing independently limit rows; see [authorization](../concepts/authorization.md).
+
+## Caller conditions
+
+"Not while impersonating", "only with a verified email" and "only after a recent sign-in" are facts of the identity
+system, which Core cannot verify for a gateway caller, so `requires` stays closed (ADR-0002) and the Caller gains no
+fields for them (ADR-lite #1937). The application decides them in the `authorize(target, caller)` it passes to `rest`,
+`mcp`, `web` and `admin` (`Authorize` from `@aotter/mantle/contracts`; `true` allows).
+
+- **What it receives.** The target's `kind` (`view`, `procedure` or `schema`), its manifest `name` and, on Admin's
+  generic entry routes, `action`. On the Caller: `kind`, `subject`, `impersonatedBy` (the real actor, only on the
+  original Caller of an impersonated session), `credential` and `credentialId` (for a session, the session id).
+- **Where it runs.** On the selected REST, MCP, web and Admin boundaries, after credentials and `requires`, before any
+  database handle. A generated function called directly (`run(db, caller, input)`, or a View or Procedure a handler
+  calls through its `store`) does not run it: that is application code, trusted like the callback.
+- **A refusal.** REST answers 403 `{ "error": { "code": "AUTH_DENIED", "message", "path" } }`; MCP answers the
+  `tools/call` with HTTP 403 and the same `error`. A rejection with an `AUTH_DENIED` `ContractError` keeps its message;
+  any other refusal reads `Target is not authorized.`
+- **Cost.** For `tools/list`, MCP calls it once per tool to leave out what the caller may not call (unless
+  `discovery: "all"`), so keep it cheap.
+- **Gateway callers** carry no identity record, whether `kind: "host"` (admin layer) or `kind: "user"` (member
+  layer): gateway mode never resolves the application's own Caller. The host checks such conditions before it forwards.
+
+### Limits and authorize
+
+A `ContractError` with `status: 429` thrown from `authorize` reaches REST and MCP as 403 `AUTH_DENIED` and loses its
+`retryAfter`. Refuse with 429 from a ref handler instead, and limit request rates in the application's route:
+[a handler answers 429](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429).
 
 ## User fields
 
@@ -36,7 +63,7 @@ A user field is a value the identity provider verified on the user, such as `reg
 
 Values come from the verified Better Auth user record. Declare stored fields with `input: false` in `user.additionalFields`, or produce derived fields through `customSession`. Session, OAuth and service credentials read roles, bans and stored fields from the same current database user record; customSession-only fields are refused on OAuth/service paths with `AUTH_CONFIGURATION_ERROR`. `input: false` protects only public endpoints. Anyone permitted to update users can change row-access field values through the admin API; control that authority with Better Auth access control (`user:update`, and `user:set-role` for roles). Store `{ all: true }` in a `json` additional field. Pass the generated `userFields` constant as `resolveCaller(request, auth, { fields: userFields })`.
 
-SQL cannot reference caller values: `auth.user()` fails with `USER_REF_SCOPE_ONLY`, and `auth.hasRole()` / `auth.role()` with `AUTH_ROLE_REMOVED`. Names are literals; Better Auth core fields and names beginning `mantle` are reserved.
+SQL cannot reference caller values: `auth.user()` fails with `USER_REF_SCOPE_ONLY`, and `auth.hasRole()` / `auth.role()` with `AUTH_ROLE_REMOVED`. Put the term in a `scope` or `restrict` instead; memberships and roles reach them as user fields, never as reads of an auth plugin's tables ([organization members](#organization-members-and-invitations)). Names are literals; Better Auth core fields and names beginning `mantle` are reserved.
 
 Values come from the original frozen Caller, which holds identity in a private WeakMap. Anonymous and copied/unbranded callers have no roles or user fields. Values are validated and frozen: finite numbers, integers when the field scopes an `integer` column; strings of 1–256 UTF-8 bytes without NUL or lone surrogates; arrays of at most 64 items with duplicates removed, only for multi-valued fields. `{ all: true }` is the typed "every value" state of one field; storing it requires a Better Auth additional field of type `json`. Unknown user fields are discarded. A missing or empty value is refused before SQL runs (`UNAUTHENTICATED` for anonymous callers, otherwise `AUTH_DENIED`); it never matches every row. Inside a restrict OR-clause it instead matches no row for that term, so the clause's other terms decide ([creator or organization owner](#creator-or-organization-owner)); a host caller's field that the host did not forward at all is still refused there (`HOST_CONTRACT`, 412), and only a forwarded empty array matches no row. Never mint verified users from request data. Resolve credentials before constructing an identity, and pass the original Caller to generated operations.
 
@@ -80,6 +107,22 @@ await store(db, caller).collection("documents").insert({ org, title });
 - Put the same `restrict` on the update and delete Procedures: their `UPDATE`/`DELETE` then change only rows the caller may see, and `org` and `author_id` can never be `SET` through them.
 - A paged View needs an index on its ordered columns (`[title, id]` here): an OR fixes no index prefix ([index prefixes](schema.md#index-prefixes-for-paged-views)).
 - The example is the `documents` part of the SDK's user-fields test application, run on all four targets.
+
+### Organization members and invitations
+
+View SQL reads declared Schemas only, never an auth plugin's tables: those tables belong to one plugin, and an
+application behind a gateway has none (ADR-0046). Memberships and roles reach row policy as verified user fields the
+application maintains, such as `orgIds`. An application that needs a listing with paging, `describe`, REST and MCP
+keeps its own declared Schema scoped by that field (`scope: "orgId IN auth.user('orgIds')"`). Keeping the field and
+any such Schema current is the application's job, and it must cover every way a membership can end in its identity
+system: not every such change necessarily fires a plugin hook.
+
+What Core does with the field:
+
+- `resolveCaller(request, auth, { fields: userFields })` reads it from the current user record on every request, for
+  session, OAuth and the application's own credentials alike, so a changed value applies from the next request.
+- A missing or empty value is refused before SQL runs: `AUTH_DENIED` (403), `UNAUTHENTICATED` for an anonymous caller.
+- A multi-valued field accepts at most 64 values; more fail building the Caller with `USER_FIELD_INVALID` (400).
 
 ## Gateway mode
 

@@ -64,7 +64,10 @@ scope.
    - An interactive part on a public page (save, add to cart) or an interactive area (a cart, a dashboard, a planner):
      the same page's "When to choose something else" says which shape fits and what an app beside the pages must keep.
 4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`. Write app code in the
-   order of [Write the least code](#write-the-least-code).
+   order of [Write the least code](#write-the-least-code). When a manifest cannot say what the brief needs, or
+   generation refuses a declaration, read [what Core does, and what it does not](../concepts/core-boundary.md)
+   (`mantle help core-boundary`) before working around Mantle or proposing a change to it: most such limits are the
+   app's to solve, with a documented pattern.
 5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
    signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing
    the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
@@ -122,6 +125,8 @@ these in the final report. Never cut input validation, authorization, or handlin
 
 | Task | Read |
 | --- | --- |
+| Change the manifests of an app whose database has data | `pnpm generate`, then write the migration yourself from `git diff -- generated/schema.sql` and apply it before deploying: [schema migrations](../guides/migrations.md#write-a-migration) (`mantle help migrations`). Mantle ships no migration tool. |
+| Something seems missing from Mantle | [What Core does, and what it does not](../concepts/core-boundary.md): the pattern to use instead, or what a request to Core must contain |
 | Upgrade Mantle | [Upgrade an application](../releases/index.md#upgrade-an-application) |
 | Deploy, only when the user asks | [Before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy): sign-in method, Cloudflare account, `wrangler login`, database and secrets, with the user at each step |
 | A slow page, first request or query | [Performance pass](../guides/performance.md) |
