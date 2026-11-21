@@ -103,9 +103,7 @@ export type WebOptions<Database, E> = {
   gateway?: Gateway;
   fields?: UserFields;
   authorize?: Authorize;
-  onAccess?: GatewayOptions["onAccess"];
-  accessTargets?: GatewayOptions["accessTargets"];
-};
+} & Pick<GatewayOptions, "onAccess" | "accessTargets">;
 export function web<Database, E>(
   options: WebOptions<Database, E>,
   table: readonly (readonly [string, View<Database>])[],
