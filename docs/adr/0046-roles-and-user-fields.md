@@ -116,19 +116,31 @@ restrict: { orders: "owner = auth.uid()" }
   - **Version rule.** `v` stays `1`. A `v: 1` host that never sent `dryRun` is unaffected: the same props are accepted
     and answered as before. A host that sends `dryRun`, with any value (`true` and `false` alike), gets 412
     `HOST_CONTRACT`: `hostCaller` refuses unknown top-level keys, and `dryRun` is now one. The refusal names the key
-    (message `Unknown key 'dryRun'.`, `field: "dryRun"`), as it now does for any unknown key, after the shape, version
-    and tenant checks; a `v` other than `1` is still refused as malformed first. `false` is refused too: accepting it
+    (message `Unknown key 'dryRun'.`, `field: "dryRun"`), as it now does for any unknown key that is an identifier of
+    at most 32 characters (`/^[A-Za-z_][A-Za-z0-9_]{0,31}$/`); any other unknown key is refused with the generic
+    "Malformed host contract or tenant mismatch." and no `field`, so a key is never echoed unbounded into the response
+    or the access event. This check runs after the shape, version and tenant checks; a `v` other than `1` is still
+    refused as malformed first. `false` is refused too: accepting it
     would keep a key in the contract that means nothing.
   - **Why no `v` bump.** The evolution rule ("input props evolve only by bumping `v`, never by adding an optional key")
     keeps a host from sending a key that a Core refuses without the version telling it so. Removing a key that no host
     sends leaves no such host: before this amendment the maintainer checked that the hosting service sends no
     `dryRun`. A bump would instead make every v1 host change its props for nothing. The host-contract fixture changes
     with this amendment, as it did for #2050.
-  - **Removed with it.** The dry-run answers (`{ dryRun: true, event }` on REST and web, the same as MCP structured
-    content), the `DRY_RUN_UNSUPPORTED` code, the access event's `dryRun` field (it is always absent now; a listener
-    that read it as a boolean reads `undefined`, which was `false` for every host), and the parts of the generated
-    gateway metadata that only decided dry runs (an access target's `opaque` and `variants`, a native route's
-    `variant` and `prepare`).
+  - **Removed with it.** Each item is a Migration line of the removing PR:
+    - the dry-run answers: `{ dryRun: true, event }` on REST and web, the same as MCP `structuredContent`;
+    - the `DRY_RUN_UNSUPPORTED` code (412);
+    - `HostProps.dryRun` (`@aotter/mantle/host-caller`) and `Caller.dryRun` (`@aotter/mantle/contracts`);
+    - the access event's `dryRun` field (`AccessEvent.dryRun`; it is always absent now: a listener that read it as a
+      boolean reads `undefined`, which was `false` for every host);
+    - the generated gateway metadata that only decided dry runs: `AccessTarget.opaque` and `AccessTarget.variants`
+      (`@aotter/mantle/contracts`; generated `access-targets.ts` carries `targetHash` only);
+    - `Route.variant` and `Route.prepare` of `nativeRest` (`@aotter/mantle/rest`);
+    - `Pipeline.dryRun`, `dryRunResult()` and `dryRunResponse()` on the pipeline a `Send` receives
+      (`@aotter/mantle/rest`);
+    - Admin's `Route.prepare` (`@aotter/mantle-admin/server`);
+    - `callToolLazy`'s positional `dryRun` parameter (`@aotter/mantle/mcp`): `call` moves from the seventh argument to
+      the sixth, so an untyped caller that passed `undefined, call` drops the `undefined`.
   - **What a host uses instead.** An access preview ("who gains or loses which targets") is computed from the plan
     and `mantle describe` (`describeApp`: targets, target hashes, scope and `restrict` terms, and the diff between two
     plans) before anything is called; it sends no request. A host that needs "would this one call be allowed" is the
