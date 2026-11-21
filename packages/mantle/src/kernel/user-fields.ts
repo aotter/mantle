@@ -87,7 +87,8 @@ export const userBinds =
         `This target restricts rows by '${recipe.field}', which needs explicit values; { all: true } does not lift a restrict.`,
       );
     const values = value === undefined ? [] : Array.isArray(value) ? value : [value];
-    if (!values.length) missing(caller, recipe.field);
+    // In a restrict OR-clause an empty set is false (not NULL), so the clause's other terms decide.
+    if (!values.length && !(recipe.any && caller.kind !== "anonymous")) missing(caller, recipe.field);
     return sqlite ? JSON.stringify(values) : pgArray(values);
   };
 export const userRefs = (sqlite: boolean, version: number) => {

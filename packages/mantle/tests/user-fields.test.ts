@@ -553,7 +553,8 @@ test("caller references are refused in SQL and restrict is validated", async () 
     { orders: "missing IN auth.user('region')" },
     { orders: "region = auth.user('region')" },
     { orders: "region = auth.uid()" },
-    { orders: "region IN auth.user('region') OR tier IN auth.user('tier')" },
+    { orders: "region IN auth.user('region') OR tier = auth.user('tier')" },
+    { orders: "(region IN auth.user('region') OR tier IN auth.user('tier')" },
   ])
     await expect(
       generateOrThrow("bun-sqlite", [

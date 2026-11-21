@@ -20,6 +20,8 @@ export type RowValue =
       readonly multiple: boolean;
       readonly type: "string" | "number";
       readonly scope?: true;
+      /** A term of a restrict OR-clause (#2105): a missing or empty value binds an empty set, so the other terms decide. */
+      readonly any?: true;
     };
 /** `eq`: `column = value`. `ttl`: `column IS NULL OR column > value`. `admin`: published, or the bound caller holds the admin layer. */
 export type RowTerm =
@@ -46,12 +48,14 @@ export function protectedColumns(s: RowSchema, restrict?: PlanRestrict[string]):
     ...(s.userScopes ?? []).map(u => u.column),
     ...(restrict?.owner ? [restrict.owner] : []),
     ...(restrict?.terms ?? []).map(u => u.column),
+    ...(restrict?.or ?? []).flat().map(t => ("owner" in t ? t.owner : t.column)),
   ];
 }
 /** `swappable`: a Schema scope term, which `{ all: true }` drops at run time; a target's restrict term is never swappable. */
 export function userScopeTerm(
   scope: UserScope,
   swappable = false,
+  any = false,
 ): Extract<RowTerm, readonly [string, "in", ...unknown[]]> {
   return [
     scope.column,
@@ -62,8 +66,18 @@ export function userScopeTerm(
       type: scope.type,
       multiple: true,
       ...(swappable ? { scope: true as const } : {}),
+      ...(any ? { any: true as const } : {}),
     },
   ];
+}
+/** A target's restrict on one Schema as row terms: its single terms, then one list per OR-clause (#2105). */
+export function restrictTerms(r: PlanRestrict[string]): { all: RowTerm[]; any: RowTerm[][] } {
+  return {
+    all: [...(r.owner ? [[r.owner, "eq", { k: "uid" }] as const] : []), ...r.terms.map(u => userScopeTerm(u))],
+    any: (r.or ?? []).map(clause =>
+      clause.map(t => ("owner" in t ? ([t.owner, "eq", { k: "uid" }] as const) : userScopeTerm(t, false, true))),
+    ),
+  };
 }
 /**
  * An `x-mantle-ref` column whose target Schema is scoped (ADR-0034 §8). A caller's write of a non-null value must name a row

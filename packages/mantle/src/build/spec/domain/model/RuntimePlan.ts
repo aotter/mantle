@@ -47,8 +47,23 @@ export interface PlanSchema {
   readonly indexes?: readonly (readonly string[])[];
 }
 
-/** A target's extra row terms per Schema (`restrict`): AND-ed onto that Schema's scope, never dropped by `{ all: true }`. */
-export type PlanRestrict = Readonly<Record<string, { readonly owner?: string; readonly terms: readonly UserScope[] }>>;
+/** A term of a restrict clause: `owner = auth.uid()` or `column IN auth.user(field)`. */
+export type RestrictTerm = { readonly owner: string } | UserScope;
+/**
+ * A target's extra row terms per Schema (`restrict`): AND-ed onto that Schema's scope, never dropped by `{ all: true }`.
+ * `owner` and `terms` are the single-term clauses; each `or` entry is a clause of two or more terms of which one must hold
+ * (ADR-0046, #2105). Every reader of the conjunction reads `or` too.
+ */
+export type PlanRestrict = Readonly<
+  Record<
+    string,
+    {
+      readonly owner?: string;
+      readonly terms: readonly UserScope[];
+      readonly or?: readonly (readonly RestrictTerm[])[];
+    }
+  >
+>;
 export interface PlanView extends SqlPlan {
   readonly restrict?: PlanRestrict;
   readonly title?: LocalizedText;

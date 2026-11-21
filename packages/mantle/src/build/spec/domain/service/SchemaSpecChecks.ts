@@ -19,7 +19,7 @@ import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
 import { MAX_TTL_SECONDS, isTtlSeconds } from "./SqlTypes.js";
-import { parseRowTemplate } from "../model/UserFields.js";
+import { parseRestrict, parseRowTemplate } from "../model/UserFields.js";
 
 export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
@@ -126,7 +126,16 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   if (s["scope"] !== undefined) {
     const template = parseRowTemplate(s["scope"]);
     if (typeof template === "string")
-      throw new ManifestParseError(`Schema.spec.scope: ${template}`, idx, "/spec/scope");
+      throw new ManifestParseError(
+        `Schema.spec.scope: ${
+          // OR would break insert auto-fill, never-SET scoped columns and partitioned uniqueness (ADR-0046, #2105).
+          typeof parseRestrict(s["scope"]) === "object"
+            ? "scope is AND-only; OR and parentheses are accepted only in a View or Procedure restrict"
+            : template
+        }`,
+        idx,
+        "/spec/scope",
+      );
     const columns = [...(template.owner ? [template.owner] : []), ...template.terms.map(t => t.column)];
     for (const field of columns) {
       const property =

@@ -81,7 +81,18 @@ function mergeRestrict(policies: PlanRestrict[], conjunctive: boolean): PlanRest
         t => conjunctive || rows.every(p => p.terms.some(v => canonical(v) === canonical(t))),
       );
       const owner = rows.find(p => p.owner)?.owner;
-      return [schema, { ...(owner && (conjunctive || rows.every(p => p.owner === owner)) ? { owner } : {}), terms }];
+      // OR-clauses (#2105) are conjuncts like terms: a target keeps them all, a route only those of every variant.
+      const or = [...new Map(rows.flatMap(p => p.or ?? []).map(c => [canonical(c), c])).values()].filter(
+        c => conjunctive || rows.every(p => p.or?.some(v => canonical(v) === canonical(c))),
+      );
+      return [
+        schema,
+        {
+          ...(owner && (conjunctive || rows.every(p => p.owner === owner)) ? { owner } : {}),
+          terms,
+          ...(or.length ? { or } : {}),
+        },
+      ];
     }),
   );
 }

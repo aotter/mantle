@@ -8,8 +8,8 @@ import {
   classify,
   protectedColumns,
   refChecks,
+  restrictTerms,
   rowPolicy,
-  userScopeTerm,
   writePolicy,
   type RowMode as Mode,
   type LockTerm,
@@ -31,7 +31,7 @@ export type BindSpec =
   | { k: "const"; value: unknown }
   | { k: "input"; name: string; type: string }
   | { k: "scoped"; column: string; field: string; type: "string" | "number"; name?: string; value?: string | number }
-  | { k: "user"; field: string; type: "string" | "number"; multiple: boolean; scope?: true }
+  | { k: "user"; field: string; type: "string" | "number"; multiple: boolean; scope?: true; any?: true }
   | DialectBind
   | { k: "version" }
   | { k: "cursor"; i: number };
@@ -271,10 +271,11 @@ function probe(c: C, rel: N, a: string, where: N | undefined, locks: readonly Lo
 /** Where a Schema's visibility rule is rendered (`rowPolicy` spells it). `a` is the alias (or table) the predicate reads through. */
 function visible(s: SchemaDef, a: string, c: C, table?: string): N | undefined {
   const r = table !== undefined && c.mode !== "trusted" ? c.restrict?.[table.toLowerCase()] : undefined;
-  const extra: RowTerm[] = r
-    ? [...(r.owner ? [[r.owner, "eq", { k: "uid" }] as const] : []), ...r.terms.map(u => userScopeTerm(u))]
-    : [];
-  return and(...[...rowPolicy(s, c.mode, c.schemas), ...extra].map(t => term(c, a, t)));
+  const extra = r ? restrictTerms(r) : { all: [], any: [] };
+  return and(
+    ...[...rowPolicy(s, c.mode, c.schemas), ...extra.all].map(t => term(c, a, t)),
+    ...extra.any.map(clause => or(...clause.map(t => term(c, a, t)))),
+  );
 }
 /**
  * A caller's write of an `x-mantle-ref` to a scoped Schema (Core's `refChecks`): `value` is NULL or names a row of the target the
