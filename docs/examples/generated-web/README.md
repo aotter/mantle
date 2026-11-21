@@ -7,7 +7,7 @@ The frontend has no runtime dependencies. It renders Markdown as escaped text,
 preserving the source for the `.md` alternate.
 
 Use a separate copy of this directory for each host. Each generation target writes
-its own `generated/` tree for the same `src/site.ts`. In the Workers copy, set
+its own `generated/` tree for the same `src/app.ts`. In the Workers copy, set
 `"type": "module"` in `package.json`, install the exact selected Mantle version
 and host tools, then run:
 

@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { fetchSite, health, type Env } from '../src/site.js';
+import { fetchSite, health, type Env } from '../src/app.js';
 
 const assetPath = '/assets/posts.svg';
 

@@ -1,4 +1,4 @@
-import { fetchSite, health, type Env } from './site.js';
+import { fetchSite, health, type Env } from './app.js';
 
 export default {
   fetch(request: Request, env: Env): Response | Promise<Response> {

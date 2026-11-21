@@ -13,11 +13,11 @@ async function writeWorker(dir: string) {
   const entry = join(dir, "src/worker.ts");
   await cp(join(example, "src/worker.ts"), entry);
   // Before package assembly, resolve the public import to its existing kernel.
-  const code = (await readFile(join(example, "src/site.ts"), "utf8")).replace(
+  const code = (await readFile(join(example, "src/app.ts"), "utf8")).replace(
     '"@aotter/mantle/contracts"',
     JSON.stringify(resolve(import.meta.dir, "../src/kernel/contracts.js")),
   );
-  await writeFile(join(dir, "src/site.ts"), code);
+  await writeFile(join(dir, "src/app.ts"), code);
   return entry;
 }
 
