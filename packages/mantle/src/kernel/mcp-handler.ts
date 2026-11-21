@@ -23,6 +23,8 @@ type Surface = "public" | "admin";
 type AppLinks = ReturnType<typeof linkSurface>;
 type ReadCatalogue = readonly { readonly name: string; readonly surface: string }[];
 const BODY_LIMIT = 1024 * 1024;
+/** The SDK's own batch limit (`MAX_BATCH_SIZE`, @modelcontextprotocol/server 2.4.0 dist/index.mjs:39, refused at 515-517). */
+const MAX_BATCH_SIZE = 100;
 /** Methods that only read the catalogue: they suit cached cookie authority. The connect steps name no tool. */
 const CATALOGUE_METHODS = ["initialize", "server/discover", "tools/list", "resources/list", "resources/read"];
 /** Methods whose answer names tools, so it is filtered to what the caller may call. */
@@ -135,6 +137,13 @@ export function handler<Env, Database, Handlers>(
         const error = { code: -32000, message: `Request body exceeds ${BODY_LIMIT} bytes.` };
         return Response.json({ jsonrpc: "2.0", id: null, error }, { status: 413 });
       }
+      // Gateway mode read the request itself, so the SDK cannot read an empty or malformed body again: answer its parse
+      // error here, as the client's.
+      if (pipeline.gateway && request.method === "POST" && body.parsed === undefined) {
+        pipeline.finish(new ContractError("INPUT_VALIDATION_FAILED", "MCP body is not JSON.", "mcp", { status: 400 }));
+        const error = { code: -32700, message: "Parse error: Invalid JSON" };
+        return Response.json({ jsonrpc: "2.0", id: null, error }, { status: 400 });
+      }
 
       // A host forwards one message per request, and its target is admitted before anything else is decided.
       if (pipeline.host) {
@@ -145,7 +154,13 @@ export function handler<Env, Database, Handlers>(
         }
       }
 
-      // Credentials: every call in a batch (2025-03-26 and earlier) is checked before any call runs.
+      // A batch the SDK would refuse for its size is refused, as the SDK answers it, before any call is authorized.
+      if (body.messages.length > MAX_BATCH_SIZE) {
+        pipeline.finish(new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }));
+        const message = `Invalid Request: Batch must not exceed ${MAX_BATCH_SIZE} messages`;
+        return Response.json({ jsonrpc: "2.0", error: { code: -32600, message }, id: null }, { status: 400 });
+      }
+      // Credentials: every call in a batch (2025-03-26 and earlier) is checked before any call runs, each tool once.
       const called = calledTools(body.messages, selected);
       for (const tool of called) {
         const refusal = credentialRefusal(caller, tool, requiredScopes, pipeline.host);
@@ -409,14 +424,15 @@ async function admitHostMessage<Database, Handlers>(
   if (tool) await pipeline.admit(callOf(tool));
 }
 
-/** The mounted tool each `tools/call` message names; a name the catalogue lacks is the SDK's to refuse. */
+/** The mounted tools the `tools/call` messages name, each once; a name the catalogue lacks is the SDK's to refuse. */
 function calledTools<T extends { readonly name: string }>(messages: readonly unknown[], selected: readonly T[]): T[] {
-  return messages.flatMap(message => {
+  const tools = messages.flatMap(message => {
     const call = message as { method?: unknown; params?: { name?: unknown } | null } | null | undefined;
     if (!call || call.method !== "tools/call") return [];
     const tool = selected.find(candidate => candidate.name === call.params?.name);
     return tool ? [tool] : [];
   });
+  return [...new Set(tools)];
 }
 
 /** Resolve the endpoint's App sources for this request and link them to its tools; static links are cached per surface. */

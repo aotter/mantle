@@ -321,3 +321,94 @@ test("era classification and the host rule, request by request", async () => {
   }
   expect(table).toEqual(rows.map(([name, , route, status]) => [name, route, status]));
 });
+
+test("only a refusal of the protocol revision is observed as protocol-version, not other 400s that carry such a header", async () => {
+  const events: McpObservation[] = [];
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => void events.push(event),
+  });
+  const post = (body: string, version = "1999-01-01") =>
+    handle(
+      new Request("https://app.test/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": version,
+        },
+        body,
+      }),
+      {},
+    );
+  const errors = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    // A body that is not JSON, and a batch over the SDK's limit, each with an unsupported header: refused, not observed.
+    expect((await post("{not json"))!.status).toBe(400);
+    expect((await post(JSON.stringify(Array.from({ length: 101 }, (_, id) => call("echo", id)))))!.status).toBe(400);
+    expect(events).toEqual([]);
+    // The unsupported header itself is.
+    expect((await post(JSON.stringify(call("echo"))))!.status).toBe(400);
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "request-refused", status: 400, reason: "protocol-version" }),
+    ]);
+  } finally {
+    errors.mockRestore();
+  }
+});
+
+test("a host's 2025-era initialize the SDK refuses is recorded as an error, one it answers as an allow", async () => {
+  const PINNED = "procedure:peek";
+  const events: { outcome: string; reason?: string }[] = [];
+  const handle = mcp(
+    [
+      {
+        name: "peek",
+        surface: "public",
+        readOnly: true,
+        target: { kind: "procedure", name: "peek" },
+        description: "peek",
+        inputSchema: { type: "object" },
+        validate: raw => raw as Record<string, unknown>,
+        run: async () => ({}),
+      },
+    ] as Tool<object>[],
+    {
+      gateway: { tenant: "example" },
+      accessTargets: async () => ({ [PINNED]: { targetHash: "hash", opaque: false } }),
+      db: () => ({}),
+      onAccess: event => void events.push(event),
+    },
+  );
+  const props = { props: { mantle: mantleProps({ target: PINNED, targetHash: "hash" }) } } as never;
+  for (const [params, outcome] of [
+    [legacyInitialize.params, ["allow", undefined]],
+    // No capabilities or clientInfo: the SDK answers a JSON-RPC error (HTTP 200, SSE), not a result.
+    [{ protocolVersion: "2025-06-18" }, ["error", "INPUT_VALIDATION_FAILED"]],
+  ] as const) {
+    events.length = 0;
+    const response = (await handle(
+      new Request("https://app.test/mcp", legacyInit({ ...legacyInitialize, params })),
+      {},
+      props,
+    ))!;
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(events.map(e => [e.outcome, e.reason])).toEqual([[...outcome]]);
+  }
+});
+
+// What 0.2.2-alpha.7 did and this Core still does (`clientUiSupport` is the same function in v0.2.2-alpha.7's
+// packages/mantle/src/kernel/mcp-server.ts): a stateless request carries no capabilities of its own, so an `initialize`
+// that declared no MCP Apps support does not carry over; the next bare `tools/list` is "unknown" and lists App-only tools.
+test("a 2025-era client that declared no MCP Apps support at initialize, then a bare tools/list, sees App-only tools (unknown)", async () => {
+  const appOnly = [...tools, { ...tools[0]!, name: "app_only", meta: { ui: { visibility: ["app"] } } }];
+  const handle = mcp(appOnly as never, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
+  const post = async (body: unknown) =>
+    json((await handle(new Request("https://app.test/mcp", legacyInit(body)), {}))!);
+  const initialized = await post({ ...legacyInitialize, params: { ...legacyInitialize.params, capabilities: {} } });
+  expect(initialized.result.capabilities.resources).toBeUndefined();
+  const listed = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+  expect(listed.result.tools.map((tool: { name: string }) => tool.name)).toEqual(["echo", "app_only"]);
+});

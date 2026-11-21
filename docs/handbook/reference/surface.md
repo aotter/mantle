@@ -421,7 +421,7 @@ notice of an oversized View page, then the blocks a `withResult` return adds
 (from a hand-written tool's `run` or `page`, or from a ref Procedure's handler).
 `structuredContent` is the data: on 2026-07-28 any JSON value but `undefined`; on a 2025 revision,
 whose structured content is an object, only an object (other data is its JSON text block alone, and
-a tool whose `outputSchema` root is not an object lists none there, so the SDK never wraps either as
+a tool whose `outputSchema` root is not an object, or also admits `null` or another type, lists none there, so the SDK never wraps either as
 `{ result }`). The tool version is the same in both eras. Core owns the first
 three, `structuredContent`, `isError` and the error envelope; the application's
 blocks are checked by the installed SDK, and one it refuses fails the call as

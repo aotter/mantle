@@ -104,13 +104,15 @@ export async function serveTools<Env, Database, Handlers>(
       ? ((await response
           .clone()
           .json()
-          .catch(() => undefined)) as { error?: { code?: unknown } } | undefined)
+          .catch(() => undefined)) as { error?: { code?: unknown; message?: unknown } } | undefined)
       : undefined;
   settled = true;
-  const header = serving.request.headers.get("mcp-protocol-version");
+  // -32022 from the modern path; the 2025-era transport answers an unsupported header with -32000 and this message
+  // (`validateProtocolVersion`, @modelcontextprotocol/server 2.4.0 dist/index.mjs:689-694).
+  const { code, message } = answer?.error ?? {};
   if (
-    answer?.error?.code === sdk.ProtocolErrorCode.UnsupportedProtocolVersion ||
-    (answer && header !== null && ![...sdk.SUPPORTED_PROTOCOL_VERSIONS, "2026-07-28"].includes(header))
+    code === sdk.ProtocolErrorCode.UnsupportedProtocolVersion ||
+    (code === -32000 && String(message).startsWith("Bad Request: Unsupported protocol version"))
   )
     observe(serving.options.onObservation, {
       kind: "request-refused",
@@ -156,7 +158,8 @@ function buildServer<Env, Database, Handlers>(
       pipeline.finish(
         serving.request.signal.aborted
           ? cancelled()
-          : handshake
+          : // An `initialize` the SDK refused (invalid params) never reached its handler, which records the client.
+            handshake && (!legacy || server.server.getClientVersion() !== undefined)
             ? undefined
             : new ContractError("INPUT_VALIDATION_FAILED", "MCP request refused.", "mcp", { status: 400 }),
       );
@@ -236,8 +239,12 @@ function buildServer<Env, Database, Handlers>(
     // A 2025 revision's structured content is a JSON object. Its SDK codec would list any other root wrapped as
     // `{ result }` and wrap the value to match (`projectCallToolResult`), so one tool would answer two shapes: on that
     // era, a schema whose root the SDK does not list as an object is not listed, and its non-object data is sent as text
-    // only. The SDK's own conversion decides, so a typeless root it proves object-shaped stays listed.
-    if (legacy && listed.outputSchemaJson?.type !== "object") listed.outputSchema = listed.outputSchemaJson = undefined;
+    // only. The SDK's own conversion decides, so a typeless root it proves object-shaped stays listed. A root that also
+    // admits another value (`nullable`, a type list) is not listed either: that value is sent as text, and the SDK would
+    // refuse a listed schema without structured content after the call was recorded.
+    const json = listed.outputSchemaJson;
+    if (legacy && !(json?.type === "object" && objectOnly(json)))
+      listed.outputSchema = listed.outputSchemaJson = undefined;
   }
   // An empty catalogue still answers tools/list and refuses calls the same way.
   if (registered.size === 0) {
@@ -302,6 +309,9 @@ function rootAllows(schema: Record<string, unknown>, value: unknown): boolean {
     kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
   return types.includes(kind) || (kind === "number" && types.includes(Number.isInteger(value) ? "integer" : ""));
 }
+/** `rootAllows` admits an object and no other JSON kind under this root. */
+const objectOnly = (schema: Record<string, unknown>) =>
+  [null, [], "", 1, 0.5, true].every(value => !rootAllows(schema, value));
 /** One `tools/call`: the pipeline's per-call steps, the tool, and the result or diagnostic the model reads. */
 async function invoke<Env, Database, Handlers>(
   serving: Serving<Env, Database, Handlers>,

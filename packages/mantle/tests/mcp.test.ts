@@ -1071,9 +1071,71 @@ test("a 2025-era batch whose second call the caller may not make runs neither ca
   expect(scoped.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
   expect(authorized).toEqual([]);
   expect(runs).toBe(0);
-  // Both allowed: both run.
+  // Both allowed: both run, and `authorize` decided the tool once.
+  authorized.length = 0;
   expect((await send(["allowed", "allowed"]))!.status).toBe(200);
   expect(runs).toBe(2);
+  expect(authorized).toEqual(["allowed"]);
+  // A batch over the SDK's limit of 100 is refused as the SDK refuses it, before any call is authorized or runs.
+  authorized.length = 0;
+  const oversized = (await send(Array.from({ length: 101 }, () => "allowed")))!;
+  expect([oversized.status, await oversized.json()]).toEqual([
+    400,
+    {
+      jsonrpc: "2.0",
+      error: { code: -32600, message: "Invalid Request: Batch must not exceed 100 messages" },
+      id: null,
+    },
+  ]);
+  expect([authorized, runs]).toEqual([[], 2]);
+  // 100 messages are still a batch the SDK serves.
+  expect((await send(Array.from({ length: 100 }, () => "allowed")))!.status).toBe(200);
+  expect([authorized, runs]).toEqual([["allowed"], 102]);
+});
+
+test("gateway: an empty or malformed body is the client's parse error, not a server fault", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  const targets = { "procedure:peek": { targetHash: "h", opaque: false } };
+  const events: { outcome: string; reason?: string }[] = [];
+  const handle = mcp(
+    [
+      {
+        name: "peek",
+        surface: "public",
+        readOnly: true,
+        target: { kind: "procedure", name: "peek" },
+        description: "peek",
+        inputSchema: { type: "object" },
+        validate: (raw: any) => raw,
+        run: async () => ({}),
+      },
+    ] as never,
+    {
+      gateway: { tenant: "example" },
+      accessTargets: async () => targets,
+      db: () => ({}),
+      onAccess: e => void events.push(e),
+    },
+  );
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const body of ["", "{not json"]) {
+      events.length = 0;
+      const response = (await handle(new Request("https://app.test/mcp", legacyInit(body)), {}, {
+        props: { mantle: await pinned(mantleProps(), targets, "procedure:peek") },
+      } as never))!;
+      expect([JSON.stringify(body), response.status, await response.json()]).toEqual([
+        JSON.stringify(body),
+        400,
+        { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error: Invalid JSON" } },
+      ]);
+      expect(events.map(e => [e.outcome, e.reason])).toEqual([["error", "INPUT_VALIDATION_FAILED"]]);
+    }
+    expect(logged.mock.calls).toEqual([]);
+  } finally {
+    logged.mockRestore();
+  }
 });
 
 test("MCP tools advertise input rules as description sentences and enforce them", async () => {

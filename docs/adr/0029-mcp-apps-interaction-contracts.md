@@ -351,9 +351,11 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   `tools/call` in it passes the credential rules (an auth requirement, a
 >   service credential's scope-gated tools, the tool's scopes) and then
 >   application `authorize`; one refusal answers the whole batch and runs no
->   call. The cookie read-only hint is given only when every message is a
->   catalogue read or calls a read tool. A host may not batch. A batch with a
->   2026-07-28 element is refused by the SDK (400).
+>   call. Each distinct tool is checked once, and a batch over the SDK's limit
+>   of 100 messages is refused before any check, with the SDK's own answer (400,
+>   JSON-RPC `-32600`). The cookie read-only hint is given only when every
+>   message is a catalogue read or calls a read tool. A host may not batch. A
+>   batch with a 2026-07-28 element is refused by the SDK (400).
 > - MCP Apps support, per request. 2026-07-28: what its `_meta` client
 >   capabilities declare (an envelope without them is refused by the SDK).
 >   2025: what a message's `_meta["io.modelcontextprotocol/clientCapabilities"]`
@@ -381,7 +383,10 @@ value Runtime accepts. Ineligible outputs advertise none. Views advertise none.
 >   `wrapOutputSchemaForLegacy`, `projectCallToolResult`). Core therefore lists
 >   on that era only an `outputSchema` whose root the SDK's own conversion
 >   lists as `type: "object"` (`RegisteredTool.outputSchemaJson`: an object
->   schema, or a typeless root the SDK proves object-shaped), and sends
+>   schema, or a typeless root the SDK proves object-shaped) and whose root
+>   admits no other value under the root check (`nullable` or a type list
+>   would let `null` through, which is then sent as text; the SDK would refuse
+>   a listed schema without structured content after the call was recorded), and sends
 >   `structuredContent` only for object data; anything else is its JSON text
 >   block alone, as before #2114. With no non-object schema listed and no
 >   non-object value sent, the codec has nothing to wrap. The root check

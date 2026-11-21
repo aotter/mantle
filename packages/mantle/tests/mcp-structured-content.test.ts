@@ -111,6 +111,52 @@ test("on a 2025 revision a non-object tool lists no outputSchema and sends text 
   expect(descriptions[0]).toEqual(descriptions[1]!);
 });
 
+test("on a 2025 revision every root shape either answers valid output or fails before the call is recorded", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  // Every root of the tables above, plus roots that admit an object and another value.
+  const tools = [
+    ...conforming,
+    tool("missing", () => undefined, { type: "string" }),
+    tool("unshaped", () => [1], { type: "object" }),
+    tool("wrong", () => "3", { type: "integer" }),
+    tool("objectish", () => [1], { anyOf: [{ type: "object" }, { properties: {} }] }),
+    tool("silent", () => undefined),
+    tool("nullable_object_null", () => null, { type: "object", nullable: true }),
+    tool("nullable_object_value", () => ({ id: "n" }), { type: "object", nullable: true }),
+    tool("object_or_null", () => null, { type: ["object", "null"] }),
+    tool("object_or_array", () => [1], { type: ["object", "array"] }),
+    tool("listed_type_object", () => ({ id: "l" }), { type: ["object"] }),
+  ];
+  const completions: Record<string, string> = {};
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => {
+      if (event.kind === "invocation" && event.phase === "completion") completions[event.tool] = event.outcome;
+    },
+  });
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    const client = await mcpClient(handle, undefined, { era: LEGACY_REVISION });
+    const listed = Object.fromEntries((await client.listTools()).tools.map(t => [t.name, t.outputSchema]));
+    for (const { name } of tools) {
+      const result = await client.callTool({ name, arguments: {} });
+      const text = (result.content as { text: string }[])[0]!.text;
+      // The SDK never refuses a result Core already recorded as succeeded.
+      expect([name, text.startsWith("Output validation error")]).toEqual([name, false]);
+      expect([name, completions[name]]).toEqual([name, result.isError ? "failed" : "succeeded"]);
+      // A listed schema always gets structured content on success.
+      if (listed[name] && !result.isError) expect([name, result.structuredContent]).not.toEqual([name, undefined]);
+    }
+    // Only a root that admits nothing but an object is listed.
+    expect(Object.keys(listed).filter(name => listed[name])).toEqual(["record", "unshaped", "objectish"]);
+    await client.close();
+  } finally {
+    console.error = quiet;
+  }
+});
+
 test("a success the listed schema's root does not admit fails before it is recorded; a failure omits structuredContent only under a schema", async () => {
   const { mcp } = await import("../src/kernel/mcp.js");
   const tools = [
