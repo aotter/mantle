@@ -121,7 +121,11 @@ return `null`. Web and site pages (pinned by `view:<name>`) and auth routes are
 outside `matchTarget`.
 
 Diff records contain `id`, `field`, `direction` and optional `before`/`after`.
-Removing a scope or restrict term widens access; adding one narrows it. An OR-clause counts as one term, so changing it (adding or dropping a disjunct) reports a widening.
+Removing a scope or restrict term widens access; adding one narrows it. A restrict is an AND of
+OR-clauses (a single term is a clause of one): adding a disjunct to a clause widens, dropping one
+narrows, also when the clause is left with one term and moves from `or` to the single terms. A
+change that both widens one clause and narrows another, such as swapping a term, is reported as
+widened; a change that admits and removes no row (a clause another already implies) is `changed`.
 Reading another Schema, dropping requirements, adding surfaces or Triggers,
 removing `readOnly` or `trustedOnly`, or enabling `opaque` or `unscopedReads`
 widens access. Variants are compared separately. Adding a target widens;

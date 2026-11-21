@@ -142,21 +142,28 @@ const combine = (directions: Direction[]): Direction =>
     : directions.length && directions.every(d => d === "narrowed")
       ? "narrowed"
       : "changed";
-const terms = (p: PlanRestrict[string]) => [
-  ...(p.owner ? [canonical({ owner: p.owner })] : []),
-  ...p.terms.map(canonical),
-  // An OR-clause is one conjunct: losing or changing it widens, adding it narrows.
-  ...(p.or ?? []).map(canonical),
-];
+/** A policy as an AND of OR-clauses, each a list of terms; a single-term clause (`owner`, `terms`) is a clause of one. */
+const clauses = (p: PlanRestrict[string] | undefined): string[][] =>
+  p
+    ? [
+        ...(p.owner ? [[canonical({ owner: p.owner })]] : []),
+        ...p.terms.map(t => [canonical(t)]),
+        ...(p.or ?? []).map(c => c.map(canonical)),
+      ]
+    : [];
+// Clause `c` follows from clause `d` when every disjunct of `d` is one of `c`'s.
+const implied = (c: string[], by: string[][]) => by.some(d => d.every(t => c.includes(t)));
+// A clause of `before` that `after` does not imply may admit new rows: widened, even when another clause narrows (a swap
+// is still a widening). Otherwise a clause of `after` that `before` does not imply narrows; else the rows are the same.
+const clauseDirection = (before: string[][], after: string[][]): Direction =>
+  before.some(c => !implied(c, after)) ? "widened" : after.some(c => !implied(c, before)) ? "narrowed" : "changed";
 function policyDirection(before: PlanRestrict, after: PlanRestrict, scope: boolean): Direction {
   const directions: Direction[] = [];
   for (const schema of new Set([...Object.keys(before), ...Object.keys(after)])) {
     const x = before[schema],
       y = after[schema];
     if (canonical(x) === canonical(y)) continue;
-    directions.push(
-      scope && (!x || !y) ? (x ? "narrowed" : "widened") : inclusion(x ? terms(x) : [], y ? terms(y) : []),
-    );
+    directions.push(scope && (!x || !y) ? (x ? "narrowed" : "widened") : clauseDirection(clauses(x), clauses(y)));
   }
   return combine(directions);
 }
