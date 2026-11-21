@@ -479,9 +479,6 @@ export interface CtxAuthScopePredicate {
   readonly "ctx.auth.scope": string;
 }
 
-/** Role names are application-owned; the privileged layer comes from Better Auth. */
-export type AdminRole = string;
-
 /* ─── Trigger ─── */
 
 export type TriggerManifest = ManifestEnvelope<"Trigger", TriggerManifestSpec>;
