@@ -6,14 +6,14 @@
  *
  * 1. `select`: name the target, so a refusal that follows is observed against it.
  * 2. `resolveCaller`: forwarded host props, or the application's resolver with a read-only hint.
- * 3. `admit`: a host caller's target pin, freshness and dry-run support (of the call's variant, if it names one).
+ * 3. `admit`: a host caller's target pin and freshness.
  * 4. `enforceOrigin`: the cookie-session Origin rule.
- * 5. `guard`: the generated `requires` check, then application `authorize`.
- * 6. `dryRun`: answer the decision instead of dispatching; no database handle is acquired before this point.
- * 7. `finish`, `finishResponse`, `failure`: the access event and the error envelope.
+ * 5. `guard`: the generated `requires` check, then application `authorize`; no database handle is acquired before
+ *    this point.
+ * 6. `finish`, `finishResponse`, `failure`: the access event and the error envelope.
  *
- * Gateway mode lives here only: without `options.gateway` no caller is a host, and `select`, `admit`, `dryRun` and
- * the `finish` steps do nothing.
+ * Gateway mode lives here only: without `options.gateway` no caller is a host, and `select`, `admit` and the `finish`
+ * steps do nothing.
  *
  * What stays with a surface: REST's route matching and body decoding; MCP's transport Origin check, endpoint and
  * credential-scope rules, batch pre-authorization and SDK plumbing (`mcp-handler.ts`); web's rendering, and its
@@ -52,8 +52,6 @@ export interface Call {
   readonly view: boolean;
   /** A Procedure the compiler proved read-only; ref handlers never qualify. */
   readonly readOnly?: boolean;
-  /** The variant of the access target a host caller's dry run is decided by, e.g. `procedure:<name>`. */
-  readonly variant?: string;
   /** What application `authorize` decides on; without it only `check` guards the call. */
   readonly target?: Target;
   /** The generated `requires` guard. */
@@ -102,8 +100,6 @@ export interface Pipeline {
   readonly caller: Caller | undefined;
   /** The caller is a forwarded host caller. */
   readonly host: boolean;
-  /** The host caller asked for the decision only. */
-  readonly dryRun: boolean;
   /** Step 1. Also re-names the target after a later match; the resolved caller, if any, stays attached. */
   select(id: string): Promise<void>;
   /** Step 2 for forwarded props alone, so a broken host contract is refused before a surface matches anything. */
@@ -111,22 +107,18 @@ export interface Pipeline {
   /** Step 2. Resolves once per request: forwarded props win, else `resolve` runs with the read-only hint. */
   resolveCaller<Env>(request: Request, env: Env, resolve: CallerResolver<Env>, readOnly: boolean): Promise<Caller>;
   /** Step 3. */
-  admit(call: Pick<Call, "id" | "view" | "readOnly" | "variant">): Promise<void>;
+  admit(call: Pick<Call, "id" | "view" | "readOnly">): Promise<void>;
   /** Step 4. */
   enforceOrigin(request: Request, call: Pick<Call, "view" | "readOnly">): void;
   /** Step 5, first half: the generated guard alone, for a surface that authorized the call earlier in the request. */
   check(call: Pick<Call, "check" | "scoped">): void;
   /** Step 5. */
   guard(call: Pick<Call, "check" | "scoped" | "target">): Promise<void>;
-  /** Step 6 as a tool result: the decision's access event. */
-  dryRunResult(): { readonly dryRun: true; readonly event: unknown };
-  /** Step 6 as an HTTP response. */
-  dryRunResponse(): Response;
-  /** Step 7: the request's one access event; later calls keep the first outcome. */
+  /** Step 6: the request's one access event; later calls keep the first outcome. */
   finish(error?: unknown): void;
-  /** Step 7 for a response a surface already built: its status and error body decide the outcome. */
+  /** Step 6 for a response a surface already built: its status and error body decide the outcome. */
   finishResponse(response: Response): Promise<void>;
-  /** Step 7 for a refusal: the access event, then the error envelope the caller's kind reads. */
+  /** Step 6 for a refusal: the access event, then the error envelope the caller's kind reads. */
   failure(error: unknown, where: string, challenge?: string): Promise<Response>;
   /** The error a tool result carries, in the same envelope as `failure`. */
   diagnostic(error: unknown, where: string): Promise<Diagnostic>;
@@ -156,9 +148,6 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     get host() {
       return isHost();
     },
-    get dryRun() {
-      return !!access?.dryRun;
-    },
     async select(id) {
       await access?.select(id, caller);
     },
@@ -169,7 +158,7 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
     },
     async admit(call) {
       await access?.select(call.id, caller);
-      await access?.check(isRead(call), call.variant);
+      await access?.check(isRead(call));
     },
     enforceOrigin(request, call) {
       if (originChecked(call, isHost())) checkOrigin(request, caller!);
@@ -179,8 +168,6 @@ export async function openPipeline(ctx: RequestContext | undefined, options: Pip
       check(call);
       if (options.authorize && call.target) await authorizeTarget(options.authorize, call.target, caller!);
     },
-    dryRunResult: () => ({ dryRun: true, event: access!.finish() }),
-    dryRunResponse: () => access!.response(),
     finish(error) {
       access?.finish(error);
     },

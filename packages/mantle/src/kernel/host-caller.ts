@@ -9,7 +9,8 @@ import { identities, isHostCaller } from "./caller-identity.js";
 /**
  * The complete JSON supplied as ctx.props.mantle by a trusted gateway.
  * Host platform contract, versioned by `v`; stable within a version.
- * Unknown top-level keys are refused, so the contract evolves only by bumping `v`; a describe report without
+ * Unknown top-level keys are refused, so the contract evolves only by bumping `v` (ADR-0046 removed the unused `dryRun`
+ * within v1 by amendment, #2101); a describe report without
  * `hostContract` accepts `v: 1` only, and the release introducing a later version adds `hostContract` to the report,
  * listing the versions it accepts.
  */
@@ -24,7 +25,6 @@ export interface HostProps {
   /** Forwarded target pinning. */
   readonly target?: string;
   readonly targetHash?: string;
-  readonly dryRun?: boolean;
 }
 export type HostCaller = Extract<Caller, { kind: "user" | "host" }> & {
   readonly authenticatedAs: HostProps["authenticatedAs"];
@@ -50,9 +50,8 @@ export function hostCaller(
     !v.includes("\0") &&
     (v as string & { isWellFormed(): boolean }).isWellFormed();
   if (!record(props)) return hostContract("Expected host contract v1.");
-  const keys = "v tenant layer user authenticatedAs credential requestId target targetHash dryRun".split(" ");
+  const keys = "v tenant layer user authenticatedAs credential requestId target targetHash".split(" ");
   if (
-    Object.keys(props).some(key => !keys.includes(key)) ||
     props.v !== 1 ||
     !text(props.tenant) ||
     props.tenant !== options.tenant ||
@@ -63,10 +62,11 @@ export function hostCaller(
     !record(props.user)
   )
     return hostContract("Malformed host contract or tenant mismatch.");
+  // Named, so a host that still sends a removed key (`dryRun`, ADR-0046 #2101) sees which one.
+  const unknown = Object.keys(props).find(key => !keys.includes(key));
+  if (unknown !== undefined) return hostContract(`Unknown key '${unknown}'.`, unknown);
   for (const key of ["target", "targetHash"])
     if (Object.hasOwn(props, key) && !text(props[key])) return hostContract(`Invalid '${key}'.`, key);
-  if (Object.hasOwn(props, "dryRun") && typeof props.dryRun !== "boolean")
-    return hostContract("Invalid 'dryRun'.", "dryRun");
   for (const key of ["target", "targetHash"])
     if (props.layer === "admin" && !text(props[key])) return hostContract(`Admin callers require '${key}'.`, key);
   const user = props.user;
@@ -91,7 +91,6 @@ export function hostCaller(
     requestId: props.requestId as string,
     target: props.target as string | undefined,
     targetHash: props.targetHash as string | undefined,
-    dryRun: props.dryRun === true,
   });
   identities.set(caller, Object.freeze({ ...identities.get(base)!, admin: caller.admin, host: true }));
   return caller;

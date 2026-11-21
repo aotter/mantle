@@ -25,23 +25,18 @@ export function accessRequest(ctx: RequestContext | undefined, options: GatewayO
     throw new ContractError(code, code, id, { status, fields: field ? { field } : undefined });
   };
   return {
-    get dryRun() {
-      return !!caller && isHostCaller(caller) && "dryRun" in caller && caller.dryRun === true;
-    },
     async select(target: string, resolved?: Caller) {
       id = target;
       caller = resolved;
       const all = await (targets ??= options.accessTargets?.());
       meta = all && Object.hasOwn(all, id) ? all[id] : undefined;
     },
-    async check(readOnly: boolean, variant?: string) {
+    async check(readOnly: boolean) {
       if (!caller || !isHostCaller(caller)) return;
       const c = caller as Extract<Caller, { kind: "user" | "host" }>;
       if (c.target !== undefined && c.target !== id) fail("TARGET_MISMATCH", 412);
       if (c.targetHash !== undefined && (!meta || c.targetHash !== meta.targetHash)) fail("TARGET_HASH_MISMATCH", 412);
       checkFresh(caller, readOnly, id);
-      const policy = variant ? (meta?.variants?.find(v => v.id === variant) ?? meta) : meta;
-      if (this.dryRun && (!policy || policy.opaque)) fail("DRY_RUN_UNSUPPORTED", 412);
     },
     finish(error?: unknown): AccessEvent {
       if (finished) return finished;
@@ -82,7 +77,6 @@ export function accessRequest(ctx: RequestContext | undefined, options: GatewayO
               ...(typeof failure.error.field === "string" ? { field: failure.error.field } : {}),
             }
           : {}),
-        dryRun: caller && isHostCaller(caller) ? this.dryRun : props?.dryRun === true,
       };
       finished = Object.freeze({ ...finished, caller: Object.freeze(finished.caller) });
       if (present && options.onAccess) {
@@ -123,12 +117,6 @@ export function accessRequest(ctx: RequestContext | undefined, options: GatewayO
           status: response.status,
           fields: payload?.error?.field ? { field: payload.error.field } : undefined,
         }),
-      );
-    },
-    response() {
-      return Response.json(
-        { dryRun: true, event: this.finish() },
-        { headers: { "cache-control": "private, no-store" } },
       );
     },
   };

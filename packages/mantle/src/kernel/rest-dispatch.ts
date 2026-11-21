@@ -19,7 +19,7 @@ function boolean(raw: string): boolean {
 const typed = (raw: string, type: "number" | "boolean" | undefined): unknown =>
   type === "number" ? number(raw) : type === "boolean" ? boolean(raw) : raw;
 
-/** Decode the input, answer a dry run, else run the View or Procedure. */
+/** Decode the input, then run the View or Procedure. */
 export async function dispatch<Database, Handlers, Env>(
   route: Route<Database, Handlers, Env>,
   request: Request,
@@ -34,14 +34,12 @@ export async function dispatch<Database, Handlers, Env>(
     const { input: raw, ...paging } = route.query!(new URL(request.url).searchParams);
     const input = { ...raw };
     convert(input, route.convert);
-    if (pipeline.dryRun) return pipeline.dryRunResponse();
     data = await route.page(getDb(), caller, input as never, paging);
   } else {
     const raw = await body(request);
     for (const key in params) raw[key] = typed(params[key]!, route.params?.[key]);
     const input = route.validate!(raw);
     convert(input, route.convert);
-    if (pipeline.dryRun) return pipeline.dryRunResponse();
     data = await route.run!(getDb(), caller, input as never, options.handlers as Handlers);
   }
   // A route's `withResult` wrapper is for MCP: REST answers its data; the blocks and `_meta` stay out.

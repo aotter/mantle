@@ -383,7 +383,7 @@ test("a host forwarding an App's call of an App-only tool with no declared capab
     run: async () => ({ written: true }),
   };
   const targets = Object.fromEntries(
-    [...tools, write].map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash`, opaque: false }]),
+    [...tools, write].map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash` }]),
   );
   let allowed = true;
   const api = mcp<unknown, null>([...tools, write], {

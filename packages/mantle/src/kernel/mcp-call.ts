@@ -11,7 +11,7 @@ export async function callTool<Database, Handlers>(
   handlers: Handlers,
   call?: ToolCall,
 ): Promise<unknown> {
-  return callToolLazy(tool, raw, () => db, caller, handlers, undefined, call);
+  return callToolLazy(tool, raw, () => db, caller, handlers, call);
 }
 /** Transport input is checked before acquiring an application-owned native handle. */
 export async function callToolLazy<Database, Handlers>(
@@ -20,7 +20,6 @@ export async function callToolLazy<Database, Handlers>(
   getDb: () => Database,
   caller: Caller,
   handlers: Handlers,
-  dryRun?: () => unknown,
   call: ToolCall = { apps: false },
 ): Promise<unknown> {
   if (tool.page) {
@@ -29,7 +28,6 @@ export async function callToolLazy<Database, Handlers>(
     if (cursor !== undefined && typeof cursor !== "string") invalid("Invalid paging options.", tool.path!);
     await tool.validate(input);
     convert(input, tool.convert);
-    if (dryRun) return dryRun();
     return tool.page(getDb(), caller, input as never, {
       limit: limit as number | undefined,
       cursor: cursor as string | undefined,
@@ -37,6 +35,5 @@ export async function callToolLazy<Database, Handlers>(
   }
   const input = await tool.validate(raw);
   convert(input, tool.convert);
-  if (dryRun) return dryRun();
   return tool.run!(getDb(), caller, input as never, handlers, call);
 }

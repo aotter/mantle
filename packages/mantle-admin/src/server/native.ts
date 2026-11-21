@@ -358,7 +358,7 @@ export async function nativeEntryGet<Database>(
     )[0] ?? null
   );
 }
-/** Prepare and execution admit only writable fields; inserts fill the caller's scope values. */
+/** A write admits only writable fields; inserts fill the caller's scope values. */
 export function nativeEntryData(
   spec: NativeEntryProcedures,
   values: Values,

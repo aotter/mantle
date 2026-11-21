@@ -1,4 +1,3 @@
-import { binds } from "@aotter/mantle/internal/binds";
 /** Selected Admin entry transport over generated native Views and Procedures. No schema or SQL interpreter. */
 import { ContractError, type Target, type Row, type Caller } from "@aotter/mantle/contracts";
 import { csv } from "./csv.js";
@@ -7,7 +6,6 @@ import {
   entryLocks,
   exactVersion,
   type EntryLocks,
-  nativeEntryData,
   nativeEntryGet,
   nativeEntryPage,
   nativeEntryProcedure,
@@ -590,41 +588,6 @@ export function entries<Env, DB>(
   ];
   return routes.map(route => ({
     ...route,
-    prepare: async ctx => {
-      const raw = route.method === "GET" || route.method === "DELETE" ? {} : await json(ctx);
-      const schema = schemaOf(
-        route.path.startsWith("/collections/")
-          ? ctx.params.name
-          : route.method === "POST" && route.path === "/entries"
-            ? raw.collection
-            : ctx.url.searchParams.get("collection"),
-      );
-      binds(adapter.values, schema.binding.caller.binds, ctx.caller);
-      if (route.method === "GET") {
-        await readable(schema, ctx);
-        schema.query(ctx.url.searchParams);
-        return;
-      }
-      writable(schema, route.method === "POST" && route.path === "/entries");
-      if (route.method === "POST" && route.path === "/entries") {
-        const data = {
-          ...schema.defaults,
-          ...Object.fromEntries(Object.entries(dataOf(raw)).filter(([, v]) => v !== null)),
-        };
-        schema.native?.(data);
-        const values = schema.values(schema.validate(data, !schema.publishing));
-        nativeEntryData(schema.binding, adapter.values, ctx.caller, "create", values);
-      } else if (route.method === "PATCH") {
-        if (!exactVersion(raw.expectedVersion)) fail("expectedVersion is required.");
-        const data = dataOf(raw);
-        schema.native?.(data);
-        schema.validate(data, false);
-        nativeEntryData(schema.binding, adapter.values, ctx.caller, "patch", schema.values(data, true));
-      } else if (route.method === "POST") {
-        if (!schema.publishing) throw conflict("Only publishing collections have transitions.");
-        if (raw.expectedVersion !== undefined && !exactVersion(raw.expectedVersion)) fail("Invalid expectedVersion.");
-      }
-    },
     target: ctx => {
       const schema = schemaOf(
         route.path.startsWith("/collections/")

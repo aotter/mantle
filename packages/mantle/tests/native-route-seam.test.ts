@@ -1,6 +1,6 @@
 /**
- * The native REST seam a mounted surface such as Admin builds on: mount admission, a route's access variant, dry run
- * through `prepare`, and an authorize target computed from the decoded request with `authorize` bound to the caller.
+ * The native REST seam a mounted surface such as Admin builds on: mount admission, a route's read-only flag, and an
+ * authorize target computed from the decoded request with `authorize` bound to the caller.
  */
 import { expect, test } from "bun:test";
 import { ContractError, type AccessEvent, type Caller, type Target } from "../src/kernel/contracts.js";
@@ -100,7 +100,7 @@ test("a refusal returned by admission is the request's access event, against the
     {
       db: () => null,
       gateway: { tenant: "example" },
-      accessTargets: async () => ({ "mount:POST /x": { targetHash: "mount:POST /x-hash", opaque: true } }),
+      accessTargets: async () => ({ "mount:POST /x": { targetHash: "mount:POST /x-hash" } }),
       onAccess: event => {
         events.push(event);
       },
@@ -121,20 +121,14 @@ test("a refusal returned by admission is the request's access event, against the
   expect(events.at(-1)).toMatchObject({ target: "mount:POST /x", outcome: "allow" });
 });
 
-test("a route's access variant decides a host caller's dry run; prepare answers it without a database", async () => {
+test("a native route's read-only flag decides a host caller's freshness", async () => {
   let acquired = 0,
     handled = 0;
-  const prepared: string[] = [];
   const id = "mount:POST /ops/:name";
   const route = (name: string, extra: Partial<Route<null>> = {}): Route<null> => ({
     method: "POST",
     id,
     pattern: new RegExp(`^/api/ops/${name}$`),
-    variant: `procedure:${name}`,
-    prepare: (_request, _env, _caller, _params, input) => {
-      prepared.push(`${name}:${JSON.stringify(input)}`);
-      if (input?.bad) throw new ContractError("INPUT_VALIDATION_FAILED", "Bad input.", "mount");
-    },
     handle: async (_request, _env, getDb) => {
       getDb();
       handled++;
@@ -142,66 +136,21 @@ test("a route's access variant decides a host caller's dry run; prepare answers 
     },
     ...extra,
   });
-  const api = nativeRest(
-    [
-      route("safe"),
-      route("opaque"),
-      route("unprepared", { prepare: undefined }),
-      route("read", { readOnly: true }),
-      { method: "POST", id: "mount:POST /raw", pattern: /^\/api\/raw$/, handle: async () => ({}) },
-    ],
-    {
-      db: () => {
-        acquired++;
-        return null;
-      },
-      gateway: { tenant: "example" },
-      accessTargets: async () => ({
-        [id]: {
-          targetHash: id + "-hash",
-          opaque: true,
-          variants: [
-            { id: "procedure:safe", opaque: false },
-            { id: "procedure:opaque", opaque: true },
-            { id: "procedure:unprepared", opaque: false },
-            { id: "procedure:read", opaque: false },
-          ],
-        },
-        "mount:POST /raw": { targetHash: "mount:POST /raw-hash", opaque: false },
-      }),
+  const api = nativeRest([route("safe"), route("read", { readOnly: true })], {
+    db: () => {
+      acquired++;
+      return null;
     },
-  );
-  const dry = (path: string, target: string, body?: string, extra: object = {}) =>
-    api(post(path, body), {}, hostProps(target, { dryRun: true, ...extra }));
+    gateway: { tenant: "example" },
+    accessTargets: async () => ({ [id]: { targetHash: id + "-hash" } }),
+  });
 
-  const answered = await dry("/api/ops/safe", id, '{"a":1}');
-  expect(answered!.status).toBe(200);
-  expect(await answered!.json()).toMatchObject({ dryRun: true, event: { target: id, outcome: "allow", dryRun: true } });
-  expect(prepared.splice(0)).toEqual(['safe:{"a":1}']);
-
-  const invalid = await dry("/api/ops/safe", id, '{"bad":true}');
-  expect([invalid!.status, (await errorOf(invalid)).code]).toEqual([400, "INPUT_VALIDATION_FAILED"]);
-  prepared.length = 0;
-
-  // The variant's own policy refuses before anything is read.
-  const opaque = await dry("/api/ops/opaque", id);
-  expect([opaque!.status, (await errorOf(opaque)).code]).toEqual([412, "DRY_RUN_UNSUPPORTED"]);
-
-  // A route without prepare refuses even a malformed body, which it never decodes.
-  for (const [path, target] of [
-    ["/api/ops/unprepared", id],
-    ["/api/raw", "mount:POST /raw"],
-  ]) {
-    const refused = await dry(path!, target!, "{");
-    expect([refused!.status, (await errorOf(refused)).code]).toEqual([412, "DRY_RUN_UNSUPPORTED"]);
-  }
-  expect([prepared, handled, acquired]).toEqual([[], 0, 0]);
-
-  // Freshness follows the route's own read-only flag: a snapshot caller may read, not write.
+  // A snapshot caller may read, not write; the refused write never reaches the handler or the database.
   const snapshot = { authenticatedAs: "snapshot" };
   expect((await api(post("/api/ops/read"), {}, hostProps(id, snapshot)))!.status).toBe(200);
   const stale = await api(post("/api/ops/safe"), {}, hostProps(id, snapshot));
   expect([stale!.status, (await errorOf(stale)).code]).toEqual([403, "STALE_CALLER"]);
+  expect([handled, acquired]).toEqual([1, 1]);
 });
 
 test("a computed target is authorized from the decoded request; handlers get authorize bound to the caller", async () => {

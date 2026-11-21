@@ -45,7 +45,6 @@ export function router<Env, Database, Handlers>(
           id: route.id ?? `rest:${route.method} ${decodeURIComponent(path).replace(/\/$/, "")}`,
           view: view && SAFE_METHODS.includes(request.method),
           readOnly: route.readOnly,
-          variant: route.variant,
           // A computed target is the dispatch's to authorize, once the request is decoded.
           target: typeof route.target === "function" ? undefined : route.target,
           check: route.check,

@@ -372,18 +372,7 @@ export async function generateFromSources(
     return { ok: false, diagnostics: [...refusals, ...diagnostics.map(explain)] };
   }
   if (!result.ok) return { ...result, diagnostics: result.diagnostics.map(explain) };
-  const accessTargets = Object.fromEntries(
-    report.targets.map(({ _meta: m }) => {
-      return [
-        m.id,
-        {
-          targetHash: m.targetHash,
-          opaque: m.opaque,
-          ...(m.variants.length ? { variants: m.variants.map(v => ({ id: v.id, opaque: v.opaque })) } : {}),
-        },
-      ];
-    }),
-  );
+  const accessTargets = Object.fromEntries(report.targets.map(({ _meta: m }) => [m.id, { targetHash: m.targetHash }]));
   const gatewayFiles = generatedFiles({
     "access-targets.ts": `import type { AccessTarget } from "@aotter/mantle/contracts";\nexport const targets: Readonly<Record<string, AccessTarget>> = ${JSON.stringify(accessTargets)};\n`,
   });

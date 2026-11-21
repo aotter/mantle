@@ -41,7 +41,7 @@ export function serve<Database, E>(
   const origin = new URL(options.origin);
   const resolver = callerResolver(options.caller);
 
-  /** The visit over an open pipeline: decode the View input, then admit, guard and (unless a dry run) page. */
+  /** The visit over an open pipeline: decode the View input, then admit, guard and page. */
   const visit = (request: Request, pipeline: Pipeline, caller: Caller): Visit => {
     const state: Visit = {
       caller,
@@ -62,7 +62,6 @@ export function serve<Database, E>(
           await pipeline.admit(call);
           pipeline.enforceOrigin(request, call);
           await pipeline.guard(call);
-          if (pipeline.dryRun) return { rows: [] };
           return await view.page(options.db, caller, input as never, { limit: 500, cursor });
         } catch (error) {
           state.failure = error;

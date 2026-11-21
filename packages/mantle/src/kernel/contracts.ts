@@ -18,8 +18,6 @@ export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean =>
 /** Generated gateway metadata is loaded only after a forwarded request. */
 export interface AccessTarget {
   readonly targetHash: string;
-  readonly opaque: boolean;
-  readonly variants?: readonly (Pick<AccessTarget, "opaque"> & { readonly id: string })[];
 }
 export interface AccessEvent {
   readonly v: 1;
@@ -30,7 +28,6 @@ export interface AccessEvent {
   readonly outcome: "allow" | "deny" | "error";
   readonly reason?: string;
   readonly field?: string;
-  readonly dryRun: boolean;
 }
 export interface GatewayOptions {
   readonly accessTargets?: () => Promise<Readonly<Record<string, AccessTarget>>>;
@@ -57,7 +54,6 @@ type IdentityCaller = {
   readonly requestId?: string;
   readonly target?: string;
   readonly targetHash?: string;
-  readonly dryRun?: boolean;
 };
 export type Caller =
   | { readonly kind: "anonymous" }

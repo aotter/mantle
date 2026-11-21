@@ -241,7 +241,6 @@ function checkUiControllerImports() {
 const ADMIN_PLUMBING_DEBT = {
   // The runtime half of generated `admin-bindings.ts`: caller-mode SQL, bind recipes, cursors and page limits.
   "packages/mantle-admin/src/server/native.ts": ["binds", "paging", "user-fields", "validation"],
-  "packages/mantle-admin/src/server/entries.ts": ["binds"],
   // The role-name syntax the member routes validate against.
   "packages/mantle-admin/src/server/site.ts": ["user-fields"],
 };

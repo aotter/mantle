@@ -1,6 +1,5 @@
 /** REST request handling for a generated route table: matching, body and parameter decoding, dispatch and errors. */
 import type { Caller, Target, Authorize, Gateway, RequestContext, GatewayOptions } from "./contracts.js";
-import { ContractError } from "./contract-error.js";
 import type { CallerResolver, Pipeline, PipelineOptions } from "./request-pipeline.js";
 import { invalid, type Conversions } from "./surface.js";
 /** The routers' path grammar, for Admin's router: its mount, route patterns and the canonical request path. */
@@ -26,11 +25,9 @@ export interface Route<Database, Handlers = never, Env = unknown> {
   readonly id?: string;
   /** Compiler-proved read-only Procedure; ref handlers never qualify. */
   readonly readOnly?: boolean;
-  /** The variant of the route's access target that a host caller's dry run is decided by, e.g. `procedure:<name>`. */
-  readonly variant?: string;
   /**
    * What application `authorize` decides on. A native route may compute it from the decoded request; it is then
-   * authorized after the body is decoded, before `prepare` or `handle`.
+   * authorized after the body is decoded, before `handle`.
    */
   readonly target?: Target | NativeTarget<Env>;
   /** Generated requires guard, used before application authorization. */
@@ -51,18 +48,6 @@ export interface Route<Database, Handlers = never, Env = unknown> {
     input: Record<string, unknown> | undefined,
     access: RouteAccess,
   ) => Promise<unknown>;
-  /**
-   * A native route's checks without effects. A host caller's dry run runs it, with no database, and answers the
-   * decision; a native route without it refuses a dry run as `DRY_RUN_UNSUPPORTED` before reading the body.
-   */
-  readonly prepare?: (
-    request: Request,
-    env: Env,
-    caller: Caller,
-    params: Record<string, string>,
-    input: Record<string, unknown> | undefined,
-    access: RouteAccess,
-  ) => Promise<void> | void;
   /** Selected raw APIs may declare a different body limit; JSON routes default to one million bytes. */
   readonly bodyLimit?: number;
   /** The app owns raw stream consumption; only the declared Content-Length is checked. */
@@ -178,8 +163,6 @@ export function nativeRest<Env, Database, Handlers = never>(
   options: NativeOptions<Env, Database, Handlers>,
 ): Fetch<Env> {
   return router(routes, options, async (route, request, env, caller, params, pipeline) => {
-    if (pipeline.dryRun && !route.prepare)
-      throw new ContractError("DRY_RUN_UNSUPPORTED", "Opaque native route.", route.id, { status: 412 });
     const limit = route.bodyLimit ?? DEFAULT_BODY_LIMIT;
     if (Number(request.headers.get("content-length")) > limit) fail(`Request body exceeds ${limit} bytes.`);
     const bodiless = route.rawBody || ["GET", "HEAD", "OPTIONS"].includes(request.method);
@@ -194,10 +177,6 @@ export function nativeRest<Env, Database, Handlers = never>(
     };
     if (typeof route.target === "function")
       await pipeline.guard({ target: route.target(request, env, caller, params, input) });
-    if (pipeline.dryRun) {
-      await route.prepare!(request, env, caller, params, input, access);
-      return pipeline.dryRunResponse();
-    }
     let initialized = false,
       db: Database;
     const getDb = () => {

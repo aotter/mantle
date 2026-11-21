@@ -1,6 +1,6 @@
 /**
  * Every response a surface builds states its Cache-Control, so a shared cache in front of the Worker (Workers Cache)
- * stores only what a surface marked public. Gateway answers and dry runs are pinned by `host-contract.golden.json`,
+ * stores only what a surface marked public. Gateway answers are pinned by `host-contract.golden.json`,
  * every Admin API cell by Admin's request matrix.
  */
 import { expect, spyOn, test } from "bun:test";
