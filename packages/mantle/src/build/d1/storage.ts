@@ -14,7 +14,6 @@ import { print } from "./print.js";
 
 export type { StorageSchema };
 
-
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
 function checkText(expr: SqlNode, s: StorageSchema): string {
   const problem = checkShapeProblem(expr, storageColumns(s));
@@ -41,16 +40,7 @@ interface Column {
   readonly type: string;
   readonly native: boolean;
 }
-interface Desired {
-  readonly table: string;
-  readonly columns: readonly Column[];
-  readonly indexes: readonly { name: string; unique: boolean; columns: readonly string[]; sql: string }[];
-  readonly triggers: readonly { name: string; sql: string }[];
-  /** FTS5 / R*Tree tables with the SQL they must have been created with. */
-  readonly virtuals: readonly { name: string; sql: string }[];
-}
-
-function desired(name: string, s: StorageSchema): Desired {
+function desired(name: string, s: StorageSchema) {
   const t = q(name);
   const columns: Column[] = [
     { name: "_rid", type: "INTEGER", native: true },
@@ -90,40 +80,39 @@ function desired(name: string, s: StorageSchema): Desired {
     })), // the grammar already starts a scoped unique index with the scope
     ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
   ].map(i => ({
-    ...i,
     sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})`,
   }));
 
-  const triggers: { name: string; sql: string }[] = [];
+  const triggers: { sql: string }[] = [];
   (s.checks ?? []).forEach((c, i) => {
     const e = checkText(c, s);
     for (const ev of ["INSERT", "UPDATE"])
       triggers.push({
-        name: `_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`,
+
         sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END`,
       });
   });
-  const virtuals: Desired["virtuals"][number][] = [];
+  const virtuals: { sql: string }[] = [];
   if (s.search?.length) {
     const fts = q(ftsTableName(name));
     const f = s.search.map(q).join(", ");
     const n = s.search.map(c => `new.${q(c)}`).join(", ");
     const o = s.search.map(c => `old.${q(c)}`).join(", ");
     virtuals.push({
-      name: ftsTableName(name),
+
       sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`,
     });
     triggers.push(
       {
-        name: `_mantle_fts_${name}_i`,
+
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
       },
       {
-        name: `_mantle_fts_${name}_d`,
+
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END`,
       },
       {
-        name: `_mantle_fts_${name}_u`,
+
         sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_u`)} AFTER UPDATE OF ${f} ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
       },
     );
@@ -135,18 +124,18 @@ function desired(name: string, s: StorageSchema): Desired {
     const g = q(tree);
     const la = q(`${geo}_lat`);
     const ln = q(`${geo}_lng`);
-    virtuals.push({ name: tree, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)` });
+    virtuals.push({ sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)` });
     triggers.push(
       {
-        name: `${tree}_i`,
+
         sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END`,
       },
       {
-        name: `${tree}_d`,
+
         sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END`,
       },
       {
-        name: `${tree}_u`,
+
         sql: `CREATE TRIGGER ${q(`${tree}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END`,
       },
     );
@@ -155,7 +144,7 @@ function desired(name: string, s: StorageSchema): Desired {
 }
 
 /** `notNull`: the columns the initial artifact (not convergence, which never alters an existing column) also declares NOT NULL. */
-function createTable(d: Desired, notNull: ReadonlySet<string> = new Set()): string {
+function createTable(d: ReturnType<typeof desired>, notNull: ReadonlySet<string>): string {
   const cols = d.columns.map(c => {
     if (c.name === "_rid") return "_rid INTEGER PRIMARY KEY";
     if (c.name === "id") return "id TEXT NOT NULL UNIQUE";
@@ -181,9 +170,7 @@ const SYSTEM_DDL = [
 export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>): readonly string[] {
   // This initial artifact compiles with UTC, not an application-selected regional time zone.
   return [
-    SYSTEM_DDL[0]!,
-    SYSTEM_DDL[1]!,
-    SYSTEM_DDL[2]!,
+    ...SYSTEM_DDL,
     "INSERT OR IGNORE INTO _mantle_tz (from_us, offset_us) VALUES (-9007199254740991, 0)",
     ...Object.entries(plan).flatMap(([name, schema]) => {
       const d = desired(name, schema);
