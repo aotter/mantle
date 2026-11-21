@@ -26,7 +26,18 @@ A `"serialization"` conflict means PostgreSQL refused and rolled back the write,
 
 Unknown errors map to redacted `INTERNAL_ERROR` (500). A custom `ContractError` outside the core set must carry an explicit status. Media uses its selected `mediaError` contract. Never expose SQL errors, tokens or credentials.
 
-The runtime runs no DDL or schema checks. Schema installation and failures belong to [the native migration tool](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), not a boot diagnostic.
+The runtime runs no DDL or schema checks. Schema installation and failures belong to [the native migration tool](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), not a boot diagnostic; write each migration from the diff of `schema.sql` ([schema migrations](../guides/migrations.md)).
+
+Some refusals are decisions, not missing features; each has a pattern ([what Core does, and what it does not](../concepts/core-boundary.md)):
+
+| Refusal | Why, and what to do instead |
+| --- | --- |
+| `INVALID_MANIFEST_ENVELOPE` at `/spec/requires/guard` ("requires.guard is not accepted") | `requires` is closed; state caller conditions once in `authorize(target, caller)`: [caller conditions](authorization.md#caller-conditions) |
+| `INVALID_MANIFEST_ENVELOPE` at `/spec/source/kind` for `schedule` ("Wire scheduled() yourself") | Scheduling is the application's: [scheduled work](../cloudflare/deploy-and-operate.md#scheduled-work) |
+| `SQL_RELATION` "… is not a declared Schema" for an auth table such as `member` or `user` | Views read declared Schemas only: [organization members and invitations](authorization.md#organization-members-and-invitations) |
+| `USER_REF_SCOPE_ONLY` | Caller values reach SQL only through a `scope` or `restrict` term: [user fields](authorization.md#user-fields) |
+| A role list in `requires` (`{ ctx.admin: [editor] }`) | Decide per-target roles in `authorize` or a handler: [authorization](authorization.md) |
+| None: two owners can hold the same value of a scoped Schema's `uniqueIndexes` field, since its unique indexes start with the scope columns | For a value unique across all owners use a registry Schema: [a value unique across all owners](schema.md#a-value-unique-across-all-owners) |
 
 `Schema.spec.publishing` that is malformed or on a Schema that is not `lifecycle: publishing` is `SCHEMA_PUBLISHING_INVALID`. A Store update that sets a field `publish` requires to null on a published row is `INPUT_VALIDATION_FAILED`, naming the field, for every caller. A malformed `Schema.spec.lock` entry is `SCHEMA_LOCK_INVALID`; a lock `when` outside the [lock subset](schema.md#locks) is `SQL_SHAPE` (or the SQL compiler's own code), and an `EXISTS` no declared index serves is `LOCK_INDEX_MISSING`, whose message names the index to declare.
 

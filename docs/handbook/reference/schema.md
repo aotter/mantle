@@ -121,7 +121,7 @@ Publishing fields may be NULL in drafts even when required, so they cannot be Vi
 
 `checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. `searchableFields` defaults to none: Store and Admin list search then match the exact id only, and Admin's search box says so. Name the fields people search by, such as the list `primaryField` or a `title`; with Admin selected, `mantle generate` warns when a Schema has no `searchableFields` but has such a field that could be one (a plain string, not a date, date-time or reference). Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
 
-The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), including explicit data migration for destructive/type changes. Mantle drops nothing.
+The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), written from the diff of `schema.sql` ([schema migrations](../guides/migrations.md)), including explicit data migration for destructive/type changes. Mantle drops nothing.
 
 ### A value unique across all owners
 

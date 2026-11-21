@@ -25,3 +25,6 @@ its docs one topic at a time.
 4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.** Before a first
    deploy, `mantle help deploy-and-operate` takes the user through choosing how their users sign in, a Cloudflare
    account and `wrangler login`; the user types secrets into Wrangler, never into chat.
+5. **Hit a limit? Read `mantle help core-boundary` before proposing a change to Mantle.** Most limits are the app's to
+   solve with a documented pattern. Schema migrations are yours to write from the `schema.sql` diff
+   (`mantle help migrations`).

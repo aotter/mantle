@@ -66,7 +66,12 @@ exclusions, but keep an unmet explicit user requirement unresolved until the
 user changes its scope; do not redefine it as optional to make a round pass.
 Reuse the installed version's Views,
 Procedures, Store and surface contracts; a missing business tool is not by
-itself an SDK runtime defect.
+itself an SDK runtime defect. Before recording a gap as a Mantle gap, check
+[what Core does, and what it does not](../concepts/core-boundary.md): a need on
+its table is application-owned, so record it as `application-owned (pattern:
+<link>)` and build that pattern. Record a candidate Mantle gap only with the
+evidence that page asks for: the application code that works around it, why
+the listed patterns do not fit, and which of its tests the request passes.
 
 For simple creates/partial updates, prefer a declared Store-backed `ref`
 Procedure: await the caller-bound Store write, return a safe allowlist with its
@@ -143,7 +148,10 @@ the evidence.
    discoverable), P2 (friction) or P3 (suggestion), with evidence and the
    smallest repair. Separate a violated explicit requirement, a demonstrated
    defect and a newly inferred product wish; a wish is not permission to grow
-   the product. A goal the evaluator's own environment stopped (its tool
+   the product. A repair is the application's own unless
+   [Core's boundary](../concepts/core-boundary.md) says otherwise: a finding
+   whose repair is on its "does not do" table is fixed with that pattern, not
+   reported as a Mantle defect. A goal the evaluator's own environment stopped (its tool
    approval, sandbox or network, not an app refusal) is not a finding: record
    it as an [environment block](#report-done-ness-in-layers) and rerun that
    role once it is lifted.
@@ -350,6 +358,13 @@ Use ordinary Markdown; no new receipt schema or framework is required:
   author regression only, or UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
   used, which is layer 3 of the [layered report](#report-done-ness-in-layers).
   Retain every failed report.
+- Each schema change made during the rounds and its migration, written by
+  the author from the `generated/schema.sql` diff and rehearsed on a copy
+  ([schema migrations](migrations.md)); Mantle ships no migration tool, and
+  needing one is not a finding against it.
+- Every need recorded as application-owned with its pattern, and every
+  candidate Mantle gap with the evidence
+  [Core's boundary](../concepts/core-boundary.md#when-something-really-is-missing) asks for.
 - Fixture cleanup result and every remaining limitation.
 
 Keep credentials, raw auth logs, full resource HTML and private operational

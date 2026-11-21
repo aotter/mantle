@@ -4,7 +4,7 @@ A View requires `surface: public | admin | internal` and one `sql` SELECT. Optio
 
 ## SQL
 
-PostgreSQL syntax is parsed and checked at generation. Reads may reference declared Schemas, CTEs and reusable internal Views; no auth/system tables or arbitrary external relations. The compiler adds scope, TTL, publication and translation-parent visibility at every relation. SQL policy is not injected at request time.
+PostgreSQL syntax is parsed and checked at generation. Reads may reference declared Schemas, CTEs and reusable internal Views; no auth/system tables or arbitrary external relations (to list an auth plugin's members or invitations, mirror them into a Schema: [organization members and invitations](authorization.md#organization-members-and-invitations)). The compiler adds scope, TTL, publication and translation-parent visibility at every relation. SQL policy is not injected at request time.
 
 The SQL each dialect accepts, for Views and Procedures alike, is listed in [the SQL reference](sql.md); [SQL patterns](../guides/sql-patterns.md) shows the common ones. Unsupported SQL fails with a source position; generation is the authority for each target.
 
