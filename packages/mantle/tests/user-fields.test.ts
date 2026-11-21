@@ -67,7 +67,7 @@ test("verified identities freeze values, discard unknown fields and lose authori
     expect(() => userCaller({ id: "ok", region: value }, { fields })).not.toThrow();
   expect(() => userCaller({ id: "bad", region: "界".repeat(86) }, { fields })).toThrow();
   expect(() => userCaller({ id: "host:bad" })).toThrow();
-  expect(() => userRefs(true, 2)).toThrow("version");
+  expect(() => userRefs(true, 3)).toThrow("version");
   expect(() => binds({ userRefs: userRefs(true, 1) }, [{ k: "future" }] as never, caller)).toThrow(
     "Unknown user-reference",
   );

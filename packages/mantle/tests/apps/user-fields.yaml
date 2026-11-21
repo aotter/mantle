@@ -82,13 +82,14 @@ metadata: {name: rename-order-mcp}
 spec: {source: {kind: mcp, surface: admin}, target: {procedure: rename-order}}
 ---
 # OR between restrict terms (ADR-0046, #2105): a document is visible to its creator or to an owner of its organization.
+# `documents` and `my-docs` are the handbook's example (reference/authorization.md#creator-or-organization-owner).
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
-metadata: {name: docs}
+metadata: {name: documents}
 spec:
   title: Documents
   lifecycle: operational
-  indexes: [[org, title, id], [title, id]]
+  indexes: [[title, id]]
   schema:
     type: object
     required: [org, title]
@@ -100,8 +101,8 @@ metadata: {name: my-docs}
 spec:
   title: Documents I created or whose organization I own
   surface: public
-  restrict: {docs: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
-  sql: SELECT id, title, org FROM docs ORDER BY title, id
+  restrict: {documents: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
+  sql: SELECT id, title, org FROM documents ORDER BY title, id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -110,8 +111,8 @@ spec:
   title: One document I created or whose organization I own
   surface: public
   input: {type: object, required: [id], properties: {id: {type: string}}}
-  restrict: {docs: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
-  sql: SELECT id, title FROM docs WHERE id = input.id ORDER BY id
+  restrict: {documents: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
+  sql: SELECT id, title FROM documents WHERE id = input.id ORDER BY id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -119,8 +120,8 @@ metadata: {name: member-docs}
 spec:
   title: My documents in organizations I belong to, or any document of an organization I own
   surface: internal
-  restrict: {docs: "org IN auth.user('orgIds') AND author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
-  sql: SELECT id, title FROM docs ORDER BY title, id
+  restrict: {documents: "org IN auth.user('orgIds') AND author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
+  sql: SELECT id, title FROM documents ORDER BY title, id
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -129,8 +130,8 @@ spec:
   title: Rename a document
   input: {type: object, required: [id, title], properties: {id: {type: string}, title: {type: string, minLength: 1}}, additionalProperties: false}
   output: {type: object}
-  restrict: {docs: "(author_id = auth.uid() OR org IN auth.user('ownerOrgIds'))"}
-  handler: {sql: "UPDATE docs SET title = input.title WHERE id = input.id RETURNING id, title"}
+  restrict: {documents: "(author_id = auth.uid() OR org IN auth.user('ownerOrgIds'))"}
+  handler: {sql: "UPDATE documents SET title = input.title WHERE id = input.id RETURNING id, title"}
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
@@ -139,5 +140,5 @@ spec:
   title: Delete a document
   input: {type: object, required: [id], properties: {id: {type: string}}, additionalProperties: false}
   output: {type: object}
-  restrict: {docs: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
-  handler: {sql: "DELETE FROM docs WHERE id = input.id RETURNING id"}
+  restrict: {documents: "author_id = auth.uid() OR org IN auth.user('ownerOrgIds')"}
+  handler: {sql: "DELETE FROM documents WHERE id = input.id RETURNING id"}

@@ -797,7 +797,8 @@ export async function compileLinkedPlan(
       };
   }
   if (diagnostics.length) return { ok: false, diagnostics };
-  // `restrict`: extra row terms a target puts on the Schemas its SQL reads. Same grammar as `scope`; AND-ed, so it never widens.
+  // `restrict`: extra row terms a target puts on the Schemas its SQL reads. The scope's two terms, joined by AND or OR
+  // (ADR-0046, #2105; `scope` is AND-only), AND-ed onto the scope, so it never widens.
   const touched = (node: unknown, includeCtes = false, found = new Set<string>()): Set<string> => {
     if (!node || typeof node !== "object") return found;
     const n = node as SqlNode,
@@ -857,7 +858,14 @@ export async function compileLinkedPlan(
         continue;
       }
       const owner = template.owner?.toLowerCase();
-      const userTerm = ({ column: c, field }: { column: string; field: string }) => {
+      // Each distinct term is resolved once, so a mistake the CNF rewrite copies into several clauses is reported once.
+      const resolved = new Map<string, UserScope[]>();
+      const userTerm = (t: { column: string; field: string }) => {
+        const key = `${t.column.toLowerCase()}\0${t.field}`;
+        if (!resolved.has(key)) resolved.set(key, resolveTerm(t));
+        return resolved.get(key)!;
+      };
+      const resolveTerm = ({ column: c, field }: { column: string; field: string }): UserScope[] => {
         const found = column(c);
         if (!found) {
           fail(`restrict column '${c}' is not a field of '${schema.name}'.`);

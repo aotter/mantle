@@ -1,11 +1,19 @@
 /** OR between restrict terms (ADR-0046 amendment, #2105): grammar, refusals, binds, the index rule and describe. */
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { parseRestrict } from "../src/build/spec/domain/model/UserFields.js";
 import { compilePlan, d1Dialect } from "../src/build/compiler.js";
 import { describeApp, diffApp } from "../src/domain/describe/index.js";
-import { userBinds } from "../src/kernel/user-fields.js";
+import { userBinds, userRefs } from "../src/kernel/user-fields.js";
 import { userCaller } from "../src/kernel/user-caller.js";
-import { generateOrThrow } from "./apps/link.js";
+import { hostCaller } from "../src/kernel/host-caller.js";
+import { generateOrThrow, link, loadFixtureSources, writeGenerated } from "./apps/link.js";
+import { mantleProps } from "./gateway-fixture.js";
+
+const directory = resolve(import.meta.dir, "apps/.generated", `restrict-or-${crypto.randomUUID()}`);
+afterAll(() => rm(directory, { recursive: true, force: true }));
 
 const M = (kind: string, name: string, spec: object) =>
   JSON.stringify({ apiVersion: "cms.mantle.aotter.net/v2", kind, metadata: { name }, spec });
@@ -212,4 +220,231 @@ test("describe lists clauses under `or`; composition carries them; changing a cl
   expect(diffApp(before, andMore).find(c => c.id === "view:visible" && c.field === "restrict")?.direction).toBe(
     "narrowed",
   );
+});
+
+test("two spellings of one column are one term: an OR of them collapses, an AND of them is refused", async () => {
+  // SQL folds unquoted names; so does generation's column lookup.
+  expect(parseRestrict("org IN auth.user('o') OR ORG IN auth.user('o')")).toEqual({
+    terms: [{ column: "org", field: "o" }],
+    or: [],
+  });
+  expect(parseRestrict("Author_id = auth.uid() OR author_id = auth.uid()")).toEqual({
+    owner: "Author_id",
+    terms: [],
+    or: [],
+  });
+  for (const text of [
+    "org IN auth.user('a') AND ORG IN auth.user('b')",
+    "(org IN auth.user('a')) AND ORG IN auth.user('b')",
+    "(org IN auth.user('a') OR ORG IN auth.user('a')) AND org IN auth.user('b')",
+  ])
+    expect(parseRestrict(text)).toContain("appears twice");
+  // The collapsed term is a single term again: outside a clause, a missing field is refused.
+  const r = await compilePlan(
+    {
+      sources: [
+        {
+          sourceId: "d.yaml",
+          text: [docs(), view("org IN auth.user('o') OR ORG IN auth.user('o')")].join("\n---\n"),
+        },
+      ],
+    },
+    d1Dialect,
+    "operational",
+  );
+  if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+  expect(r.plan.views["visible"]!.restrict).toEqual({
+    docs: { terms: [{ column: "org", field: "o", type: "string" }] },
+  });
+  expect(typeof (await generate(docs(), view("Author_id = auth.uid() OR author_id = auth.uid()")))).toBe("object");
+});
+
+test("a flat AND has no term limit; a value with OR or parentheses has at most 8 terms", () => {
+  const nine = Array.from({ length: 9 }, (_, i) => `c${i} IN auth.user('f${i}')`).join(" AND ");
+  expect(typeof parseRestrict(nine)).toBe("object");
+  expect(parseRestrict(`(${nine})`)).toContain("at most 8 terms");
+});
+
+test("a mistake in one term of an OR restrict is reported once, whatever the clauses it lands in", async () => {
+  const text = [docs(), view("(author_id = auth.uid() AND org IN auth.user('o')) OR missing IN auth.user('m')")];
+  const r = await compilePlan(
+    { sources: [{ sourceId: "d.yaml", text: text.join("\n---\n") }] },
+    d1Dialect,
+    "operational",
+  );
+  if (r.ok) throw Error("generated");
+  expect(r.diagnostics.filter(d => d.message.includes("'missing'"))).toHaveLength(1);
+});
+
+test("the OR paging refusal names every unfixed prefix column, so the equality way it offers is bounded", async () => {
+  const scoped = M("Schema", "docs", {
+    title: "Docs",
+    scope: "region IN auth.user('region')",
+    indexes: [["region", "org", "title", "id"]],
+    schema: {
+      type: "object",
+      required: ["region", "org", "title"],
+      properties: { region: { type: "string" }, org: { type: "string" }, title: { type: "string" } },
+    },
+  });
+  const message = await generate(scoped, view(OR));
+  expect(message).toContain("past 'org', which an OR (such as a restrict OR-clause) never fixes");
+  expect(message).toContain("View inputs bound with equality on 'region', 'org'");
+  // That way is bounded: equalities on both prefix columns serve the index.
+  const both = M("View", "visible", {
+    surface: "public",
+    input: {
+      type: "object",
+      required: ["org", "region"],
+      properties: { org: { type: "string" }, region: { type: "string" } },
+    },
+    restrict: { docs: OR },
+    sql: "SELECT id, title FROM docs WHERE region = input.region AND org = input.org ORDER BY title, id",
+  });
+  expect(typeof (await generate(scoped, both))).toBe("object");
+  // So is the other: an index on the ordered columns.
+  expect(message).toContain("or index [title, id], read in order and filtered");
+  const ordered = scoped.replace('[["region","org","title","id"]]', '[["region","org","title","id"],["title","id"]]');
+  expect(typeof (await generate(ordered, view(OR)))).toBe("object");
+});
+
+test("an OR in the View's own SQL gets the OR guidance, for an input and for a literal", async () => {
+  const own = (where: string) =>
+    M("View", "visible", {
+      surface: "public",
+      input: { type: "object", required: ["org"], properties: { org: { type: "string" } } },
+      sql: `SELECT id, title FROM docs WHERE ${where} ORDER BY title, id`,
+    });
+  for (const where of [
+    "org = input.org OR member = 'm'",
+    "org = 'o1' OR member = input.org",
+    "input.org = org OR member = 'm'",
+  ])
+    expect(await generate(docs([["org", "title", "id"]]), own(where))).toContain(
+      "past 'org', which an OR (such as a restrict OR-clause) never fixes",
+    );
+});
+
+test("INSERT into a restricted Schema: an OR-clause behaves as an IN term, trusted-only with a field scope and refused without", async () => {
+  const insert = (restrict: string) =>
+    M("Procedure", "add", {
+      title: "Add",
+      input: { type: "object", additionalProperties: false, properties: { title: { type: "string" } } },
+      output: { type: "object" },
+      restrict: { docs: restrict },
+      handler: { sql: "INSERT INTO docs (org, title, member) VALUES ('o1', input.title, 'm') RETURNING id" },
+    });
+  const scoped = docs([["member", "title", "id"]], "member IN auth.user('teams')");
+  for (const restrict of ["org IN auth.user('ownerOrgIds')", OR]) {
+    expect(await generate(docs(), insert(restrict))).toContain(
+      "Procedure INSERT/upsert into a restricted Schema, or INSERT ... SELECT into a field-scoped one, requires trusted mode",
+    );
+    const r = await compilePlan(
+      { sources: [{ sourceId: "d.yaml", text: [scoped, insert(restrict)].join("\n---\n") }] },
+      d1Dialect,
+      "operational",
+    );
+    if (!r.ok) throw Error(JSON.stringify(r.diagnostics));
+    expect(r.plan.procedures["add"]!.trustedOnly).toBe(true);
+  }
+  // An owner term alone is stamped from the caller, so a caller may insert.
+  expect(typeof (await generate(docs(), insert("author_id = auth.uid()")))).toBe("object");
+});
+
+test("host callers: a field the host did not forward is 412 inside a clause too; a forwarded [] binds the empty set", async () => {
+  const fields = { ownerOrgIds: { type: "string" as const, multiple: true } };
+  const host = (user: Record<string, unknown>) =>
+    hostCaller(mantleProps({ layer: "member", user: { id: "c1", ...user } as never }), { tenant: "example", fields });
+  const recipe = {
+    k: "user" as const,
+    field: "ownerOrgIds",
+    type: "string" as const,
+    multiple: true,
+    any: true as const,
+  };
+  const failure = (run: () => unknown) => {
+    try {
+      run();
+    } catch (e: any) {
+      return [e?.code, e?.status, e?.fields];
+    }
+  };
+  for (const sqlite of [true, false]) {
+    expect(userBinds(sqlite)(recipe, host({ ownerOrgIds: [] }))).toBe(sqlite ? "[]" : "{}");
+    expect(failure(() => userBinds(sqlite)(recipe, host({})))).toEqual([
+      "HOST_CONTRACT",
+      412,
+      { field: "ownerOrgIds" },
+    ]);
+  }
+  // The generated View on the host-contract path.
+  const files = await generateOrThrow("bun-sqlite", await loadFixtureSources("user-fields.yaml"));
+  await writeGenerated(resolve(directory, "host"), files);
+  const app = await import(resolve(directory, "host", "generated.ts")),
+    db = new Database(":memory:");
+  const titles = async (caller: unknown) =>
+    ((await app.views["my-docs"](db, caller, {})) as { title: string }[]).map(r => r.title);
+  try {
+    db.exec(files["schema.sql"]!);
+    await app
+      .store(db, userCaller({ id: "c1" }))
+      .collection("documents")
+      .insert({ org: "o1", title: "mine" });
+    await app
+      .store(db, userCaller({ id: "x" }))
+      .collection("documents")
+      .insert({ org: "o2", title: "theirs" });
+    expect(await titles(host({ ownerOrgIds: [] }))).toEqual(["mine"]);
+    expect(await titles(host({ ownerOrgIds: ["o2"] }))).toEqual(["mine", "theirs"]);
+    const refused = await titles(host({})).then(
+      () => undefined,
+      (e: any) => [e?.code, e?.status, e?.fields],
+    );
+    expect(refused).toEqual(["HOST_CONTRACT", 412, { field: "ownerOrgIds" }]);
+    // The application's own callers keep the amendment's rule: a missing field is an empty set.
+    expect(await titles(userCaller({ id: "c1" }, { fields }))).toEqual(["mine"]);
+  } finally {
+    db.close();
+  }
+});
+
+test("bind capability: output with an OR-clause needs USER_REFS_V2, and a V1-only runtime refuses it instead of misreading binds", async () => {
+  const v1 = await generate(docs(), view("author_id = auth.uid() AND org IN auth.user('ownerOrgIds')"));
+  const v2 = await generate(docs(), view(OR));
+  if (typeof v1 === "string" || typeof v2 === "string") throw Error(String(v1) + String(v2));
+  expect(v1["generated.ts"]).toContain("USER.userRefs(true, 1)");
+  expect(v2["generated.ts"]).toContain("USER.userRefs(true, 2)");
+  expect(Object.values(v2).some(code => code.includes("USER.userRefs(true, 1)"))).toBe(false);
+  // This runtime links both; an unknown version still fails.
+  expect(() => userRefs(true, 1)).not.toThrow();
+  expect(() => userRefs(true, 2)).not.toThrow();
+  expect(() => userRefs(true, 3)).toThrow("version");
+  // A runtime that knows only V1 (the user-fields module before #2105) fails to load the OR output.
+  const dir = resolve(directory, "v1-runtime"),
+    kernel = resolve(import.meta.dir, "../src/kernel");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    resolve(dir, "user-fields-v1.ts"),
+    [
+      `export * from ${JSON.stringify(resolve(kernel, "user-fields.ts"))};`,
+      `import { userRefs as current } from ${JSON.stringify(resolve(kernel, "user-fields.ts"))};`,
+      `import { ContractError } from ${JSON.stringify(resolve(kernel, "contract-error.ts"))};`,
+      "export const userRefs = (sqlite: boolean, version: number) => {",
+      '  if (version !== 1) throw new ContractError("USER_REFS_VERSION", "User-reference bind version differs.");',
+      "  return current(sqlite, version);",
+      "};",
+    ].join("\n"),
+  );
+  await writeFile(
+    resolve(dir, "generated.ts"),
+    link(v2["generated.ts"]!.replace('"@aotter/mantle/internal/user-fields"', '"USER_FIELDS_V1"')).replace(
+      '"USER_FIELDS_V1"',
+      JSON.stringify(resolve(dir, "user-fields-v1.ts")),
+    ),
+  );
+  const code = await import(resolve(dir, "generated.ts")).then(
+    () => "linked",
+    (e: any) => e?.code ?? String(e),
+  );
+  expect(code).toBe("USER_REFS_VERSION");
 });

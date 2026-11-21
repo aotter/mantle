@@ -32,7 +32,8 @@ export function parseRowTemplate(text: unknown): RowTemplate | string {
     if (!user)
       return `unsupported term '${term}'; use column = auth.uid() or column IN auth.user('field'), joined by AND`;
     if (!validUserFieldName(user[2]!)) return `invalid or reserved user field '${user[2]}'`;
-    if (terms.some(t => t.column === user[1] || t.field === user[2]))
+    // Unquoted SQL names fold, so two spellings of one column are one column.
+    if (terms.some(t => t.column.toLowerCase() === user[1]!.toLowerCase() || t.field === user[2]))
       return `column '${user[1]}' or field '${user[2]}' appears twice`;
     terms.push({ column: user[1]!, field: user[2]! });
   }
@@ -47,7 +48,9 @@ export interface RestrictTemplate extends RowTemplate {
 const MAX_RESTRICT_TERMS = 8;
 const TOKEN =
   /\s*(?:([A-Za-z_][A-Za-z0-9_]*\s*=\s*auth\.uid\(\)|[A-Za-z_][A-Za-z0-9_]*\s+IN\s+auth\.user\('[^']*'\))|([()])|(AND|OR)(?![A-Za-z0-9_]))/iy;
-const termKey = (t: TemplateTerm) => ("owner" in t ? `0${t.owner}` : `1${t.column}\0${t.field}`);
+// Column names fold as in SQL (generation resolves them without case), so two spellings of a term are one term.
+const termKey = (t: TemplateTerm) =>
+  "owner" in t ? `0${t.owner.toLowerCase()}` : `1${t.column.toLowerCase()}\0${t.field}`;
 /**
  * `restrict := conj (OR conj)*`, `conj := factor (AND factor)*`, `factor := term | "(" restrict ")"`. A value without OR or
  * parentheses is `parseRowTemplate`'s, unchanged; each AND-chain of terms keeps its rules (one `= auth.uid()`, a column or
@@ -111,7 +114,10 @@ export function parseRestrict(text: unknown): RestrictTemplate | string {
   const clauses = [
     ...new Map(
       cnf.map(c => {
-        const terms = [...new Map(c.map(t => [termKey(t), t])).entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+        // Reversed, so a repeated term keeps its first spelling; the clause is sorted next.
+        const terms = [...new Map(c.map(t => [termKey(t), t] as const).reverse()).entries()].sort(([a], [b]) =>
+          a < b ? -1 : 1,
+        );
         return [terms.map(([k]) => k).join("|"), terms.map(([, t]) => t)] as const;
       }),
     ).values(),
@@ -120,7 +126,9 @@ export function parseRestrict(text: unknown): RestrictTemplate | string {
     owners = single.flatMap(t => ("owner" in t ? [t.owner] : [])),
     terms = single.filter((t): t is { column: string; field: string } => !("owner" in t));
   if (owners.length > 1) return "at most one `= auth.uid()` term";
-  const twice = terms.find((t, n) => terms.some((u, m) => m < n && (u.column === t.column || u.field === t.field)));
+  const twice = terms.find((t, n) =>
+    terms.some((u, m) => m < n && (u.column.toLowerCase() === t.column.toLowerCase() || u.field === t.field)),
+  );
   if (twice) return `column '${twice.column}' or field '${twice.field}' appears twice`;
   return { ...(owners[0] ? { owner: owners[0] } : {}), terms, or: clauses.filter(c => c.length > 1) };
 }

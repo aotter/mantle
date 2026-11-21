@@ -394,7 +394,7 @@ async function verifyRestrictOr(
     orgIds: { type: "string", multiple: true },
   } as const;
   const as = (id: string, values: Fields = {}): Caller => makeCaller({ id, ...values }, { fields });
-  const docs = (caller: Caller) => app.store(db, caller).collection("docs");
+  const docs = (caller: Caller) => app.store(db, caller).collection("documents");
   // c1 creates d1 (org o1) and d2 (o2); x creates d3 (o1) and d4 (o3).
   for (const [author, org, title] of [
     ["c1", "o1", "d1"],

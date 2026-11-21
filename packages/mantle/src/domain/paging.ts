@@ -205,14 +205,19 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
       if (output && pos > 0) return resolve(s.targetList[pos - 1]?.ResTarget.val, false);
       return;
     };
-    // Columns an OR compares to a value (a restrict OR-clause, #2105): an OR fixes none of them, so they only guide the refusal.
+    // Columns an OR compares to a value, as `fixed` tests an equality (a restrict OR-clause, #2105, or the View's own SQL):
+    // an OR fixes none of them, so they only guide the refusal.
     const either = (n: SqlNode): void => {
       const raw = n?.Raw?.parts,
         e = n?.A_Expr,
         col = anyOf(raw)
           ? resolve(raw[1], false)
-          : e?.kind === "AEXPR_OP" && e.name?.[0]?.String?.sval === "=" && e.rexpr?.ParamRef
-            ? resolve(e.lexpr, false)
+          : e?.kind === "AEXPR_OP" && e.name?.[0]?.String?.sval === "="
+            ? scalar(e.rexpr)
+              ? resolve(e.lexpr, false)
+              : scalar(e.lexpr)
+                ? resolve(e.rexpr, false)
+                : undefined
             : undefined;
       if (col && col.source === base!.fields.get("id")?.source) base!.ors.add(col.name);
     };
@@ -311,14 +316,16 @@ export function provePaging(plan: RuntimePlan, ast: SqlNode): PagingProof | unde
               eq = [...base.fixed].filter(c => c !== "id" && !order.some(f => f.name === c));
             // A column only an OR compares (#2105): an equality input fixes it; an index on the ordered columns is read in
             // order and filtered. Ordering by the OR's column first would scan that whole index too, so it is not offered.
-            const unfixed = set.filter(c => base!.ors.has(c) && !base!.sets.has(c));
+            const unfixed = set.filter(c => base!.ors.has(c) && !base!.sets.has(c)),
+              quoted = (cs: string[]) => cs.map(c => `'${field(c)}'`).join(", ");
+            // The equality way names every unfixed prefix column: one a user-field term binds to a set needs its own too.
+            const others = set.filter(c => !unfixed.includes(c));
             if (unfixed.length)
               return fail(
-                `ORDER BY (${columns}) needs index [${index.map(field).join(", ")}] past ${unfixed.map(c => `'${field(c)}'`).join(", ")}, which an OR (such as a restrict OR-clause) never fixes: every page would sort all of the caller's matching rows. Bounded: a View input bound with equality on that column; or index [${[...eq.map(field), fields].join(", ")}, id], read in order and filtered (handbook: reference/schema.md#index-prefixes-for-paged-views).`,
+                `ORDER BY (${columns}) needs index [${index.map(field).join(", ")}] past ${quoted(unfixed)}, which an OR (such as a restrict OR-clause) never fixes${others.length ? `, and ${quoted(others)}, which a user-field scope or restrict binds to a set of values` : ""}: every page would sort all of the caller's matching rows. Bounded: ${set.length > 1 ? `View inputs bound with equality on ${quoted(set)}` : "a View input bound with equality on that column"}; or index [${[...eq.map(field), fields].join(", ")}, id], read in order and filtered (handbook: reference/schema.md#index-prefixes-for-paged-views).`,
               );
             // The suggested order is the index from its first set-bound column: an equality-fixed column between stays in it.
-            const lead = prefix.slice(prefix.indexOf(set[0]!)),
-              quoted = (cs: string[]) => cs.map(c => `'${field(c)}'`).join(", ");
+            const lead = prefix.slice(prefix.indexOf(set[0]!));
             // The scope-first order is offered only when SQL can name every added column and none can be null. The owner
             // scope column is NOT NULL in storage, but a View cannot address it.
             const notNull = notNullColumns(schema),
