@@ -14,7 +14,7 @@ import {
   type RuntimePlan,
   type SqlNode,
 } from "../build/compiler.js";
-import { wireReturning, wireScalars } from "../domain/wireScalars.js";
+import { printExpression, wireReturning, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType, outputType } from "../domain/columns.js";
 import { castCursor, provePaging, type PagingProof } from "../domain/paging.js";
 import { dialect as sqliteDialect } from "../kernel/dialect/sqlite.js";
@@ -39,16 +39,7 @@ const coreLocks = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schema
                 name: l.name,
                 on: l.on,
                 message: l.message,
-                sql: dialect.print!(
-                  {
-                    SelectStmt: {
-                      targetList: [{ ResTarget: { val: lockCondition(l.when, schemas, dialect.lowering) } }],
-                      limitOption: "LIMIT_OPTION_DEFAULT",
-                      op: "SETOP_NONE",
-                    },
-                  },
-                  schemas,
-                ).replace(/^SELECT /, ""),
+                sql: printExpression(dialect, lockCondition(l.when, schemas, dialect.lowering), schemas),
               })),
             ],
           ]
@@ -60,17 +51,7 @@ const coreLocks = (dialect: Pick<typeof d1Dialect, "print" | "lowering">, schema
 export const coreNewId = (
   dialect: Pick<typeof d1Dialect, "print" | "lowering">,
   schemas: Parameters<NonNullable<typeof d1Dialect.print>>[1],
-): string =>
-  dialect.print!(
-    {
-      SelectStmt: {
-        targetList: [{ ResTarget: { val: dialect.lowering.newId() } }],
-        limitOption: "LIMIT_OPTION_DEFAULT",
-        op: "SETOP_NONE",
-      },
-    },
-    schemas,
-  ).replace(/^SELECT /, "");
+): string => printExpression(dialect, dialect.lowering.newId(), schemas);
 
 // JSON, date-time and date inputs are driver-ready text. Declaring their parameter as text makes every driver send it verbatim:
 // Bun.SQL would JSON-encode a string bound to jsonb a second time, and postgres.js turns one bound to timestamptz or date into a

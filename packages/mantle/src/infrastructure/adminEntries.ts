@@ -5,7 +5,7 @@ import { parsePgSql } from "../build/compiler.js";
 import { compileProgram } from "../build/compiler.js";
 import { adminOrder } from "../domain/adminOrder.js";
 import { declaredType, SCALAR, serverOwned } from "../domain/columns.js";
-import { wireScalars, wireReturning } from "../domain/wireScalars.js";
+import { printExpression, wireScalars, wireReturning } from "../domain/wireScalars.js";
 import { recipesOf } from "../domain/recipes.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
@@ -54,14 +54,7 @@ export async function adminEntries(
     return stmts;
   };
   const print = (ast: SqlNode) => dialect.print!(ast, plan.schemas);
-  const expr = (value: SqlNode) =>
-    print({
-      SelectStmt: {
-        targetList: [{ ResTarget: { val: value } }],
-        op: "SETOP_NONE",
-        limitOption: "LIMIT_OPTION_DEFAULT",
-      },
-    }).replace(/^SELECT /, "");
+  const expr = (value: SqlNode) => printExpression(dialect, value, plan.schemas);
   for (const s of Object.values(plan.schemas))
     try {
       const columns = [...system(s), ...fields(s)],

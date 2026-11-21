@@ -1,7 +1,7 @@
 /** Print native Admin matching fragments once. No compiler, AST or authored schema reaches requests. */
 import type { RuntimePlan, SqlNode } from "../build/compiler.js";
 import { adminEntries } from "./adminEntries.js";
-import { wireScalars } from "../domain/wireScalars.js";
+import { printExpression, wireScalars } from "../domain/wireScalars.js";
 import { boundaryType } from "../domain/columns.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import type { GenerateDiagnostic } from "../domain/model.js";
@@ -84,14 +84,7 @@ export function adminPaging(
           },
         };
         const tail = print(suffixAst).replace(/^SELECT 1/, "");
-        const expression = (ast: SqlNode) =>
-          print({
-            SelectStmt: {
-              targetList: [{ ResTarget: { val: ast } }],
-              limitOption: "LIMIT_OPTION_DEFAULT",
-              op: "SETOP_NONE",
-            },
-          }).replace(/^SELECT /, "");
+        const expression = (ast: SqlNode) => printExpression(dialect, ast, plan.schemas);
         const fragment = (match: Parameters<typeof pagedOf>[3], type?: string) => {
           const p = pagedOf({ schemas: plan.schemas, dialect }, c, undefined, match);
           const ast = structuredClone(p.ast.SelectStmt.whereClause);

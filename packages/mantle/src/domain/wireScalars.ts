@@ -1,6 +1,17 @@
-import type { RuntimePlan, SqlNode } from "../build/compiler.js";
+import type { MantleDialect, RuntimePlan, SqlNode } from "../build/compiler.js";
 import type { Dialect } from "../kernel/dialect/common.js";
 import { declaredType } from "./columns.js";
+
+/** Print one node as an SQL expression: the dialect prints statements, so this is the target of a bare SELECT. */
+export const printExpression = (
+  dialect: Pick<MantleDialect, "print">,
+  val: SqlNode,
+  schemas: Parameters<NonNullable<MantleDialect["print"]>>[1],
+): string =>
+  dialect.print!(
+    { SelectStmt: { targetList: [{ ResTarget: { val } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } },
+    schemas,
+  ).replace(/^SELECT /, "");
 
 const raw = (...parts: (string | SqlNode)[]): SqlNode => ({ Raw: { parts } });
 
