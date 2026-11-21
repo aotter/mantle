@@ -5404,11 +5404,11 @@ gateway=off authorize=allow caller=admin-session shape=same-origin route=collect
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=entry-write
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[schema:records:update,schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[schema:records:update,schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=entry-write-malformed-json
   400 error{code=INPUT_VALIDATION_FAILED path=rest message} keys=error cache=private, no-store
@@ -5416,11 +5416,11 @@ gateway=off authorize=allow caller=admin-session shape=same-origin route=entry-w
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=entry-create
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[schema:records:create,schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[schema:records:create,schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=publish
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[procedure:records.publish,schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[procedure:records.publish,schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=same-origin route=view-read
   200 keys=rows cache=private, no-store
@@ -5504,7 +5504,7 @@ gateway=off authorize=allow caller=admin-session shape=cross-origin route=collec
   event=none
 gateway=off authorize=allow caller=admin-session shape=cross-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=cross-origin route=entry-write
   403 error{code=AUTH_DENIED path=request:origin message} keys=error cache=private, no-store
@@ -5604,7 +5604,7 @@ gateway=off authorize=allow caller=admin-session shape=no-origin route=collectio
   event=none
 gateway=off authorize=allow caller=admin-session shape=no-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=1 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=1 authorize=[schema:records:read]
   event=none
 gateway=off authorize=allow caller=admin-session shape=no-origin route=entry-write
   403 error{code=AUTH_DENIED path=request:origin message} keys=error cache=private, no-store
@@ -7204,11 +7204,11 @@ gateway=on authorize=allow caller=host-admin shape=same-origin route=collection-
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=entry-write
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:update,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:update,schema:records:read]
   event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=entry-write-malformed-json
   400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
@@ -7216,11 +7216,11 @@ gateway=on authorize=allow caller=host-admin shape=same-origin route=entry-write
   event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=entry-create
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:create,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:create,schema:records:read]
   event=allow@admin:POST /entries hash=<hash:admin:POST /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=publish
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read]
   event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=same-origin route=view-read
   200 keys=rows cache=private, no-store
@@ -7304,11 +7304,11 @@ gateway=on authorize=allow caller=host-admin shape=cross-origin route=collection
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=entry-write
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:update,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:update,schema:records:read]
   event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=entry-write-malformed-json
   400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
@@ -7316,11 +7316,11 @@ gateway=on authorize=allow caller=host-admin shape=cross-origin route=entry-writ
   event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=entry-create
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:create,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:create,schema:records:read]
   event=allow@admin:POST /entries hash=<hash:admin:POST /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=publish
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read]
   event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=cross-origin route=view-read
   200 keys=rows cache=private, no-store
@@ -7404,11 +7404,11 @@ gateway=on authorize=allow caller=host-admin shape=no-origin route=collection-li
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=entry-write
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:update,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:update,schema:records:read]
   event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=entry-write-malformed-json
   400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
@@ -7416,11 +7416,11 @@ gateway=on authorize=allow caller=host-admin shape=no-origin route=entry-write-m
   event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=entry-create
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:create,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:create,schema:records:read]
   event=allow@admin:POST /entries hash=<hash:admin:POST /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=publish
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read]
   event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin shape=no-origin route=view-read
   200 keys=rows cache=private, no-store
@@ -7804,11 +7804,11 @@ gateway=on authorize=allow caller=host-admin-session shape=same-origin route=col
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=entry-write
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:update,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:update,schema:records:read]
   event=allow@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=entry-write-malformed-json
   400 error{code=INPUT_VALIDATION_FAILED target=rest message} keys=error cache=private, no-store
@@ -7816,11 +7816,11 @@ gateway=on authorize=allow caller=host-admin-session shape=same-origin route=ent
   event=error:INPUT_VALIDATION_FAILED@admin:PATCH /entries/:id hash=<hash:admin:PATCH /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=entry-create
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:create,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:create,schema:records:read]
   event=allow@admin:POST /entries hash=<hash:admin:POST /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=publish
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[procedure:records.publish,schema:records:read]
   event=allow@admin:POST /entries/:id/publish hash=<hash:admin:POST /entries/:id/publish> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=same-origin route=view-read
   200 keys=rows cache=private, no-store
@@ -7904,7 +7904,7 @@ gateway=on authorize=allow caller=host-admin-session shape=cross-origin route=co
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=cross-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=cross-origin route=entry-write
   403 error{code=AUTH_DENIED target=request:origin message} keys=error cache=private, no-store
@@ -8004,7 +8004,7 @@ gateway=on authorize=allow caller=host-admin-session shape=no-origin route=colle
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=no-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-session shape=no-origin route=entry-write
   403 error{code=AUTH_DENIED target=request:origin message} keys=error cache=private, no-store
@@ -8404,7 +8404,7 @@ gateway=on authorize=allow caller=host-admin-snapshot shape=same-origin route=co
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=same-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=same-origin route=entry-write
   403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
@@ -8504,7 +8504,7 @@ gateway=on authorize=allow caller=host-admin-snapshot shape=cross-origin route=c
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=cross-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=cross-origin route=entry-write
   403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
@@ -8604,7 +8604,7 @@ gateway=on authorize=allow caller=host-admin-snapshot shape=no-origin route=coll
   event=allow@admin:GET /entries hash=<hash:admin:GET /entries> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=no-origin route=entry-read
   200 keys=collection,entry,parentEntryId,parentEntryTitle,related cache=private, no-store
-  db=1 resolver=0 authorize=[schema:records:read,schema:records:read]
+  db=1 resolver=0 authorize=[schema:records:read]
   event=allow@admin:GET /entries/:id hash=<hash:admin:GET /entries/:id> caller=host/admin/host:person
 gateway=on authorize=allow caller=host-admin-snapshot shape=no-origin route=entry-write
   403 error{code=STALE_CALLER target=admin:PATCH /entries/:id message} keys=error cache=private, no-store
