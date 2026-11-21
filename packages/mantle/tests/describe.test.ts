@@ -454,9 +454,12 @@ test("target hashes normalize optional lowering away for all targets", async () 
     views: { "regional-orders": { caller: { sql: "cached", binds: [] } } },
     procedures: { "rename-order": { caller: [{ sql: "cached", binds: [] }] } },
   };
-  const report = await describeApp(a);
-  for (const t of report.targets) expect(await targetHash(a, t._meta.id)).toBe(await targetHash(b, t._meta.id));
-  expect(diffApp(report, await describeApp(b))).toEqual([]);
+  const report = await describeApp(a),
+    other = await describeApp(b);
+  expect(report.targets.map(t => [t._meta.id, t._meta.targetHash])).toEqual(
+    other.targets.map(t => [t._meta.id, t._meta.targetHash]),
+  );
+  expect(diffApp(report, other)).toEqual([]);
 });
 
 test("a dispatcher reports widening in one variant even when aggregate flags stay unchanged", async () => {
