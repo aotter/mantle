@@ -13,7 +13,6 @@ it("application frontend builds without Admin and renders/pages through official
   const alias = {
     react: resolve(require.resolve("react"), ".."),
     "react-dom": resolve(require.resolve("react-dom/client"), ".."),
-    "@aotter/mantle-ui": resolve(root, "packages/mantle-ui/src/index.ts"),
     "@modelcontextprotocol/ext-apps/react": require.resolve("@modelcontextprotocol/ext-apps/react"),
     "@modelcontextprotocol/ext-apps/app-bridge": require.resolve("@modelcontextprotocol/ext-apps/app-bridge"),
     "@modelcontextprotocol/ext-apps": require.resolve("@modelcontextprotocol/ext-apps"),
@@ -34,7 +33,6 @@ it("application frontend builds without Admin and renders/pages through official
       /packages\/mantle(?:-admin)?\/(?:src|admin|dist)\//.test(path),
     ),
   ).toEqual([]);
-  expect(Object.keys(frontend.metafile!.inputs).some(path => path.includes("mantle-ui/src/"))).toBe(true);
   const host = await build({
     stdin: {
       contents: `
@@ -83,6 +81,17 @@ await bridge.connect(new PostMessageTransport(frame.contentWindow,frame.contentW
     await page.goto(`http://127.0.0.1:${address.port}`);
     const app = page.frameLocator("iframe");
     await app.getByText("Alice one").waitFor();
+    await page.evaluate(() => {
+      const bridge = (window as any).host.bridge;
+      const resume = bridge.oncalltool;
+      bridge.oncalltool = () => {
+        bridge.oncalltool = resume;
+        return { isError: true, content: [{ type: "text", text: "Temporary refusal" }] };
+      };
+    });
+    await app.getByRole("button", { name: "Load more" }).click();
+    await app.getByRole("alert").filter({ hasText: "Unable to load more tasks" }).waitFor();
+    expect(await app.getByText("Alice one").count()).toBe(1);
     await app.getByRole("button", { name: "Load more" }).click();
     await app.getByText("Alice two").waitFor();
     expect(await app.getByText("Alice one").count()).toBe(1);

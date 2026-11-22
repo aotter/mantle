@@ -9,14 +9,15 @@ import { developerConsole } from "./generated/admin-descriptors.ts";
 
 const SECRET = "local-supplier-secret", DAILY = "0 9 * * *", DAY_US = 86_400 * 1_000_000;
 
-// A stand-in supplier API: accepts an order and answers with its order id, or 503 while `supplierDown`.
+// A stand-in supplier API: accepts an order and answers with its order id, an incomplete success, or 503.
 const received = [];
-let supplierDown = false;
+let supplierDown = false, supplierMissingId = false;
 const supplier = createServer((request, response) => {
   let body = "";
   request.on("data", chunk => { body += chunk; });
   request.on("end", () => {
     if (supplierDown) return response.writeHead(503).end();
+    if (supplierMissingId) return response.writeHead(200, { "content-type": "application/json" }).end("{}");
     received.push({ ...JSON.parse(body), idempotencyKey: request.headers["idempotency-key"] });
     response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ orderId: `SUP-${received.length}` }));
   });
@@ -143,6 +144,9 @@ try {
     assert.equal(rejected.body.result.isError, undefined, JSON.stringify(rejected.body));
     assert.equal((await row(chairs)).status, "rejected");
     assert.equal((await query(`SELECT rejectionReason AS reason FROM requests WHERE id = '${chairs}'`))[0].reason, rejectionReason);
+    const rejectedDetail = (cookie) => call("GET", "/api/views/my-request?id=" + chairs, { cookie });
+    assert.equal((await rejectedDetail(alice)).body.rows[0].rejectionReason, rejectionReason);
+    assert.deepEqual((await rejectedDetail(bob)).body.rows, []);
     await waitForLog(/purchasing\.rejected → alice@example\.test[\s\S]*?Rejected: Chairs/);
     await waitForLog(/The department is deferring this purchase\./);
     const guarded = await operation(admin, "approve-request", { id: chairs, expectedVersion: await version(chairs) });
@@ -185,14 +189,16 @@ try {
     await waitForLog(/purchasing\.approved → alice@example\.test[\s\S]*?Approved: Laptop/);
     step("approval places the supplier order (status 'ordered') and emails the requester");
 
-    supplierDown = true;
+    supplierMissingId = true;
     const viaAi = await mcp("/mcp/admin", admin, "approve_request", { id: desk, expectedVersion: await version(desk) });
     assert.equal(viaAi.body.result.isError, undefined, JSON.stringify(viaAi.body));
+    supplierMissingId = false;
+    supplierDown = true;
     assert.equal((await operation(carol, "approve-request", { id: projector, expectedVersion: await version(projector) })).status, 200);
     assert.deepEqual([(await row(desk)).status, (await row(projector)).status], ["approved", "approved"]);
     assert.equal(await remaining("Engineering"), 2800);
     await waitForLog(/purchasing\.approved → bob@example\.test[\s\S]*?Approved: Desk/);
-    step("the admin MCP tool approves too; with the supplier down, approvals still commit and stay 'approved'");
+    step("the admin MCP tool approves too; with the supplier down or missing its order id, approvals still commit and stay 'approved'");
 
     assert.equal((await signed({ reference: laptop, orderId: "SUP-1" }, "wrong-secret")).status, 401);
     const tampered = await call("POST", "/callbacks/supplier", { body: JSON.stringify({ reference: laptop, orderId: "SUP-1" }),

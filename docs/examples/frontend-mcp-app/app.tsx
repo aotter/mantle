@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useApp } from "@modelcontextprotocol/ext-apps/react";
-import { EntityPreview } from "@aotter/mantle-ui";
 
 interface Rows { rows: { id: string; title: string; version: number }[]; nextCursor?: string }
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20,11 +19,13 @@ function Frontend() {
   const [page, setPage] = useState<Rows>({ rows: [] });
   const [failure, setFailure] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pageFailed, setPageFailed] = useState(false);
   const { app, isConnected, error } = useApp({
     appInfo: { name: "my-tasks", version: "1" }, capabilities: {},
     onAppCreated: app => { app.ontoolresult = result => {
       // This application consumes its declared View result, not Admin metadata.
       generation.current++;
+      setPageFailed(false);
       try { setPage(readRows(result)); setFailure(null); }
       catch { setFailure("Unable to read tasks. Ask for the task list again."); }
     }; },
@@ -35,15 +36,18 @@ function Frontend() {
     if (!app || busy || !page.nextCursor) return;
     const opened = generation.current;
     setBusy(true);
+    setPageFailed(false);
     try {
       const result = await app.callServerTool({ name: "my_tasks", arguments: { limit: 1, cursor: page.nextCursor } });
       const next = readRows(result);
       if (opened !== generation.current) return;
       setPage(current => ({ rows: [...current.rows, ...next.rows], ...(next.nextCursor ? { nextCursor: next.nextCursor } : {}) }));
-    } catch { if (opened === generation.current) setFailure("Unable to load more tasks"); }
+    } catch { if (opened === generation.current) setPageFailed(true); }
     finally { setBusy(false); }
   };
-  return <main aria-busy={busy}><h1>My tasks</h1>{page.rows.map(row => <EntityPreview key={row.id} entry={{ id: row.id, version: row.version, data: { title: row.title } }} />)}
+  return <main aria-busy={busy}><h1>My tasks</h1>
+    {page.rows.length ? <ul>{page.rows.map(row => <li key={row.id}>{row.title}</li>)}</ul> : <p>No tasks yet.</p>}
+    {pageFailed ? <p role="alert">Unable to load more tasks. Try again.</p> : null}
     {page.nextCursor && app?.getHostCapabilities()?.serverTools ? <button disabled={busy} onClick={() => { void more(); }}>Load more</button> : null}
   </main>;
 }
