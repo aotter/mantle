@@ -67,6 +67,19 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
     await page.goto(`${origin}/admin/p/revisions?post=${post}`);
     await page.getByRole("heading", { name: "Post: hello", exact: true }).waitFor();
+    // A base href must not turn a same-page skip link into navigation to Admin Home.
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() =>
+        page
+          .getByRole("link", { name: "Skip to main content", exact: true })
+          .evaluate(node => node === document.activeElement),
+      )
+      .toBe(true);
+    await page.keyboard.press("Enter");
+    expect(new URL(page.url()).pathname).toBe("/admin/p/revisions");
+    expect(new URL(page.url()).searchParams.get("post")).toBe(post);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("content");
     const revision = page.getByLabel("Revision", { exact: true });
     const preview = page.getByRole("button", { name: "Preview selected revision", exact: true });
     const change = page.getByRole("button", { name: "Switch to reviewed revision", exact: true });
