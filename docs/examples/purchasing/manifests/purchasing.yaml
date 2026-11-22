@@ -43,6 +43,7 @@ spec:
       budgetId: { type: string, x-mantle-ref: budgets, readOnly: true }
       requestStatus: { type: string, enum: [submitted, approved, rejected, ordered, confirmed] }
       supplierOrderId: { type: string }
+      rejectionReason: { type: string, maxLength: 1000, readOnly: true, title: Rejection reason }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -262,15 +263,17 @@ kind: Procedure
 metadata: { name: reject-request }
 spec:
   title: Reject a purchase request
+  description: Reject a submitted request with a reason; keeps the department budget unchanged and notifies the requester.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: requests, id: id, version: expectedVersion }
   input:
     type: object
     additionalProperties: false
-    required: [id, expectedVersion]
+    required: [id, expectedVersion, reason]
     properties:
       id: { type: string }
       expectedVersion: { type: integer }
+      reason: { type: string, minLength: 1, maxLength: 1000, pattern: '\S', title: Reason, description: Explain why this request is being rejected. }
   output: { type: object }
   handler: { ref: reject-request }
 ---
@@ -282,16 +285,17 @@ spec:
   input:
     type: object
     additionalProperties: false
-    required: [id, expectedVersion]
+    required: [id, expectedVersion, reason]
     properties:
       id: { type: string }
       expectedVersion: { type: integer }
+      reason: { type: string, minLength: 1, maxLength: 1000, pattern: '\S' }
   output: { type: object }
   handler:
     sql: |
-      UPDATE requests SET requestStatus = 'rejected'
+      UPDATE requests SET requestStatus = 'rejected', rejectionReason = input.reason
       WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
-      RETURNING id, title, author_id AS "authorId"
+      RETURNING id, title, author_id AS "authorId", rejectionReason AS "rejectionReason"
 ---
 # Called after the supplier accepted the order: by the approve handler (admin caller) and by the cron retry (system
 # caller). System callers satisfy no `requires` predicate, so it has none; no Trigger exposes it.

@@ -29,6 +29,11 @@ that have been waiting too long.
 - **Admin-only operations**: `approve-request` and `reject-request` declare `requires: ctx.admin` and a `target`, so
   Admin shows them as operations on a request. Their `kind: mcp, surface: admin` Triggers make them
   `approve_request` / `reject_request` tools on `/mcp/admin`. They are not listed on `/mcp`.
+- **A rejection with a reason**: the rejection form requires a non-blank reason of at most 1,000 characters. The
+  guarded transition stores it in `requests.rejectionReason`, exposes it read-only in Admin, and includes it in the
+  requester's notification. It does not spend the budget or write a spending ledger row. Existing copies need a
+  reviewed migration adding the nullable text column before adopting this manifest; clients of `reject_request`
+  must supply `reason` as well as `id` and `expectedVersion`.
 - **Optimistic concurrency**: clients send `expectedVersion`, and the SQL matches `version = input.expectedVersion`.
   If the requester changes the amount (`change-amount`, only their own request and only while it is `submitted`)
   after an admin reviewed it, that admin's approval is a 409. When two admins approve the same version, one succeeds
