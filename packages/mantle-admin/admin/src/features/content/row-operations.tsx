@@ -434,6 +434,7 @@ export function OperationDialog({
         onCloseAutoFocus={restoreFocus}
         create={() => createOperationController(operation, binding, row?.collection, reviewed)}
         operation={operation}
+        bindings={binding?.bind}
         hidden={hidden}
         automatic={automatic}
         refScopes={parentRefScopes(operation.input, row ? binding : undefined, reviewed, collections.data)}
