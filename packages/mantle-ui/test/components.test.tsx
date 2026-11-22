@@ -44,6 +44,25 @@ describe("@aotter/mantle-ui components", () => {
     expect(html).not.toContain('type="submit"');
   });
 
+  it("labels the unchanged reviewed snapshot separately from a successful operation result", async () => {
+    const c = controller({ invoke: async () => ({ ok: true, data: { requestStatus: "approved" } }) });
+    await c.open();
+    await c.submit();
+    const html = renderToStaticMarkup(
+      <OperationPanel
+        controller={c}
+        title="Approve request"
+        previewFields={["requestStatus"]}
+        renderResult={result => <p>{JSON.stringify(result)}</p>}
+      />,
+    );
+    expect(c.getSnapshot().reviewed?.data.requestStatus).toBe("submitted");
+    expect(html).toContain("Snapshot before this operation");
+    expect(html).toContain("Operation completed.");
+    expect(html).toContain("approved");
+    expect(html.indexOf("Snapshot before this operation")).toBeLessThan(html.indexOf("Operation completed."));
+  });
+
   it("offers no dead re-read after a conflict when the host cannot read", async () => {
     const c = createInteractionController({
       interaction,

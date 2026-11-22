@@ -153,7 +153,8 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     // A bound 32-character id must wrap without pushing the form's Run button off a phone screen.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${origin}/admin/c/posts/${post}`);
-    await page.getByRole("search").getByRole("button", { name: "New revision", exact: true }).click();
+    const trigger = page.getByRole("search").getByRole("button", { name: "New revision", exact: true });
+    await trigger.click();
     const dialog = page.getByRole("dialog");
     const run = dialog.getByRole("button", { name: "Run", exact: true });
     await run.waitFor();
@@ -165,6 +166,26 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     }));
     expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.width);
     expect(bounds.right).toBeLessThanOrEqual(bounds.viewport);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => trigger.evaluate(node => node === document.activeElement)).toBe(true);
+    await page.keyboard.press("Enter");
+    await run.click();
+    await dialog.getByText("Operation completed.", { exact: true }).waitFor();
+    // The in-dialog outcome is sufficient; a duplicate toast must not cover Close on a phone.
+    expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
+    const close = dialog.locator("footer").getByRole("button", { name: "Close", exact: true });
+    await close.click();
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => trigger.evaluate(node => node === document.activeElement)).toBe(true);
+    await page.goto(`${origin}/admin/c/post_revisions`);
+    const menu = page.getByRole("button", { name: /^Actions for / }).first();
+    await menu.click();
+    await page.getByRole("menuitem", { name: "Delete revision", exact: true }).click();
+    await run.waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => menu.evaluate(node => node === document.activeElement)).toBe(true);
   } finally {
     await browser.close();
     backend.kill("SIGTERM");

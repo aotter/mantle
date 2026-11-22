@@ -37,6 +37,7 @@ export function EntityPreview(
   const fields = props.fields ?? Object.keys(props.entry.data).filter(field => field !== "version");
   return (
     <section data-slot="entity-preview" aria-label={labels.reviewedEntry} className="rounded-md border p-3 text-sm">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{labels.reviewedEntry}</p>
       <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3 gap-y-1">
         {fields.map(field => (
           <div key={field} className="contents">
