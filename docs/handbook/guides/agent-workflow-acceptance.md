@@ -104,6 +104,39 @@ fixes:
 
 Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
 
+## Accept Admin work in the browser
+
+Give a fresh admin evaluator its signed-in Admin URL and a real browser.
+It must use the UI; API/MCP writes and seeded records cannot substitute for a
+missing control. Derive the private rubric from the original brief: each
+required, authorized workflow's business inputs and observable result, including
+jobs the evaluator does not discover.
+
+| Required browser evidence | What the author checks |
+| --- | --- |
+| Find the action | The role can start the workflow from its normal entry, including applicable empty or later-page states. Knowing a hidden URL is insufficient. |
+| Enter the business inputs | Required user-supplied fields and relations can be entered or changed, including custom inputs and operation dialogs. |
+| Submit and interpret the outcome | Exercise applicable validation, refusals and recovery. Distinguish failure from uncertain completion without blindly retrying. A success toast alone is not proof of a write. |
+| Reopen or reload and read back | Observe persisted values, relations and state through the UI, not just the submitted draft or completion summary. |
+
+A missing required action or input is a product FAIL (P1, or P0 for authority,
+integrity or data loss), even when the API works. An unattempted workflow is
+UNVERIFIED; a browser/tool or execution-policy refusal is an environment BLOCKED.
+A required write covered only by browsing, or an applicable failure path never
+attempted, stays UNVERIFIED.
+
+Judge controls against the intended role. Read-only collections, system-managed
+values and parent/locale values supplied by context need no generic create
+button or editable field. Operational collections may use declared
+[collection or row operations](native-admin.md#collection-navigation-and-operation-placement).
+Verify that workflow; do not widen permissions or enable generic CRUD to pass.
+
+Capture and visually inspect real screenshots at supported desktop and narrow
+widths: fields, actions, focus, legibility and overflow. DOM checks alone do not
+prove usability. Record browser/version, screenshots and persisted readbacks in
+the existing handoff; keep API/MCP evidence separate. The evaluator gets only
+the role prompt below, never a rubric, expected control locations or click script.
+
 ## Run role-only acceptance rounds until they converge
 
 The evaluator gets a role, not a task list. It works out what that role needs
