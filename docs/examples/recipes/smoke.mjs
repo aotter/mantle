@@ -7,12 +7,12 @@ import { dirname, resolve } from "node:path";
 import { smoke } from "./smoke-kit.mjs";
 
 const recipe = {
-  slug: "scallion-pancake", title: "蔥油餅", summary: "外酥內軟的蔥油餅 </script>", total_minutes: 25, servings: 2,
-  ingredients: "中筋麵粉 200 克\n熱水 120 毫升\n青蔥 3 根", steps: "揉麵團並靜置\n擀開撒蔥捲起\n小火煎至金黃",
-};
-const english = {
-  slug: "scallion-pancake", locale: "en", title: "Scallion Pancake", summary: "Crisp outside, soft inside.",
+  slug: "scallion-pancake", title: "Scallion Pancake", summary: "Crisp outside, soft inside. </script>", total_minutes: 25, servings: 2,
   ingredients: "200 g all-purpose flour\n120 ml hot water\n3 scallions", steps: "Knead and rest the dough\nRoll, add scallions, coil\nPan-fry until golden",
+};
+const french = {
+  slug: "scallion-pancake", locale: "fr", title: "Galette aux oignons verts", summary: "Croustillante dehors, moelleuse dedans.",
+  ingredients: "200 g de farine\n120 ml d’eau chaude\n3 oignons verts", steps: "Pétrir et laisser reposer la pâte\nÉtaler, ajouter les oignons et rouler\nFaire dorer à la poêle",
 };
 const PUBLIC = "public, max-age=60, stale-while-revalidate=600, stale-if-error=86400";
 const jsonLd = html => JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)[1]);
@@ -31,18 +31,18 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
     return created.body.entry;
   };
   const publish = (collection, entry) => call("POST", `/admin/api/entries/${entry.id}/publish?collection=${collection}`, { cookie: admin, body: { expectedVersion: entry.version } });
-  const parent = await create("recipes", recipe), translation = await create("recipe_translations", english);
-  step("admin creates a zh-TW recipe and its en translation as drafts");
+  const parent = await create("recipes", recipe), translation = await create("recipe_translations", french);
+  step("admin creates a en recipe and its fr translation as drafts");
 
-  for (const path of ["/zh-TW/recipes/scallion-pancake", "/zh-TW/recipes/scallion-pancake.md", "/en/recipes/scallion-pancake"]) {
+  for (const path of ["/en/recipes/scallion-pancake", "/en/recipes/scallion-pancake.md", "/fr/recipes/scallion-pancake"]) {
     const missing = await call("GET", path);
     assert.equal(missing.status, 404, path);
     cached(missing, "no-store", path);
   }
   // Visitor pages read as anonymous even when the request carries an admin session.
-  assert.equal((await call("GET", "/zh-TW/recipes/scallion-pancake", { cookie: admin })).status, 404);
-  assert.equal((await call("GET", "/zh-TW/recipes/scallion-pancake.md", { cookie: admin })).status, 404);
-  assert.ok(!(await call("GET", "/zh-TW/")).body.includes("scallion-pancake"));
+  assert.equal((await call("GET", "/en/recipes/scallion-pancake", { cookie: admin })).status, 404);
+  assert.equal((await call("GET", "/en/recipes/scallion-pancake.md", { cookie: admin })).status, 404);
+  assert.ok(!(await call("GET", "/en/")).body.includes("scallion-pancake"));
   assert.ok(!(await call("GET", "/llms.txt")).body.includes("scallion-pancake"));
   assert.ok(!(await call("GET", "/sitemap.xml")).body.includes("scallion-pancake"));
   step("drafts are invisible to visitors: detail, Markdown, list, llms.txt and sitemap");
@@ -50,85 +50,85 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal((await publish("recipe_translations", translation)).status, 409);
   const published = await publish("recipes", parent);
   assert.equal(published.status, 200, JSON.stringify(published.body));
-  assert.equal((await call("GET", "/en/recipes/scallion-pancake")).status, 404);
+  assert.equal((await call("GET", "/fr/recipes/scallion-pancake")).status, 404);
   assert.equal((await publish("recipe_translations", translation)).status, 200);
   step("a translation cannot publish before its parent; publishing both via the Admin API");
 
-  const zh = await call("GET", "/zh-TW/recipes/scallion-pancake");
-  assert.equal(zh.status, 200);
-  assert.match(zh.headers.get("content-type"), /text\/html/);
-  cached(zh, PUBLIC, "detail page");
-  const html = zh.body;
-  assert.match(html, /^<!doctype html><html lang="zh-TW">/);
-  assert.match(html, /<title>蔥油餅 \| 食譜<\/title>/);
-  assert.ok(has(html, "meta", { name: "description", content: "外酥內軟的蔥油餅 &lt;/script&gt;" }));
-  assert.ok(html.includes(`<link rel="canonical" href="${origin}/zh-TW/recipes/scallion-pancake">`));
-  assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${origin}/zh-TW/recipes/scallion-pancake.md">`));
-  step("zh-TW detail has title, description and canonical");
+  const en = await call("GET", "/en/recipes/scallion-pancake");
+  assert.equal(en.status, 200);
+  assert.match(en.headers.get("content-type"), /text\/html/);
+  cached(en, PUBLIC, "detail page");
+  const html = en.body;
+  assert.match(html, /^<!doctype html><html lang="en">/);
+  assert.match(html, /<title>Scallion Pancake \| Recipes<\/title>/);
+  assert.ok(has(html, "meta", { name: "description", content: "Crisp outside, soft inside. &lt;/script&gt;" }));
+  assert.ok(html.includes(`<link rel="canonical" href="${origin}/en/recipes/scallion-pancake">`));
+  assert.ok(html.includes(`<link rel="alternate" type="text/markdown" href="${origin}/en/recipes/scallion-pancake.md">`));
+  step("en detail has title, description and canonical");
 
   // The content is in the HTML body, not added by script.
-  assert.ok(has(html, "h1", {}, "蔥油餅"), "the title is the h1");
+  assert.ok(has(html, "h1", {}, "Scallion Pancake"), "the title is the h1");
   for (const item of recipe.ingredients.split("\n")) assert.ok(has(html, "li", {}, item), item);
   const steps = elements(html, "li").map(e => e.text).filter(text => recipe.steps.split("\n").includes(text));
   assert.deepEqual(steps, recipe.steps.split("\n"), "the steps, in order");
   step("the detail HTML holds the title in an h1, every ingredient and every step");
 
-  for (const [lang, path] of [["zh-TW", "/zh-TW"], ["en", "/en"], ["x-default", "/zh-TW"]]) {
+  for (const [lang, path] of [["en", "/en"], ["fr", "/fr"], ["x-default", "/en"]]) {
     assert.ok(has(html, "link", { rel: "alternate", hreflang: lang, href: `${origin}${path}/recipes/scallion-pancake` }), lang);
   }
-  assert.ok(has(html, "a", { href: "/en/recipes/scallion-pancake", hreflang: "en", lang: "en" }, "English"));
-  const en = await call("GET", "/en/recipes/scallion-pancake");
-  assert.equal(en.status, 200);
-  assert.match(en.body, /<html lang="en">/);
-  assert.ok(en.body.includes(`<link rel="canonical" href="${origin}/en/recipes/scallion-pancake">`));
-  assert.ok(has(en.body, "link", { rel: "alternate", hreflang: "zh-TW", href: `${origin}/zh-TW/recipes/scallion-pancake` }));
-  assert.ok(has(en.body, "a", { href: "/zh-TW/recipes/scallion-pancake", hreflang: "zh-TW", lang: "zh-TW" }, "繁體中文"));
-  assert.ok(has(en.body, "h1", {}, "Scallion Pancake") && has(en.body, "li", {}, "3 scallions") && has(en.body, "li", {}, "Pan-fry until golden"));
-  step("hreflang alternates and the locale switcher link zh-TW and en; the en page holds its own content");
+  assert.ok(has(html, "a", { href: "/fr/recipes/scallion-pancake", hreflang: "fr", lang: "fr" }, "Français"));
+  const fr = await call("GET", "/fr/recipes/scallion-pancake");
+  assert.equal(fr.status, 200);
+  assert.match(fr.body, /<html lang="fr">/);
+  assert.ok(fr.body.includes(`<link rel="canonical" href="${origin}/fr/recipes/scallion-pancake">`));
+  assert.ok(has(fr.body, "link", { rel: "alternate", hreflang: "en", href: `${origin}/en/recipes/scallion-pancake` }));
+  assert.ok(has(fr.body, "a", { href: "/en/recipes/scallion-pancake", hreflang: "en", lang: "en" }, "English"));
+  assert.ok(has(fr.body, "h1", {}, french.title) && has(fr.body, "li", {}, "3 oignons verts") && has(fr.body, "li", {}, "Faire dorer à la poêle"));
+  step("hreflang alternates and the locale switcher link en and fr; the fr page holds its own content");
 
-  const zhData = jsonLd(html), enData = jsonLd(en.body);
-  assert.equal(zhData["@type"], "Recipe");
-  assert.equal(zhData.name, "蔥油餅");
-  assert.equal(zhData.description, recipe.summary);
-  assert.deepEqual(zhData.recipeIngredient, ["中筋麵粉 200 克", "熱水 120 毫升", "青蔥 3 根"]);
+  const enData = jsonLd(html), frData = jsonLd(fr.body);
+  assert.equal(enData["@type"], "Recipe");
   assert.equal(enData.name, "Scallion Pancake");
-  assert.equal(enData.inLanguage, "en");
-  assert.equal(enData.totalTime, "PT25M"); // merged from the parent row
-  assert.match(zhData.datePublished, /^\d{4}-/); assert.match(zhData.dateModified, /^\d{4}-/);
-  assert.ok(has(en.body, "meta", { property: "og:url", content: `${origin}/en/recipes/scallion-pancake` }));
-  assert.ok(has(en.body, "meta", { property: "og:type", content: "article" }));
-  assert.ok(has(en.body, "meta", { property: "og:locale", content: "en" }) && has(en.body, "meta", { property: "og:locale:alternate", content: "zh_TW" }));
-  assert.match(en.body, /<section id="quick-answer"[^>]*><h2[^>]*>How long does it take\?<\/h2><p>About 25 minutes in total; serves 2.<\/p><\/section>/);
+  assert.equal(enData.description, recipe.summary);
+  assert.deepEqual(enData.recipeIngredient, ["200 g all-purpose flour", "120 ml hot water", "3 scallions"]);
+  assert.equal(frData.name, french.title);
+  assert.equal(frData.inLanguage, "fr");
+  assert.equal(frData.totalTime, "PT25M"); // merged from the parent row
+  assert.match(enData.datePublished, /^\d{4}-/); assert.match(enData.dateModified, /^\d{4}-/);
+  assert.ok(has(fr.body, "meta", { property: "og:url", content: `${origin}/fr/recipes/scallion-pancake` }));
+  assert.ok(has(fr.body, "meta", { property: "og:type", content: "article" }));
+  assert.ok(has(fr.body, "meta", { property: "og:locale", content: "fr" }) && has(fr.body, "meta", { property: "og:locale:alternate", content: "en" }));
+  assert.match(fr.body, /<section id="quick-answer"[^>]*><h2[^>]*>Combien de temps faut-il \?<\/h2><p>Environ 25 minutes au total, pour 2 personnes.<\/p><\/section>/);
   step("JSON-LD Recipe parses with name and dates; Open Graph url/type/locale; the short answer block is present");
 
   // The .md alternate is the whole recipe, composed in the View's SQL.
-  const md = await call("GET", "/en/recipes/scallion-pancake.md");
+  const md = await call("GET", "/fr/recipes/scallion-pancake.md");
   assert.equal(md.status, 200);
   assert.match(md.headers.get("content-type"), /^text\/markdown/);
   cached(md, PUBLIC, ".md");
-  assert.ok(md.body.startsWith("# Scallion Pancake\n\nCrisp outside, soft inside.\n"));
-  assert.ok(md.body.includes("## Ingredients\n\n200 g all-purpose flour\n120 ml hot water\n3 scallions\n"));
-  assert.ok(md.body.includes("## Steps\n\nKnead and rest the dough\nRoll, add scallions, coil\nPan-fry until golden\n"));
-  const zhMd = await call("GET", "/zh-TW/recipes/scallion-pancake.md");
-  assert.ok(zhMd.body.startsWith("# 蔥油餅\n") && zhMd.body.includes("## 材料\n\n中筋麵粉 200 克\n") && zhMd.body.includes("## 步驟\n\n揉麵團並靜置\n"));
+  assert.ok(md.body.startsWith("# Galette aux oignons verts\n\nCroustillante dehors, moelleuse dedans.\n"));
+  assert.ok(md.body.includes("## Ingrédients\n\n200 g de farine\n120 ml d’eau chaude\n3 oignons verts\n"));
+  assert.ok(md.body.includes("## Étapes\n\nPétrir et laisser reposer la pâte\nÉtaler, ajouter les oignons et rouler\nFaire dorer à la poêle\n"));
+  const enMd = await call("GET", "/en/recipes/scallion-pancake.md");
+  assert.ok(enMd.body.startsWith("# Scallion Pancake\n") && enMd.body.includes("## Ingredients\n\n200 g all-purpose flour\n") && enMd.body.includes("## Steps\n\nKnead and rest the dough\n"));
   // Each locale's Markdown names that locale's HTML page as canonical, on PUBLIC_ORIGIN.
-  assert.equal(md.headers.get("link"), `<${origin}/en/recipes/scallion-pancake>; rel="canonical"`);
-  assert.equal(zhMd.headers.get("link"), `<${origin}/zh-TW/recipes/scallion-pancake>; rel="canonical"`);
+  assert.equal(md.headers.get("link"), `<${origin}/fr/recipes/scallion-pancake>; rel="canonical"`);
+  assert.equal(enMd.headers.get("link"), `<${origin}/en/recipes/scallion-pancake>; rel="canonical"`);
   step(".md alternate returns the whole recipe as Markdown: title, summary, ingredients and steps, with a canonical Link");
 
   const llms = await call("GET", "/llms.txt");
   assert.match(llms.headers.get("content-type"), /^text\/plain/);
   cached(llms, PUBLIC, "llms.txt");
   assert.equal(llms.headers.get("link"), null);
-  assert.ok(llms.body.includes(`- [蔥油餅](${origin}/zh-TW/recipes/scallion-pancake.md)`));
   assert.ok(llms.body.includes(`- [Scallion Pancake](${origin}/en/recipes/scallion-pancake.md)`));
+  assert.ok(llms.body.includes(`- [Galette aux oignons verts](${origin}/fr/recipes/scallion-pancake.md)`));
   // List Views carry no body: sitemap.xml and llms.txt walk them row by row. llms.txt still links each `.md`.
-  for (const path of ["/api/views/published_recipes", "/api/views/published_translations?locale=en", "/api/views/translation_index"]) {
+  for (const path of ["/api/views/published_recipes", "/api/views/published_translations?locale=fr", "/api/views/translation_index"]) {
     const rows = (await call("GET", path)).body.rows;
     assert.equal(rows.length, 1, path);
     for (const key of ["markdown", "steps", "ingredients"]) assert.ok(!(key in rows[0]), `${path} returns ${key}`);
   }
-  for (const [locale, title, summary] of [["zh-TW", recipe.title, recipe.summary], ["en", english.title, english.summary]]) {
+  for (const [locale, title, summary] of [["en", recipe.title, recipe.summary], ["fr", french.title, french.summary]]) {
     const list = await call("GET", `/${locale}/`);
     cached(list, PUBLIC, `/${locale}/`);
     assert.ok(has(list.body, "a", { href: `/${locale}/recipes/scallion-pancake` }, title), locale);
@@ -136,13 +136,13 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   }
   const home = await fetch(`${origin}/`, { redirect: "manual" });
   assert.equal(home.status, 302);
-  assert.equal(home.headers.get("location"), `${origin}/zh-TW/`);
+  assert.equal(home.headers.get("location"), `${origin}/en/`);
   cached(home, "no-store", "redirect");
   const sitemap = await call("GET", "/sitemap.xml");
   assert.match(sitemap.headers.get("content-type"), /^application\/xml/);
   cached(sitemap, PUBLIC, "sitemap.xml");
-  for (const path of ["/zh-TW/", "/en/", "/zh-TW/recipes/scallion-pancake", "/en/recipes/scallion-pancake"]) assert.ok(sitemap.body.includes(`<loc>${origin}${path}</loc>`), path);
-  assert.match(sitemap.body, new RegExp(`<loc>${origin}/en/recipes/scallion-pancake</loc><lastmod>\\d{4}-`));
+  for (const path of ["/en/", "/fr/", "/en/recipes/scallion-pancake", "/fr/recipes/scallion-pancake"]) assert.ok(sitemap.body.includes(`<loc>${origin}${path}</loc>`), path);
+  assert.match(sitemap.body, new RegExp(`<loc>${origin}/fr/recipes/scallion-pancake</loc><lastmod>\\d{4}-`));
   const robots = await call("GET", "/robots.txt");
   cached(robots, PUBLIC, "robots.txt");
   assert.ok(robots.body.includes("Disallow: /admin/") && robots.body.includes(`Sitemap: ${origin}/sitemap.xml`));
@@ -150,7 +150,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
 
   // Every visitor gets the same bytes, so a shared cache may keep them: a member's or an admin's page is the anonymous one.
   const member = await signIn("member@example.test"), other = await signIn("other@example.test");
-  for (const path of ["/zh-TW/recipes/scallion-pancake", "/en/", "/en/recipes/scallion-pancake.md", "/llms.txt"]) {
+  for (const path of ["/en/recipes/scallion-pancake", "/fr/", "/fr/recipes/scallion-pancake.md", "/llms.txt"]) {
     const anonymous = await call("GET", path);
     for (const cookie of [member, admin]) {
       const signedIn = await call("GET", path, { cookie });
@@ -159,12 +159,12 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
       assert.equal(signedIn.headers.get("set-cookie"), null, path);
     }
   }
-  const head = await fetch(`${origin}/zh-TW/recipes/scallion-pancake`, { method: "HEAD" });
+  const head = await fetch(`${origin}/en/recipes/scallion-pancake`, { method: "HEAD" });
   assert.equal(head.status, 200);
   assert.equal(await head.text(), "");
   cached(head, PUBLIC, "HEAD");
-  assert.ok(!html.includes("noindex") && zh.headers.get("x-robots-tag") === null, "public pages stay indexable");
-  for (const path of ["/nope", "/application", "/zh-TW/nope", "/zh-TW/recipes/Not-A-Slug", "/zh-TW/recipes/nope.md"]) {
+  assert.ok(!html.includes("noindex") && en.headers.get("x-robots-tag") === null, "public pages stay indexable");
+  for (const path of ["/nope", "/application", "/de/", "/en/nope", "/en/recipes/Not-A-Slug", "/en/recipes/nope.md"]) {
     const missing = await call("GET", path, { cookie: member });
     assert.equal(missing.status, 404, path);
     cached(missing, "no-store", path);
@@ -172,7 +172,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   // /assets/* is served by the edge without the Worker (run_worker_first excludes it), so its 404 is the platform's;
   // plain fetch, as the kit's `call` asserts the Worker's own Cache-Control.
   assert.equal((await fetch(`${origin}/assets/client/missing.js`)).status, 404);
-  const post = await call("POST", "/zh-TW/recipes/scallion-pancake", { cookie: member });
+  const post = await call("POST", "/en/recipes/scallion-pancake", { cookie: member });
   assert.equal(post.status, 405);
   cached(post, "no-store", "405");
   const signInPage = await call("GET", "/sign-in");
@@ -194,7 +194,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const islandSrc = elements(html, "div").find(e => e["data-island-src"])?.["data-island-src"];
   assert.match(islandSrc ?? "", hashed("save"), "the island's hashed URL is written into its markup");
   assert.ok(!html.includes("modulepreload") && !scripts.some(e => e.src === islandSrc), "the island's bundle is not loaded by the HTML");
-  assert.ok(has(html, "button", { type: "button" }, "儲存這道食譜"), "the button is server-rendered");
+  assert.ok(has(html, "button", { type: "button" }, "儲存這道Recipes"), "the button is server-rendered");
   const IMMUTABLE = "public, max-age=86400, immutable";
   const asset = async (path, cacheControl) => {
     const response = await fetch(`${origin}${path}`);
@@ -223,7 +223,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
     for (let at = css.indexOf(selector); at >= 0; at = css.indexOf(selector, at + 1)) if (!/[\w\\-]/.test(css[at + selector.length] ?? "")) return true;
     return false;
   };
-  for (const page of [html, en.body, (await call("GET", "/zh-TW/")).body]) {
+  for (const page of [html, fr.body, (await call("GET", "/en/")).body]) {
     for (const [, names] of page.matchAll(/\bclass="([^"]*)"/g)) for (const name of names.split(" ")) assert.ok(defined(name), `class ${name} is in page.css`);
   }
   // React is reached only through import() from the routes: the Worker's static graph (the entry and every chunk it
@@ -266,7 +266,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
         element.dataset.islandSrc = src;
         document.body[first ? "prepend" : "append"](element);
       }), island);
-      await page.goto(`${origin}/zh-TW/recipes/scallion-pancake`);
+      await page.goto(`${origin}/en/recipes/scallion-pancake`);
       await page.waitForTimeout(2000);
       const [keys, srcs] = await page.evaluate(() => [Object.keys(sessionStorage), [...document.querySelectorAll("[data-island-src]")].map(e => e.dataset.islandSrc)]);
       await context.close();
@@ -328,14 +328,14 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   assert.equal((await save(member, slug)).status, 200);
   assert.equal((await save(member, slug)).status, 200, "saving twice changes nothing");
   assert.deepEqual((await mine(member)).map(row => row.slug), [slug]);
-  assert.equal((await mine(member))[0].title, "蔥油餅");
+  assert.equal((await mine(member))[0].title, "Scallion Pancake");
   assert.deepEqual((await call("GET", `/api/views/my_saved_recipes?slug=${slug}`, { cookie: member })).body.rows.map(row => row.slug), [slug]);
   assert.deepEqual((await call("GET", "/api/views/my_saved_recipes?slug=other", { cookie: member })).body.rows, []);
   assert.deepEqual(await mine(other), [], "another member sees none of it");
   // Another member's unsave matches none of their own rows (scope), so it changes nothing.
   assert.equal((await call("DELETE", `/api/saved-recipes/${slug}`, { cookie: other })).status, 200);
   assert.equal((await mine(member)).length, 1, "another member cannot unsave it");
-  assert.equal((await call("GET", "/zh-TW/recipes/scallion-pancake", { cookie: member })).body, html, "a member's saves never reach the page");
+  assert.equal((await call("GET", "/en/recipes/scallion-pancake", { cookie: member })).body, html, "a member's saves never reach the page");
   step("save and unsave are REST-only, idempotent, published-only and private to each member");
 
   assert.equal((await call("DELETE", `/api/saved-recipes/${slug}`, { cookie: member })).status, 200);
@@ -345,6 +345,6 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const unpublished = await call("POST", `/admin/api/entries/${parent.id}/unpublish?collection=recipes`, { cookie: admin, body: { expectedVersion: published.body.entry.version } });
   assert.equal(unpublished.status, 200, JSON.stringify(unpublished.body));
   assert.deepEqual(await mine(member), [], "an unpublished recipe leaves the member's list");
-  for (const path of ["/zh-TW/recipes/scallion-pancake", "/en/recipes/scallion-pancake", "/en/recipes/scallion-pancake.md"]) assert.equal((await call("GET", path)).status, 404, path);
+  for (const path of ["/en/recipes/scallion-pancake", "/fr/recipes/scallion-pancake", "/fr/recipes/scallion-pancake.md"]) assert.equal((await call("GET", path)).status, 404, path);
   step("unsave removes it; unpublishing a recipe hides it from the saved list, both locales and the Markdown");
 });

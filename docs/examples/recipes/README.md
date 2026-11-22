@@ -1,7 +1,7 @@
 # Recipes
 
 A multilingual recipe site. Admins write recipes in Admin as drafts and publish them; visitors read the published
-recipes in Traditional Chinese (`zh-TW`, the default) and English (`en`) without signing in. It is the reference for
+recipes in English (`en`, the default) and French (`fr`) without signing in. It is the reference for
 the recommended shape of a public page: server-rendered HTML with the content in the body, React on the server with
 plain elements, a small interactive part (a "save this recipe" button) hydrated in the browser and loaded late, and
 Markdown, `llms.txt` and the sitemap from the generated `web()`.
@@ -53,7 +53,7 @@ Search for `AGENT:` for what an app must keep or still provide: list paging, Mar
 | `/{locale}/`, `/{locale}/recipes/{slug}` (GET, HEAD) | HTML rendered by React on the server | `public, max-age=60, stale-while-revalidate=600, stale-if-error=86400` |
 | `/{locale}/recipes/{slug}.md`, `/llms.txt`, `/sitemap.xml` | The generated `web()`: page Views for `.md`, list Views for the indexes | the same (`cacheControl`) |
 | `/robots.txt` | `Disallow: /admin/` and the sitemap | the same |
-| `/` | 302 to `/zh-TW/` | `no-store` |
+| `/` | 302 to `/en/` | `no-store` |
 | A draft, an unknown recipe or path; a missing `.md` | 404 | `no-store` |
 | Another method on a page | 405 | `no-store` |
 | `/api/...` (the save button); an error | REST; the shell's `surfaceFailure` | `private, no-store` |
@@ -129,8 +129,13 @@ cp -R node_modules/@aotter/mantle/docs/examples/recipes/. my-app/   # run the ex
 cd my-app && pnpm install && pnpm generate && pnpm types && pnpm check
 ```
 
-Then follow the shell README (`db:init`, `dev`). Sign in at `/admin`, add a recipe, publish it, open `/zh-TW/`.
-Add a translation from the recipe's language tab and publish it to get `/en/`.
+Then follow the shell README (`db:init`, `dev`). Sign in at `/admin`, add a recipe, publish it, open `/en/`.
+Add a translation from the recipe's French tab and publish it to get `/fr/`.
+
+For a site in other languages, use the user's preferred default and translation locales. Set them in
+`src/site-config.ts`, match the translation enum and field labels in `manifests/recipes.yaml`, and localize the page
+copy, Markdown headings and acceptance data. For an existing site, plan what to do with saved translations and public
+URLs before changing its locales.
 
 ## Cover images
 
@@ -147,13 +152,13 @@ The smoke does not cover upload: local `wrangler dev` has an R2 binding but no S
 
 ## `pnpm smoke` proves
 
-- Drafts (zh-TW and en) are absent from detail, `.md`, list and `llms.txt`, even when the request has an admin session.
+- Drafts (en and fr) are absent from detail, `.md`, list and `llms.txt`, even when the request has an admin session.
 - A translation cannot publish before its parent; publishing both through the Admin API makes them visible.
 - The detail HTML holds the title in an `<h1>`, every ingredient and every step, in order; each list page holds its recipes.
-- Each locale's detail page has title, description, canonical, hreflang (`zh-TW`, `en`, `x-default`) and a switcher link.
-- JSON-LD parses as a `Recipe` with the recipe name; the en page inherits `totalTime` from its parent; the short answer is present.
+- Each locale's detail page has title, description, canonical, hreflang (`en`, `fr`, `x-default`) and a switcher link.
+- JSON-LD parses as a `Recipe` with the recipe name; the fr page inherits `totalTime` from its parent; the short answer is present.
 - `.md` returns `text/markdown` with title, summary, ingredients and steps; `llms.txt`, the sitemap (with `lastmod`)
-  and both locale lists show the published recipe; the list Views' rows carry no body; `/` redirects to `/zh-TW/`.
+  and both locale lists show the published recipe; the list Views' rows carry no body; `/` redirects to `/en/`.
 - Every response it reads states the `Cache-Control` in the table above; a member's and an admin's page, `.md` and
   `llms.txt` equal the anonymous ones, with no cookie set.
 - The HTML loads one stylesheet holding every class it uses and one module script under 1 KB without React; it never
