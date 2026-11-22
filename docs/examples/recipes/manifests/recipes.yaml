@@ -13,7 +13,10 @@ spec:
     required: [slug, title, summary, ingredients, steps, total_minutes, servings]
     properties:
       slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
-      title: {type: string}
+      title:
+        type: string
+        title: Title (Traditional Chinese)
+        description: "Default-language content. Publish this recipe in Shared fields before publishing its English translation."
       summary: {type: string, description: "One or two sentences; used as the meta description."}
       ingredients: {type: string, description: "One ingredient per line."}
       steps: {type: string, description: "One step per line."}
@@ -45,7 +48,10 @@ spec:
     properties:
       slug: {type: string, maxLength: 80}
       locale: {type: string, enum: [en], description: "BCP 47 tag. AGENT: the locales of src/site-config.ts other than the default; a locale outside it has no page."}
-      title: {type: string}
+      title:
+        type: string
+        title: Title (English)
+        description: "Translate the recipe here. Publish its Traditional Chinese parent in Shared fields first."
       summary: {type: string}
       ingredients: {type: string}
       steps: {type: string}

@@ -52,7 +52,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: members }
 spec:
-  title: Members
+  title: Club members
   lifecycle: operational
   uniqueIndexes: [[email]]
   # Better Auth lowercases emails; the check refuses a mixed-case entry that would never match.
