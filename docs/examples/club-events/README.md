@@ -14,7 +14,8 @@ is needed. See [Purchasing](../purchasing/README.md) for a custom Admin page usi
   rows from officers too; Admin lists all of them.
 - **No duplicates**: `uniqueIndexes: [[eventId, member]]`. Native `authorId` is not allowed in a unique index, so the
   `register` handler writes `member` from the verified caller (`src/handlers.ts`); a second registration is 409.
-- **Capacity that never oversells**: officers edit `capacity`; `seats_taken` is a `readOnly` property, so Admin's
+- **Capacity that never oversells**: creating and editing both allow zero capacity while no seats are taken.
+  Officers edit `capacity`; `seats_taken` is a `readOnly` property, so Admin's
   generic edit never writes it, and `checks: ["seats_taken <= capacity"]` guards both. `register-write` inserts the
   registration and adds to `seats_taken` in one program, so a full event fails the check and the insert rolls back;
   `cancel-registration` returns the seat in the same program as the delete.
