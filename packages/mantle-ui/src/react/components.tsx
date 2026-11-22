@@ -263,8 +263,17 @@ export function OperationPanel(
         <h2 className="text-base font-semibold">{props.title}</h2>
         {props.description ? <p className="text-muted-foreground text-sm">{props.description}</p> : null}
       </header>
+      {props.previewFields && state.reviewed ? (
+        <EntityPreview
+          entry={state.reviewed}
+          fields={props.previewFields}
+          labels={labels}
+          fieldLabel={props.fieldLabel}
+          fieldValue={props.fieldValue}
+        />
+      ) : null}
       {bound.length > 0 ? (
-        <section aria-label={labels.boundInputs} className="bg-muted rounded-md p-3 text-sm">
+        <section aria-label={labels.boundInputs} className="text-muted-foreground rounded-md border p-3 text-xs">
           <p className="text-muted-foreground mb-1">{labels.boundInputs}</p>
           <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3">
             {bound.map(([field, value]) => (
@@ -275,15 +284,6 @@ export function OperationPanel(
             ))}
           </dl>
         </section>
-      ) : null}
-      {props.previewFields && state.reviewed ? (
-        <EntityPreview
-          entry={state.reviewed}
-          fields={props.previewFields}
-          labels={labels}
-          fieldLabel={props.fieldLabel}
-          fieldValue={props.fieldValue}
-        />
       ) : null}
       <fieldset disabled={busy || done} className="grid gap-3">
         {props.children}

@@ -17,6 +17,7 @@ import { Badge } from "@aotter/mantle-ui/kit";
 import { SchemaFields } from "../content/entry-edit-view";
 import { withNativeSchema } from "../../lib/render-data-value";
 import { DataCell } from "../../ui/data-cell";
+import { isIdField } from "../../ui/id-value";
 import { enumOptions, optionLabel } from "../../lib/enum-options";
 import { ListQueryToolbar } from "../../ui/list-query-toolbar";
 
@@ -328,5 +329,5 @@ function viewColumns(view: ViewManifestInfo, rows: ReadonlyArray<Record<string, 
   for (const row of rows) {
     for (const key of Object.keys(row)) seen.add(key);
   }
-  return [...seen];
+  return [...seen].sort((a, b) => Number(isIdField(a)) - Number(isIdField(b)));
 }

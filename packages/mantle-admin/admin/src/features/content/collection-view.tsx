@@ -439,14 +439,6 @@ function CollectionList({
                     />
                   </TableHead>
                 ) : null}
-                <SortableTableHead
-                  className="hidden md:table-cell"
-                  label={t(language, "collection.table.id")}
-                  field="id"
-                  activeField={sortField}
-                  direction={sortDirection}
-                  href={sortHref(listPath, listState, "id", sortField, sortDirection)}
-                />
                 {!isOperationalCollection || titleField ? (
                   titleField && collection?.sortableFields?.includes(titleField) ? (
                     <SortableTableHead
@@ -498,6 +490,14 @@ function CollectionList({
                     <TableHead className="hidden md:table-cell">{t(language, "collection.table.version")}</TableHead>
                   </>
                 )}
+                <SortableTableHead
+                  className="hidden md:table-cell"
+                  label={t(language, "collection.table.id")}
+                  field="id"
+                  activeField={sortField}
+                  direction={sortDirection}
+                  href={sortHref(listPath, listState, "id", sortField, sortDirection)}
+                />
                 <SortableTableHead
                   className="hidden md:table-cell"
                   label={t(language, "collection.table.updated")}
@@ -1025,9 +1025,6 @@ function EntryRowDisplay({
           />
         </TableCell>
       ) : null}
-      <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
-        <IdValue value={String(row.id)} language={language} />
-      </TableCell>
       {!isOperational || primaryField ? (
         <TableCell className="max-w-[28rem]">
           <div className="min-w-44 md:min-w-64">
@@ -1145,6 +1142,9 @@ function EntryRowDisplay({
           <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">v{row.version}</TableCell>
         </>
       )}
+      <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
+        <IdValue value={String(row.id)} language={language} />
+      </TableCell>
       <TableCell className="hidden text-muted-foreground md:table-cell">
         {formatTimestampMs(row.updated_at) ?? "-"}
       </TableCell>
