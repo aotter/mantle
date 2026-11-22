@@ -3,7 +3,7 @@ import type { SiteDefaults } from "@aotter/mantle/site";
 /** The site's languages. The first is the default: its text is in `recipes`; the others are `recipe_translations`. */
 export const LOCALES = ["en", "fr"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = LOCALES[0];
+export const DEFAULT_LOCALE = LOCALES[0];
 
 /**
  * Site defaults for `mantle generate ... --site src/site-config.ts`, which adds the media library tables and

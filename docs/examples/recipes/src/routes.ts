@@ -27,7 +27,7 @@ const site = (env: Env) => web({
   locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
   pages: {
     // `view` reads one page's row by its key, with the body; `list` enumerates the URLs, without it.
-    [`/${DEFAULT_LOCALE}/recipes/{slug}`]: { view: "recipe", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
+    [`/${DEFAULT_LOCALE}/recipes/{slug}` as const]: { view: "recipe", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
     "/{locale}/recipes/{slug}": { view: "recipe_translation", list: "translation_index", markdown: "markdown", lastmod: "updated_at" },
   },
 });
