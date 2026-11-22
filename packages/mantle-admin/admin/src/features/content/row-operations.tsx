@@ -15,6 +15,7 @@ import type { Collection, EntryEditorPayload, AdminOperation, AdminOperationInte
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, redirectToSignIn } from "../../ui/page";
+import { isIdField } from "../../ui/id-value";
 import { Dialog, DialogContent, DialogTitle } from "@aotter/mantle-ui/kit";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
@@ -422,6 +423,15 @@ export function OperationDialog({
   const reviewed = entry.data
     ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version }
     : (listed ?? parent?.row);
+  const sourceSchema = collection?.schema ?? entry.data?.collection.schema;
+  const boundIdInputs = binding?.bind
+    .filter(
+      ({ input, field }) =>
+        (parent && scope?.parentField === "id") ||
+        isIdField(field, sourceSchema?.properties?.[field]) ||
+        isIdField(input, operation.input.properties?.[input]),
+    )
+    .map(({ input }) => input);
   return (
     <React.Suspense
       fallback={
@@ -434,13 +444,13 @@ export function OperationDialog({
         onCloseAutoFocus={restoreFocus}
         create={() => createOperationController(operation, binding, row?.collection, reviewed)}
         operation={operation}
-        bindings={binding?.bind}
+        boundIdInputs={boundIdInputs}
         hidden={hidden}
         automatic={automatic}
         refScopes={parentRefScopes(operation.input, row ? binding : undefined, reviewed, collections.data)}
         language={language}
         canonical={canonical}
-        sourceSchema={collection?.schema ?? entry.data?.collection.schema}
+        sourceSchema={sourceSchema}
         previewFields={
           row
             ? [

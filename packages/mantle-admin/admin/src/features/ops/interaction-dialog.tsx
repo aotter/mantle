@@ -13,8 +13,8 @@ import type { AdminLanguage } from "../../app/preferences";
 import { t, type I18nKey } from "../../app/i18n";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
-import type { JsonSchema, AdminOperation, AdminOperationInteraction } from "../../lib/types";
-import { IdValue, isIdField } from "../../ui/id-value";
+import type { JsonSchema, AdminOperation } from "../../lib/types";
+import { IdValue } from "../../ui/id-value";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { invalidateAfterWrite } from "../../lib/after-write";
@@ -99,7 +99,7 @@ import { operationFormSchema, type RefScope } from "./interaction-schema";
 export function InteractionDialog({
   create,
   operation,
-  bindings,
+  boundIdInputs,
   hidden,
   automatic,
   refScopes,
@@ -115,7 +115,7 @@ export function InteractionDialog({
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
   operation: AdminOperation;
-  bindings?: AdminOperationInteraction["bind"];
+  boundIdInputs?: readonly string[];
   /** Inputs the form does not render: row bindings, the version, idempotency keys. */
   hidden: readonly string[];
   /** Idempotency keys, renewed when a payload is refused or conflicts. */
@@ -171,7 +171,7 @@ export function InteractionDialog({
           <InteractionDialogPanel
             controller={created.controller}
             operation={operation}
-            bindings={bindings}
+            boundIdInputs={boundIdInputs}
             hidden={hidden}
             automatic={automatic}
             refScopes={refScopes}
@@ -199,7 +199,7 @@ export function InteractionDialog({
 function InteractionDialogPanel({
   controller,
   operation,
-  bindings,
+  boundIdInputs,
   hidden,
   automatic,
   refScopes,
@@ -216,7 +216,7 @@ function InteractionDialogPanel({
 }: {
   controller: InteractionController;
   operation: AdminOperation;
-  bindings?: AdminOperationInteraction["bind"];
+  boundIdInputs?: readonly string[];
   hidden: readonly string[];
   automatic: readonly string[];
   refScopes: Readonly<Record<string, RefScope>> | undefined;
@@ -277,17 +277,12 @@ function InteractionDialogPanel({
   const schema = operationFormSchema(operation.input, hidden);
   const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
   const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
-  const fieldValue = (field: string, value: unknown) => {
-    const property = fieldSchema(field);
-    const binding = bindings?.find(({ input }) => input === field);
-    if (
-      binding &&
-      typeof value === "string" &&
-      (isIdField(binding.field, sourceSchema?.properties?.[binding.field]) || isIdField(field, property))
-    )
-      return <IdValue value={value} language={language} />;
-    return renderDataValue(property, value, language, canonical);
-  };
+  const fieldValue = (field: string, value: unknown) =>
+    typeof value === "string" && boundIdInputs?.includes(field) ? (
+      <IdValue value={value} language={language} />
+    ) : (
+      renderDataValue(fieldSchema(field), value, language, canonical)
+    );
   return (
     <OperationPanel
       controller={controller}
