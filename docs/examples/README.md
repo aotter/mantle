@@ -14,6 +14,18 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron; the employees' area is a React single-page app under `/app`. |
 | [Generated website](./generated-web/README.md) | The smallest public site: list and detail pages, REST, `llms.txt`, sitemap, Markdown alternates. |
 
+## Built-in and custom Admin
+
+Start with the built-in Admin: Recipes uses its publishing forms, translations and media; Club events uses its
+record forms, operations and reports. Neither has a custom Admin entry. Prefer manifest labels, descriptions,
+list columns and navigation before writing a component.
+
+Purchasing deliberately shows customization: `src/admin.tsx` adds an Approval desk with request cards using typed
+`useView` and kit components, and groups the approver's navigation. Cards link to the built-in record workspace for
+review and decisions; budget forms and reports remain built-in. The [revisions recipe](../handbook/guides/revisions.md)
+shows a more specialized custom preview and switch workflow. Keep these as examples of when a custom surface helps,
+rather than rebuilding the default forms in every app.
+
 ## Combining
 
 | You need | Take |

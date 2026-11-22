@@ -56,6 +56,10 @@ that have been waiting too long.
 - Employees see only their own requests through `my-requests` (`restrict: { requests: "author_id = auth.uid()" }`).
 - **Sidebar for the approver's day**: `src/admin.tsx` declares an Approvals group (`defineAdmin` `nav.groups`) above Admin's built-in
   groups; `pending-requests` and `requests` move into it with `uiSchema.nav: { group, order }`.
+- **A custom Approval desk**: `src/admin.tsx` renders pending requests as cards with their title, department and amount,
+  using generated `useView`, `AdminLink` and kit components. It handles loading, empty, unavailable and error states,
+  with Load more for subsequent pages. Open a card to use the built-in record review and approve/reject operations;
+  budgets and ledger reports also remain built-in. The `/admin/p/guide` route is retained.
 - **The employees' app**: a React single-page app under `/app` (below). `src/signup.ts` lets only `@EMPLOYEE_DOMAIN`
   emails create an account (`vars` in `wrangler.jsonc`).
 

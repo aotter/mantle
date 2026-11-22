@@ -4,6 +4,9 @@ A club's event sign-up. Officers (the `admin` layer) create events with their se
 members list events, register, and see and cancel only their own registrations, from a page or through their own AI
 over MCP. Only members the officers listed in Admin can sign up. Officers see every registration in Admin. Seats never oversell, even when members race for the last one.
 
+The Admin UI uses the built-in forms, operations and reports, configured through the manifest; no custom Admin entry
+is needed. See [Purchasing](../purchasing/README.md) for a custom Admin page using typed hooks and shared components.
+
 ## Capabilities shown
 
 - **Member-owned rows**: `restrict: { registrations: "author_id = auth.uid()" }` on the `my-registrations` View

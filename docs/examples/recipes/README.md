@@ -6,6 +6,9 @@ the recommended shape of a public page: server-rendered HTML with the content in
 plain elements, a small interactive part (a "save this recipe" button) hydrated in the browser and loaded late, and
 Markdown, `llms.txt` and the sitemap from the generated `web()`.
 
+The Admin UI uses the built-in forms, operations and reports, configured through the manifest; no custom Admin entry
+is needed. See [Purchasing](../purchasing/README.md) for a custom Admin page using typed hooks and shared components.
+
 ## Capabilities shown
 
 - Publishing lifecycle (draft → publish): `lifecycle: publishing` on both Schemas in `manifests/recipes.yaml`;
