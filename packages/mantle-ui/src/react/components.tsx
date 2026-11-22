@@ -270,7 +270,7 @@ export function OperationPanel(
             {bound.map(([field, value]) => (
               <div key={field} className="contents">
                 <dt className="text-muted-foreground">{label(field)}</dt>
-                <dd className="break-words">{show(props, field, value, labels.empty)}</dd>
+                <dd className="min-w-0 break-words">{show(props, field, value, labels.empty)}</dd>
               </div>
             ))}
           </dl>

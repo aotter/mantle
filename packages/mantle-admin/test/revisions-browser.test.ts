@@ -149,6 +149,22 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     await frozen.getByText(`Selected when previewed: ${second}.`, { exact: true }).waitFor();
     expect(await change.isDisabled()).toBe(true); // Reconciled: this revision is already selected.
     expect((await state()).writes.length).toBe(before + 1);
+
+    // A bound 32-character id must wrap without pushing the form's Run button off a phone screen.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${origin}/admin/c/posts/${post}`);
+    await page.getByRole("search").getByRole("button", { name: "New revision", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    const run = dialog.getByRole("button", { name: "Run", exact: true });
+    await run.waitFor();
+    const bounds = await dialog.evaluate(node => ({
+      width: node.clientWidth,
+      scrollWidth: node.scrollWidth,
+      right: node.querySelector("footer button:last-child")!.getBoundingClientRect().right,
+      viewport: window.innerWidth,
+    }));
+    expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.width);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport);
   } finally {
     await browser.close();
     backend.kill("SIGTERM");
