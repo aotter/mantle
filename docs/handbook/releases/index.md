@@ -34,6 +34,25 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.10
+
+Pin the three Mantle packages to `0.2.2-alpha.10` and regenerate with your
+application's command. The handbook includes native Bun and Workers HTTP
+examples (#2144) and independent Admin browser acceptance (#2147).
+
+- **Breaking: the copied Purchasing example requires a rejection reason (#2149).**
+  - `reject_request({ id, expectedVersion })` → `reject_request({ id, expectedVersion, reason })`.
+  - Existing `requests` table without a rejection reason → apply the example's application-owned
+    migration for the nullable text column `rejectionreason` before running the new code.
+- **Breaking: the copied Recipes example uses English and French (#2150).**
+  - Default locale `zh-TW` → `en`.
+  - Translation locale `en` → `fr`.
+  Preserve existing content and public URLs by planning the content migration and redirects
+  before adopting the changed example locales.
+
+These example migrations apply when adopting the new example code. Production
+upgrade and soak remain unverified for this alpha.
+
 ### Upgrading to 0.2.2-alpha.9
 
 Pin the Mantle packages to `0.2.2-alpha.9` and regenerate: the generated `access-targets.ts` changes (#2133), and
