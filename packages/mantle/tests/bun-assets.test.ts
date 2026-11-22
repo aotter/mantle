@@ -27,10 +27,10 @@ test("Bun Admin reader serves files and refuses malformed paths and escaping sym
       "public, max-age=31536000, immutable",
     ]);
     expect(chunk.headers.get("content-type")).toContain("javascript");
-    // the application's own browser entries keep stable names: not cached as immutable
+    // The application's own browser entries keep stable names and must be checked before reuse.
     await mkdir(join(root, "assets/client"));
     await writeFile(join(root, "assets/client/spa.js"), "export {}");
-    expect((await assets("/assets/client/spa.js"))!.headers.get("cache-control")).toBeNull();
+    expect((await assets("/assets/client/spa.js"))!.headers.get("cache-control")).toBe("no-cache");
     for (const path of ["/folder", "/escape.html", "/missing.html", "/%", "/%00", "/%5c", "/%2e%2e%2fprivate.html"])
       expect(await assets(path)).toBeNull();
   } finally {

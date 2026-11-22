@@ -5,7 +5,8 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": [
     "nodejs_compat",
-    "global_fetch_strictly_public"
+    "global_fetch_strictly_public",
+    "enable_request_signal"
   ],
   "secrets": {
     "required": [
