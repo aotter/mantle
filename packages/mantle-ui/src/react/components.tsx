@@ -272,6 +272,9 @@ export function OperationPanel(
           fieldValue={props.fieldValue}
         />
       ) : null}
+      <fieldset disabled={busy || done} className="grid gap-3">
+        {props.children}
+      </fieldset>
       {bound.length > 0 ? (
         <section aria-label={labels.boundInputs} className="text-muted-foreground rounded-md border p-3 text-xs">
           <p className="text-muted-foreground mb-1">{labels.boundInputs}</p>
@@ -285,9 +288,6 @@ export function OperationPanel(
           </dl>
         </section>
       ) : null}
-      <fieldset disabled={busy || done} className="grid gap-3">
-        {props.children}
-      </fieldset>
       <ChangeDiff
         changes={controller.changes()}
         labels={labels}

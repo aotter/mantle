@@ -37,6 +37,8 @@ describe("@aotter/mantle-ui components", () => {
     expect(html).toContain('name="note"');
     expect(html).toContain("submitted");
     expect(html.indexOf('data-slot="entity-preview"')).toBeLessThan(html.indexOf("From the selected row"));
+    // Admin composes its reviewed record and editable fields as children, with their own formatters.
+    expect(html.indexOf('name="note"')).toBeLessThan(html.indexOf("From the selected row"));
     // Submitted from script: MCP hosts often sandbox Apps without `allow-forms`.
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Run<\/button>/u);
     expect(html).not.toContain('type="submit"');
