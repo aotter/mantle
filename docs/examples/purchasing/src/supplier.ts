@@ -18,7 +18,9 @@ export async function placeOrder(store: HandlerContext["store"], request: { id: 
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) throw new Error(`supplier answered ${response.status}`);
-    ({ orderId } = await response.json() as { orderId: string });
+    const order = await response.json() as { orderId?: unknown } | null;
+    if (typeof order?.orderId !== "string" || !order.orderId.trim()) throw new Error("Supplier did not return an order id.");
+    orderId = order.orderId;
   } catch (error) {
     console.error(`[purchasing] supplier order for ${request.id} failed; it stays approved for the retry`, error);
     return false;

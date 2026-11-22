@@ -20,7 +20,8 @@ is needed. See [Purchasing](../purchasing/README.md) for a custom Admin page usi
   registration and adds to `seats_taken` in one program, so a full event fails the check and the insert rolls back;
   `cancel-registration` returns the seat in the same program as the delete.
 - **A `ref` handler that checks before writing**: `register` refuses a missing (404) or closed (409) event, then calls
-  the internal SQL Procedure. It does not pre-check seats: the database check is what holds under concurrency.
+  the internal SQL Procedure. Both the seat and waitlist writes recheck that the event is open in SQL. The database
+  capacity check still arbitrates concurrent claims for the last seat.
 - **Who registered**: the handler stores a `memberName` snapshot from Better Auth's `user` row, since `member` is an
   opaque id; Admin's registration list shows it.
 - **Members-only sign-up**: officers list members' emails in the `members` Schema in Admin (unique, lower case by a

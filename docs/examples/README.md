@@ -55,7 +55,7 @@ shell's allow-all `src/signup.ts`, unless sign-up should be invite-only. Purchas
 (`src/routes.ts`, `src/supplier.ts`), email (`src/notify.ts`), cron (`src/schedule.ts` and `triggers.crons`), the
 employees' app (`src/client/`, `public/app/`) and its `wrangler.jsonc` secrets. `pnpm generate` and `tsc` point at leftovers that reference removed Schemas.
 
-Every example uses two roles: `admin` (the admin layer) and `user`.
+The app shell and its business examples use two roles: `admin` (the admin layer) and `user`.
 
 [Reference service](https://github.com/aotter/mantle/tree/v0.2.2-alpha.10/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
 Projects on 0.1.x move with [the upgrade guide](../handbook/releases/upgrade-0.1-to-0.2.md).

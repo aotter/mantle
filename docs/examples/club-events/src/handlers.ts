@@ -13,14 +13,18 @@ export const handlers: Handlers = {
     // `member` comes from the verified caller, never from request input; uniqueIndexes [eventId, member] refuses a second seat.
     // userOf: the Better Auth user record the caller was resolved from (any credential), so officers see who registered.
     const user = userOf(caller), row = { eventId, member: caller.subject, memberName: user?.name || user?.email || caller.subject };
+    let result;
     try {
-      return await store.procedures["register-write"](row);
+      result = await store.procedures["register-write"](row);
     } catch (error) {
       // register-write's only Schema check is the capacity one.
       if (!(error instanceof ContractError && error.code === "CONFLICT" && error.fields?.kind === "check" && error.fields.schema === "events")) throw error;
       if (!waitlist) throw new ContractError("CONFLICT", "The event is full.", "procedures/register");
       // ponytail: a seat freed between the two calls stays unused until the next cancel promotes a waiter.
-      return await store.procedures["waitlist-write"](row);
+      result = await store.procedures["waitlist-write"](row);
     }
+    // The atomic writes check that the event is still open after the earlier read.
+    if (!result.results[0]?.length) throw new ContractError("CONFLICT", "Registration for this event is closed.", "procedures/register");
+    return result;
   },
 };

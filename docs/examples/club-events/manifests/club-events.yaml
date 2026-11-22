@@ -139,8 +139,10 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO registrations (eventId, member, memberName, waitlisted) VALUES (input.eventId, input.member, input.memberName, false) RETURNING id, eventId AS "eventId";
-      UPDATE events SET seats_taken = seats_taken + 1 WHERE id = input.eventId RETURNING capacity - seats_taken AS seats_left
+      INSERT INTO registrations (eventId, member, memberName, waitlisted)
+        SELECT id, input.member, input.memberName, false FROM events WHERE id = input.eventId AND closed = false
+        RETURNING id, eventId AS "eventId";
+      UPDATE events SET seats_taken = seats_taken + 1 WHERE id = input.eventId AND closed = false RETURNING capacity - seats_taken AS seats_left
 ---
 # Internal: a place on the waiting list takes no seat. The member's own insert, so author_id is the member.
 apiVersion: cms.mantle.aotter.net/v2
@@ -158,7 +160,9 @@ spec:
   output: { type: object }
   handler:
     sql: |
-      INSERT INTO registrations (eventId, member, memberName, waitlisted) VALUES (input.eventId, input.member, input.memberName, true) RETURNING id, eventId AS "eventId", waitlisted
+      INSERT INTO registrations (eventId, member, memberName, waitlisted)
+        SELECT id, input.member, input.memberName, true FROM events WHERE id = input.eventId AND closed = false
+        RETURNING id, eventId AS "eventId", waitlisted
 ---
 # No restrict: promoting the next waiter must see and change another member's row. Every statement instead pins the
 # caller's own row inline (author_id = auth.uid()). The DELETE must remove exactly one row, so another member's id is
