@@ -1,4 +1,4 @@
-# Recipes. The parent row is the default locale (zh-TW); recipe_translations holds each other locale (en, ...).
+# Recipes. The parent row is the default locale (en); recipe_translations holds the French (fr) text.
 # Both use the publishing lifecycle: Admin creates drafts, publish makes them visible to visitors.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -15,8 +15,8 @@ spec:
       slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
       title:
         type: string
-        title: Title (Traditional Chinese)
-        description: "Default-language content. Publish this recipe in Shared fields before publishing its English translation."
+        title: Title (English)
+        description: "Default-language content. Publish this recipe in Shared fields before publishing its French translation."
       summary: {type: string, description: "One or two sentences; used as the meta description."}
       ingredients: {type: string, description: "One ingredient per line."}
       steps: {type: string, description: "One step per line."}
@@ -47,11 +47,11 @@ spec:
     required: [slug, locale, title, summary, ingredients, steps]
     properties:
       slug: {type: string, maxLength: 80}
-      locale: {type: string, enum: [en], description: "BCP 47 tag. AGENT: the locales of src/site-config.ts other than the default; a locale outside it has no page."}
+      locale: {type: string, enum: [fr], description: "BCP 47 tag. AGENT: the locales of src/site-config.ts other than the default; a locale outside it has no page."}
       title:
         type: string
-        title: Title (English)
-        description: "Translate the recipe here. Publish its Traditional Chinese parent in Shared fields first."
+        title: Title (French)
+        description: "Translate the recipe here. Publish its English parent in Shared fields first."
       summary: {type: string}
       ingredients: {type: string}
       steps: {type: string}
@@ -77,12 +77,12 @@ spec:
     properties: {slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}}
   sql: |
     SELECT slug, title, summary AS description, ingredients, steps, total_minutes, servings, cover_url, published_at, updated_at,
-      '# ' || title || E'\n\n' || summary || E'\n\n## 材料\n\n' || ingredients || E'\n\n## 步驟\n\n' || steps || E'\n' AS markdown
+      '# ' || title || E'\n\n' || summary || E'\n\n## Ingredients\n\n' || ingredients || E'\n\n## Steps\n\n' || steps || E'\n' AS markdown
     FROM recipes WHERE slug = input.slug ORDER BY id
 ---
 # A translated recipe page, with the parent's total_minutes, servings and cover_url; `(slug, locale)` is the unique
 # index on `recipe_translations`. A translation is hidden while its parent is unpublished (Core adds that to every read).
-# AGENT: the Markdown headings are English; give each locale its own when you add one.
+# AGENT: use the translation language's Markdown headings here; pick by locale if you support several.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: recipe_translation}
@@ -98,7 +98,7 @@ spec:
   sql: |
     SELECT t.locale, t.slug, t.title, t.summary AS description, t.ingredients, t.steps, r.total_minutes, r.servings,
       r.cover_url, t.published_at, t.updated_at,
-      '# ' || t.title || E'\n\n' || t.summary || E'\n\n## Ingredients\n\n' || t.ingredients || E'\n\n## Steps\n\n' || t.steps || E'\n' AS markdown
+      '# ' || t.title || E'\n\n' || t.summary || E'\n\n## Ingrédients\n\n' || t.ingredients || E'\n\n## Étapes\n\n' || t.steps || E'\n' AS markdown
     FROM recipe_translations t JOIN recipes r ON r.slug = t.slug
     WHERE t.slug = input.slug AND t.locale = input.locale ORDER BY t.id
 ---

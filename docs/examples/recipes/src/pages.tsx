@@ -15,8 +15,8 @@ export type Recipe = Row;
 
 // AGENT: move UI strings to your translation workflow when you add locales.
 const text = {
-  "zh-TW": { site: "食譜", description: "家常食譜，中英對照。", how: "需要多久？", answer: (m: number, s: number) => `總共約 ${m} 分鐘，可供 ${s} 人份。`, ingredients: "材料", steps: "步驟", all: "所有食譜", name: "繁體中文", save: "儲存這道食譜", saved: "已儲存" },
-  en: { site: "Recipes", description: "Home recipes in Traditional Chinese and English.", how: "How long does it take?", answer: (m: number, s: number) => `About ${m} minutes in total; serves ${s}.`, ingredients: "Ingredients", steps: "Steps", all: "All recipes", name: "English", save: "Save this recipe", saved: "Saved" },
+  en: { site: "Recipes", description: "Home recipes in English and French.", how: "How long does it take?", answer: (m: number, s: number) => `About ${m} minutes in total; serves ${s}.`, ingredients: "Ingredients", steps: "Steps", all: "All recipes", name: "English", language: "Language", save: "Save this recipe", saved: "Saved" },
+  fr: { site: "Recettes", description: "Recettes maison en anglais et en français.", how: "Combien de temps faut-il ?", answer: (m: number, s: number) => `Environ ${m} minutes au total, pour ${s} personnes.`, ingredients: "Ingrédients", steps: "Étapes", all: "Toutes les recettes", name: "Français", language: "Langue", save: "Enregistrer cette recette", saved: "Enregistrée" },
 } satisfies Record<Locale, unknown>;
 
 const lines = (value: string | null) => (value ?? "").split("\n").map(line => line.trim()).filter(Boolean);
@@ -60,7 +60,7 @@ function OpenGraph(p: { type: "website" | "article"; url: string; locale: Locale
 
 function Switcher({ locales, path, current }: { locales: readonly Locale[]; path: (locale: Locale) => string; current: Locale }) {
   return (
-    <nav aria-label="Language" className="flex gap-2 text-sm">
+    <nav aria-label={text[current].language} className="flex gap-2 text-sm">
       {locales.map(l => (l === current ? <strong key={l}>{text[l].name}</strong> : <a key={l} href={path(l)} hrefLang={l} lang={l} className={link}>{text[l].name}</a>))}
     </nav>
   );

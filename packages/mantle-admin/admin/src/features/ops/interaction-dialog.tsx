@@ -14,6 +14,7 @@ import { t, type I18nKey } from "../../app/i18n";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { JsonSchema, AdminOperation } from "../../lib/types";
+import { IdValue } from "../../ui/id-value";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { invalidateAfterWrite } from "../../lib/after-write";
@@ -98,6 +99,7 @@ import { operationFormSchema, type RefScope } from "./interaction-schema";
 export function InteractionDialog({
   create,
   operation,
+  boundIdInputs,
   hidden,
   automatic,
   refScopes,
@@ -113,6 +115,7 @@ export function InteractionDialog({
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
   operation: AdminOperation;
+  boundIdInputs?: readonly string[];
   /** Inputs the form does not render: row bindings, the version, idempotency keys. */
   hidden: readonly string[];
   /** Idempotency keys, renewed when a payload is refused or conflicts. */
@@ -168,6 +171,7 @@ export function InteractionDialog({
           <InteractionDialogPanel
             controller={created.controller}
             operation={operation}
+            boundIdInputs={boundIdInputs}
             hidden={hidden}
             automatic={automatic}
             refScopes={refScopes}
@@ -195,6 +199,7 @@ export function InteractionDialog({
 function InteractionDialogPanel({
   controller,
   operation,
+  boundIdInputs,
   hidden,
   automatic,
   refScopes,
@@ -211,6 +216,7 @@ function InteractionDialogPanel({
 }: {
   controller: InteractionController;
   operation: AdminOperation;
+  boundIdInputs?: readonly string[];
   hidden: readonly string[];
   automatic: readonly string[];
   refScopes: Readonly<Record<string, RefScope>> | undefined;
@@ -271,7 +277,12 @@ function InteractionDialogPanel({
   const schema = operationFormSchema(operation.input, hidden);
   const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
   const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
-  const fieldValue = (field: string, value: unknown) => renderDataValue(fieldSchema(field), value, language, canonical);
+  const fieldValue = (field: string, value: unknown) =>
+    typeof value === "string" && boundIdInputs?.includes(field) ? (
+      <IdValue value={value} language={language} />
+    ) : (
+      renderDataValue(fieldSchema(field), value, language, canonical)
+    );
   return (
     <OperationPanel
       controller={controller}

@@ -17,7 +17,7 @@ its docs one topic at a time.
    "Build from a product brief". Follow it rather than this file, an SDK checkout or an online copy.
 2. **Work in the user's application.** Read its `package.json` and lockfile for the exact Mantle version and keep using
    that version's docs until the user asks to upgrade (`mantle help releases/index`). Preserve existing code, identity,
-   versions and resources.
+   versions and resources. For a multilingual app, adapt example locales and copy to the user's preferred languages.
 3. **Plan once, then run to the end.** For a new app, first reply with the entry page's plan, in plain business terms
    and with the questions the brief leaves open, and wait for one go-ahead. Then build, show the Developer UI, accept
    and measure without stopping. Read `mantle help agent-workflow-acceptance` for independent acceptance, including

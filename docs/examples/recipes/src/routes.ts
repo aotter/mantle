@@ -15,7 +15,7 @@ const visitor: Caller = { kind: "anonymous" };
 // the origin fails. Redirects, 404s, errors and anything that depends on the caller: no-store.
 const PUBLIC = "public, max-age=60, stale-while-revalidate=600, stale-if-error=86400";
 const NO_STORE = { "cache-control": "no-store" };
-const page = /^\/(zh-TW|en)\/(?:recipes\/([a-z0-9-]+))?$/;
+const page = new RegExp(`^/(${LOCALES.join("|")})/(?:recipes/([a-z0-9-]+))?$`);
 
 /**
  * `.md` alternates, /llms.txt, /sitemap.xml and the head tags of each recipe page, from the public Views.
@@ -27,14 +27,14 @@ const site = (env: Env) => web({
   locales: LOCALES, sitemap: LOCALES.map(locale => `/${locale}/`), cacheControl: PUBLIC,
   pages: {
     // `view` reads one page's row by its key, with the body; `list` enumerates the URLs, without it.
-    "/zh-TW/recipes/{slug}": { view: "recipe", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
+    [`/${DEFAULT_LOCALE}/recipes/{slug}` as const]: { view: "recipe", list: "published_recipes", markdown: "markdown", lastmod: "updated_at" },
     "/{locale}/recipes/{slug}": { view: "recipe_translation", list: "translation_index", markdown: "markdown", lastmod: "updated_at" },
   },
 });
 
 /**
  * Visitor pages, tried before Admin, MCP and REST. Only these paths are matched; everything else falls through.
- *   /                            -> redirect to /zh-TW/
+ *   /                            -> redirect to the default locale
  *   /{locale}/                   list (HTML)
  *   /{locale}/recipes/{slug}     detail (HTML: SEO meta, hreflang, JSON-LD Recipe, short answer, save button)
  *   /{locale}/recipes/{slug}.md  Markdown alternate (web())

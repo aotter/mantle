@@ -163,7 +163,7 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     expect(await change.isDisabled()).toBe(true); // Reconciled: this revision is already selected.
     expect((await state()).writes.length).toBe(before + 1);
 
-    // A bound 32-character id must wrap without pushing the form's Run button off a phone screen.
+    // The target input is named post, but it binds a full record ID.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${origin}/admin/c/posts/${post}`);
     const trigger = page.getByRole("search").getByRole("button", { name: "New revision", exact: true });
@@ -171,6 +171,12 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     const dialog = page.getByRole("dialog");
     const run = dialog.getByRole("button", { name: "Run", exact: true });
     await run.waitFor();
+    const bound = dialog.getByRole("region", { name: "From the selected row" });
+    await bound.getByText(`${post.slice(0, 7)}…${post.slice(-6)}`, { exact: true }).waitFor();
+    expect(await bound.getByText(post, { exact: true }).count()).toBe(0);
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+    await bound.getByRole("button", { name: `Copy full ID: ${post}` }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(post);
     const bounds = await dialog.evaluate(node => ({
       width: node.clientWidth,
       scrollWidth: node.scrollWidth,
