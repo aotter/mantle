@@ -18,7 +18,7 @@ it("the app's both cell, CSS and useView page work in browser Admin as in the MC
     title: null,
     description: null,
     input: null,
-    list: { columns: ["item"], searchFields: [], filterFields: [] },
+    list: { columns: name === "pending" ? [] : ["item"], searchFields: [], filterFields: [] },
     columns: { item: { type: "string" } },
   }));
   const server = createServer(async (request, response) => {
@@ -77,7 +77,11 @@ it("the app's both cell, CSS and useView page work in browser Admin as in the MC
     await cell.waitFor();
     expect(await cell.getAttribute("data-surface")).toBe("browser");
     expect(await cell.innerText()).toBe("Laptops");
+    expect(await page.getByRole("columnheader").allTextContents()).toEqual(["Item", "Id"]);
     expect(await cell.evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(254, 220, 186)");
+    await page.goto(origin + "/admin/views/queue");
+    await page.getByRole("cell", { name: "first", exact: true }).waitFor();
+    expect(await page.getByRole("columnheader").allTextContents()).toEqual(["Item"]);
     await page.goto(origin + "/admin/p/queue");
     await page.getByText("page:first").waitFor();
     expect(await page.locator("h1").allTextContents()).toEqual(["Queue"]);
@@ -96,7 +100,7 @@ it("the app's both cell, CSS and useView page work in browser Admin as in the MC
       requests
         .filter(path => path.startsWith("/admin/api/views/queue"))
         .map(path => new URL(path, origin).searchParams.get("cursor")),
-    ).toEqual([null, "q2"]);
+    ).toEqual([null, null, "q2"]);
   } finally {
     await browser.close();
     await new Promise<void>(resolve => server.close(() => resolve()));

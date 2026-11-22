@@ -25,9 +25,11 @@ export const handlers: Handlers = {
     return { id: decided.id, requestStatus: ordered ? "ordered" : "approved" };
   },
   "reject-request": async ({ store }, input) => {
-    const decided = (await store.procedures["reject-request-write"](input)).results[0]![0] as Decided;
+    const decided = (await store.procedures["reject-request-write"](input)).results[0]![0] as {
+      id: string; title: string; authorId: string; rejectionReason: string;
+    };
     await notifyUser(decided.authorId, `Rejected: ${decided.title}`,
-      `Your purchase request "${decided.title}" was rejected.`, "purchasing.rejected");
-    return { id: decided.id, requestStatus: "rejected" };
+      `Your purchase request "${decided.title}" was rejected: ${decided.rejectionReason}`, "purchasing.rejected");
+    return { id: decided.id, requestStatus: "rejected", rejectionReason: decided.rejectionReason };
   },
 };

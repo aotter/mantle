@@ -43,6 +43,19 @@ await smoke(async ({ call, mcp, signIn, sql, owner, step, logs }) => {
     const { version } = (await call("GET", `/admin/api/entries/${id}?collection=events`, { cookie: admin })).body.entry;
     assert.equal((await call("PATCH", `/admin/api/entries/${id}?collection=events`, { cookie: admin, body: { data: { closed: true }, expectedVersion: version } })).status, 200);
   };
+  const unavailable = await mcp("/mcp/admin", admin, "create_event", { title: "No seats offered yet", startsAt: "2026-11-01T10:00:00Z", capacity: 0 });
+  assert.equal(unavailable.body.result?.isError, undefined, JSON.stringify(unavailable.body));
+  const empty = (await sql("SELECT id, capacity, seats_taken FROM events WHERE title = 'No seats offered yet'"))[0];
+  assert.equal(empty.capacity, 0);
+  assert.equal(empty.seats_taken, 0);
+  for (const capacity of [2, 0]) {
+    const { version } = (await call("GET", `/admin/api/entries/${empty.id}?collection=events`, { cookie: admin })).body.entry;
+    assert.equal((await call("PATCH", `/admin/api/entries/${empty.id}?collection=events`, { cookie: admin, body: { data: { capacity }, expectedVersion: version } })).status, 200);
+  }
+  const negative = await mcp("/mcp/admin", admin, "create_event", { title: "Invalid capacity", startsAt: "2026-11-01T10:00:00Z", capacity: -1 });
+  assert.equal(negative.body.result.isError, true, JSON.stringify(negative.body));
+  assert.equal((await sql("SELECT count(*) AS n FROM events WHERE title = 'Invalid capacity'"))[0].n, 0);
+  step("zero-capacity events can be created through admin MCP and edited through Admin; negative capacity is refused without a row");
   await create("Hike", 3);
   await create("Workshop", 1);
   await create("Members' dinner", 10, true);

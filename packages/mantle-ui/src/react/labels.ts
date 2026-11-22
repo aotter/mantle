@@ -36,7 +36,7 @@ export const defaultInteractionLabels: InteractionLabels = {
   cancel: "Cancel",
   close: "Close",
   boundInputs: "From the selected row",
-  reviewedEntry: "Entry you are reviewing",
+  reviewedEntry: "Snapshot before this operation",
   version: "Version",
   changes: "Your changes",
   latestChanges: "What changed",
@@ -58,6 +58,6 @@ export const defaultInteractionLabels: InteractionLabels = {
   reread: "Load latest version",
   acknowledgeUncertain: "I checked; continue",
   failed: "This operation was refused.",
-  succeeded: "Done.",
+  succeeded: "Operation completed.",
   cancelled: "Cancelled.",
 };

@@ -37,6 +37,7 @@ export function EntityPreview(
   const fields = props.fields ?? Object.keys(props.entry.data).filter(field => field !== "version");
   return (
     <section data-slot="entity-preview" aria-label={labels.reviewedEntry} className="rounded-md border p-3 text-sm">
+      <p className="mb-2 text-xs font-medium text-muted-foreground">{labels.reviewedEntry}</p>
       <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3 gap-y-1">
         {fields.map(field => (
           <div key={field} className="contents">
@@ -263,19 +264,6 @@ export function OperationPanel(
         <h2 className="text-base font-semibold">{props.title}</h2>
         {props.description ? <p className="text-muted-foreground text-sm">{props.description}</p> : null}
       </header>
-      {bound.length > 0 ? (
-        <section aria-label={labels.boundInputs} className="bg-muted rounded-md p-3 text-sm">
-          <p className="text-muted-foreground mb-1">{labels.boundInputs}</p>
-          <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3">
-            {bound.map(([field, value]) => (
-              <div key={field} className="contents">
-                <dt className="text-muted-foreground">{label(field)}</dt>
-                <dd className="break-words">{show(props, field, value, labels.empty)}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
-      ) : null}
       {props.previewFields && state.reviewed ? (
         <EntityPreview
           entry={state.reviewed}
@@ -288,6 +276,19 @@ export function OperationPanel(
       <fieldset disabled={busy || done} className="grid gap-3">
         {props.children}
       </fieldset>
+      {bound.length > 0 ? (
+        <section aria-label={labels.boundInputs} className="text-muted-foreground rounded-md border p-3 text-xs">
+          <p className="text-muted-foreground mb-1">{labels.boundInputs}</p>
+          <dl className="grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-3">
+            {bound.map(([field, value]) => (
+              <div key={field} className="contents">
+                <dt className="text-muted-foreground">{label(field)}</dt>
+                <dd className="min-w-0 break-words">{show(props, field, value, labels.empty)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
       <ChangeDiff
         changes={controller.changes()}
         labels={labels}

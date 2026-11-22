@@ -15,7 +15,6 @@ import type { Collection, EntryEditorPayload, AdminOperation, AdminOperationInte
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, redirectToSignIn } from "../../ui/page";
-import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@aotter/mantle-ui/kit";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
@@ -155,6 +154,7 @@ export function RowOperationsMenu({
   onSuccess: () => void;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const menuTrigger = React.useRef<HTMLButtonElement>(null);
   const available = operations.filter(op => operationMatchesRow(op, row));
   if (!available.length) return null;
   const label = itemName
@@ -165,7 +165,7 @@ export function RowOperationsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
+          <Button ref={menuTrigger} type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
             <MoreHorizontal className="size-3.5" aria-hidden />
           </Button>
         </DropdownMenuTrigger>
@@ -183,6 +183,7 @@ export function RowOperationsMenu({
           key={activeOperation.name}
           operation={activeOperation}
           row={row}
+          returnFocus={menuTrigger}
           collection={collection}
           language={language}
           canonical={canonical}
@@ -219,6 +220,7 @@ export function RecordOperations({
   onSuccess: () => void;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const menuTrigger = React.useRef<HTMLButtonElement>(null);
   const available = operations.filter(op => operationMatchesRow(op, row));
   if (!available.length && !entryLink) return null;
   const { inline, overflow } = splitRecordOperations(available);
@@ -242,7 +244,7 @@ export function RecordOperations({
       {overflow.length ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="secondary">
+            <Button ref={menuTrigger} type="button" variant="secondary">
               <MoreHorizontal className="size-4" aria-hidden />
               {t(language, "rowActions.more")}
             </Button>
@@ -262,6 +264,7 @@ export function RecordOperations({
           key={activeOperation.name}
           operation={activeOperation}
           row={row}
+          returnFocus={overflow.includes(activeOperation) ? menuTrigger : undefined}
           collection={collection}
           language={language}
           canonical={canonical}
@@ -280,6 +283,7 @@ function RowOperationDialog({
 }: {
   operation: AdminOperation;
   row: OperableRow;
+  returnFocus?: React.RefObject<HTMLButtonElement | null>;
   collection?: Collection;
   language: AdminLanguage;
   canonical: string | null;
@@ -356,9 +360,11 @@ export function OperationDialog({
   canonical,
   onClose,
   onSuccess,
+  returnFocus,
 }: {
   operation: AdminOperation;
   interaction?: AdminOperationInteraction;
+  returnFocus?: React.RefObject<HTMLButtonElement | null>;
   row?: OperableRow;
   scope?: ParentScope;
   collection?: Collection;
@@ -367,7 +373,20 @@ export function OperationDialog({
   onClose: () => void;
   onSuccess: () => void;
 }): React.ReactElement {
-  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+  const [trigger] = React.useState(() => returnFocus?.current ?? document.activeElement);
+  const mounted = React.useRef(true);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    // Loading and ready content share one launcher; replacing content is not closing the operation.
+    if (!mounted.current && trigger instanceof HTMLElement && trigger.isConnected)
+      trigger.focus({ preventScroll: true });
+  };
   const parent = row ? undefined : parentScopeInteraction(operation.input, scope);
   const binding = row && interaction ? interaction : parent?.interaction;
   const listed = row ? rowValues(row) : undefined;
@@ -395,7 +414,7 @@ export function OperationDialog({
 
   if (missing && !entry.data) {
     return (
-      <InteractionLoading language={language} onClose={onClose}>
+      <InteractionLoading language={language} onClose={onClose} onCloseAutoFocus={restoreFocus}>
         {entry.isError ? <ErrorBox error={entry.error} /> : <Skeleton className="h-24 w-full" />}
       </InteractionLoading>
     );
@@ -406,12 +425,13 @@ export function OperationDialog({
   return (
     <React.Suspense
       fallback={
-        <InteractionLoading language={language} onClose={onClose}>
+        <InteractionLoading language={language} onClose={onClose} onCloseAutoFocus={restoreFocus}>
           <Skeleton className="h-40 w-full" />
         </InteractionLoading>
       }
     >
       <InteractionDialog
+        onCloseAutoFocus={restoreFocus}
         create={() => createOperationController(operation, binding, row?.collection, reviewed)}
         operation={operation}
         hidden={hidden}
@@ -438,7 +458,6 @@ export function OperationDialog({
         }
         onClose={onClose}
         onDone={onSuccess}
-        onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
         renderResult={output => <OperationResult output={output} language={language} />}
       />
     </React.Suspense>
@@ -518,9 +537,11 @@ function InteractionLoading({
   language,
   onClose,
   children,
+  onCloseAutoFocus,
 }: {
   language: AdminLanguage;
   onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
@@ -530,7 +551,11 @@ function InteractionLoading({
         if (!next) onClose();
       }}
     >
-      <DialogContent closeLabel={t(language, "interaction.close")} aria-describedby={undefined}>
+      <DialogContent
+        closeLabel={t(language, "interaction.close")}
+        aria-describedby={undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogTitle className="sr-only">{t(language, "interaction.loading")}</DialogTitle>
         {children}
       </DialogContent>

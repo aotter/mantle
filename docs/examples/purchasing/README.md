@@ -29,6 +29,11 @@ that have been waiting too long.
 - **Admin-only operations**: `approve-request` and `reject-request` declare `requires: ctx.admin` and a `target`, so
   Admin shows them as operations on a request. Their `kind: mcp, surface: admin` Triggers make them
   `approve_request` / `reject_request` tools on `/mcp/admin`. They are not listed on `/mcp`.
+- **A rejection with a reason**: the rejection form requires a non-blank reason of at most 1,000 characters. The
+  guarded transition stores it in `requests.rejectionReason`, exposes it read-only in Admin, and includes it in the
+  requester's notification. It does not spend the budget or write a spending ledger row. Existing copies need a
+  reviewed migration adding the nullable text column before adopting this manifest; clients of `reject_request`
+  must supply `reason` as well as `id` and `expectedVersion`.
 - **Optimistic concurrency**: clients send `expectedVersion`, and the SQL matches `version = input.expectedVersion`.
   If the requester changes the amount (`change-amount`, only their own request and only while it is `submitted`)
   after an admin reviewed it, that admin's approval is a 409. When two admins approve the same version, one succeeds
@@ -51,6 +56,10 @@ that have been waiting too long.
 - Employees see only their own requests through `my-requests` (`restrict: { requests: "author_id = auth.uid()" }`).
 - **Sidebar for the approver's day**: `src/admin.tsx` declares an Approvals group (`defineAdmin` `nav.groups`) above Admin's built-in
   groups; `pending-requests` and `requests` move into it with `uiSchema.nav: { group, order }`.
+- **A custom Approval desk**: `src/admin.tsx` renders pending requests as cards with their title, department and amount,
+  using generated `useView`, `AdminLink` and kit components. It handles loading, empty, unavailable and error states,
+  with Load more for subsequent pages. Open a card to use the built-in record review and approve/reject operations;
+  budgets and ledger reports also remain built-in. The `/admin/p/guide` route is retained.
 - **The employees' app**: a React single-page app under `/app` (below). `src/signup.ts` lets only `@EMPLOYEE_DOMAIN`
   emails create an account (`vars` in `wrangler.jsonc`).
 

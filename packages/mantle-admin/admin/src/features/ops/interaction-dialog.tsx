@@ -106,8 +106,8 @@ export function InteractionDialog({
   sourceSchema,
   previewFields,
   onClose,
+  onCloseAutoFocus,
   onDone,
-  onSucceeded,
   renderResult,
 }: {
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
@@ -124,10 +124,9 @@ export function InteractionDialog({
   sourceSchema?: JsonSchema;
   previewFields?: readonly string[];
   onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   /** Called once when a write landed or may have landed. */
   onDone: () => void;
-  /** Called once when the write is known to have landed. */
-  onSucceeded?: () => void;
   renderResult?: (result: unknown) => React.ReactNode;
 }): React.ReactElement {
   const [created] = React.useState((): { controller: InteractionController } | { error: unknown } => {
@@ -158,6 +157,7 @@ export function InteractionDialog({
       }}
     >
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
         closeLabel={t(language, "interaction.close")}
         {...(description ? {} : { "aria-describedby": undefined })}
@@ -179,7 +179,6 @@ export function InteractionDialog({
             previewFields={previewFields}
             onClose={onClose}
             onDone={refreshed}
-            onSucceeded={onSucceeded}
             renderResult={renderResult}
             closeRef={closeRef}
           />
@@ -207,7 +206,6 @@ function InteractionDialogPanel({
   previewFields,
   onClose,
   onDone,
-  onSucceeded,
   renderResult,
   closeRef,
 }: {
@@ -225,7 +223,6 @@ function InteractionDialogPanel({
   onClose: () => void;
   /** Refreshes the page; resolves once the shown reads have refetched. */
   onDone: () => Promise<void>;
-  onSucceeded?: () => void;
   renderResult?: (result: unknown) => React.ReactNode;
   closeRef: React.MutableRefObject<() => void>;
 }): React.ReactElement {
@@ -244,7 +241,6 @@ function InteractionDialogPanel({
     // The page is refreshed once, when the write is known to have landed.
     if (state.phase === "succeeded" && !refreshed.current) {
       refreshed.current = true;
-      onSucceeded?.();
       rereading.current = onDone();
     }
     // A refused or conflicting payload gets a fresh idempotency key: the

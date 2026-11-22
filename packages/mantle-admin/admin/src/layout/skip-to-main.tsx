@@ -1,15 +1,17 @@
 import * as React from "react";
 import { t } from "../app/i18n";
 import { usePreferences } from "../app/preferences";
+import { useAdminLocation } from "../app/router";
 import { cn } from "../lib/utils";
 
 export const MAIN_CONTENT_ID = "content";
 
 export function SkipToMain({ className }: { className?: string }): React.ReactElement {
   const { language } = usePreferences();
+  const { pathname, search } = useAdminLocation();
   return (
     <a
-      href={`#${MAIN_CONTENT_ID}`}
+      href={`${pathname}${search}#${MAIN_CONTENT_ID}`}
       className={cn(
         "fixed inset-inline-start-3 top-3 z-[999]",
         "-translate-y-52 rounded-md bg-primary px-3 py-2 text-sm font-medium",

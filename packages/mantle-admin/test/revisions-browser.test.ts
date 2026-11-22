@@ -67,6 +67,19 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     await page.addInitScript(() => localStorage.setItem("cms.preference.language", "en"));
     await page.goto(`${origin}/admin/p/revisions?post=${post}`);
     await page.getByRole("heading", { name: "Post: hello", exact: true }).waitFor();
+    // A base href must not turn a same-page skip link into navigation to Admin Home.
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() =>
+        page
+          .getByRole("link", { name: "Skip to main content", exact: true })
+          .evaluate(node => node === document.activeElement),
+      )
+      .toBe(true);
+    await page.keyboard.press("Enter");
+    expect(new URL(page.url()).pathname).toBe("/admin/p/revisions");
+    expect(new URL(page.url()).searchParams.get("post")).toBe(post);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("content");
     const revision = page.getByLabel("Revision", { exact: true });
     const preview = page.getByRole("button", { name: "Preview selected revision", exact: true });
     const change = page.getByRole("button", { name: "Switch to reviewed revision", exact: true });
@@ -149,6 +162,43 @@ export default {...definition,pages:definition.pages.map(page=>({...page,element
     await frozen.getByText(`Selected when previewed: ${second}.`, { exact: true }).waitFor();
     expect(await change.isDisabled()).toBe(true); // Reconciled: this revision is already selected.
     expect((await state()).writes.length).toBe(before + 1);
+
+    // A bound 32-character id must wrap without pushing the form's Run button off a phone screen.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${origin}/admin/c/posts/${post}`);
+    const trigger = page.getByRole("search").getByRole("button", { name: "New revision", exact: true });
+    await trigger.click();
+    const dialog = page.getByRole("dialog");
+    const run = dialog.getByRole("button", { name: "Run", exact: true });
+    await run.waitFor();
+    const bounds = await dialog.evaluate(node => ({
+      width: node.clientWidth,
+      scrollWidth: node.scrollWidth,
+      right: node.querySelector("footer button:last-child")!.getBoundingClientRect().right,
+      viewport: window.innerWidth,
+    }));
+    expect(bounds.scrollWidth).toBeLessThanOrEqual(bounds.width);
+    expect(bounds.right).toBeLessThanOrEqual(bounds.viewport);
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => trigger.evaluate(node => node === document.activeElement)).toBe(true);
+    await page.keyboard.press("Enter");
+    await run.click();
+    await dialog.getByText("Operation completed.", { exact: true }).waitFor();
+    // The in-dialog outcome is sufficient; a duplicate toast must not cover Close on a phone.
+    expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
+    const close = dialog.locator("footer").getByRole("button", { name: "Close", exact: true });
+    await close.click();
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => trigger.evaluate(node => node === document.activeElement)).toBe(true);
+    await page.goto(`${origin}/admin/c/post_revisions`);
+    const menu = page.getByRole("button", { name: /^Actions for / }).first();
+    await menu.click();
+    await page.getByRole("menuitem", { name: "Delete revision", exact: true }).click();
+    await run.waitFor();
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    await expect.poll(() => menu.evaluate(node => node === document.activeElement)).toBe(true);
   } finally {
     await browser.close();
     backend.kill("SIGTERM");

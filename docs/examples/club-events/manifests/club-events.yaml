@@ -52,7 +52,7 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: members }
 spec:
-  title: Members
+  title: Club members
   lifecycle: operational
   uniqueIndexes: [[email]]
   # Better Auth lowercases emails; the check refuses a mixed-case entry that would never match.
@@ -238,7 +238,7 @@ spec:
     properties:
       title: { type: string, minLength: 1, maxLength: 200, title: Title }
       startsAt: { type: string, format: date-time, title: Starts at }
-      capacity: { type: integer, minimum: 1, title: Capacity }
+      capacity: { type: integer, minimum: 0, title: Capacity }
   output: { type: object }
   handler:
     sql: |

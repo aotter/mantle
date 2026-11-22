@@ -36,9 +36,31 @@ describe("@aotter/mantle-ui components", () => {
     expect(html).toContain("From the selected row");
     expect(html).toContain('name="note"');
     expect(html).toContain("submitted");
+    expect(html.indexOf('data-slot="entity-preview"')).toBeLessThan(html.indexOf("From the selected row"));
+    // Admin composes its reviewed record and editable fields as children, with their own formatters.
+    expect(html.indexOf('name="note"')).toBeLessThan(html.indexOf("From the selected row"));
     // Submitted from script: MCP hosts often sandbox Apps without `allow-forms`.
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Run<\/button>/u);
     expect(html).not.toContain('type="submit"');
+  });
+
+  it("labels the unchanged reviewed snapshot separately from a successful operation result", async () => {
+    const c = controller({ invoke: async () => ({ ok: true, data: { requestStatus: "approved" } }) });
+    await c.open();
+    await c.submit();
+    const html = renderToStaticMarkup(
+      <OperationPanel
+        controller={c}
+        title="Approve request"
+        previewFields={["requestStatus"]}
+        renderResult={result => <p>{JSON.stringify(result)}</p>}
+      />,
+    );
+    expect(c.getSnapshot().reviewed?.data.requestStatus).toBe("submitted");
+    expect(html).toContain("Snapshot before this operation");
+    expect(html).toContain("Operation completed.");
+    expect(html).toContain("approved");
+    expect(html.indexOf("Snapshot before this operation")).toBeLessThan(html.indexOf("Operation completed."));
   });
 
   it("offers no dead re-read after a conflict when the host cannot read", async () => {

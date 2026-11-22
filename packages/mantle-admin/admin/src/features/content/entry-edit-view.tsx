@@ -20,6 +20,7 @@ import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api, ApiError, refusalOf } from "../../lib/api";
 import { entryTitle } from "../../lib/entry-title";
+import { IdValue } from "../../ui/id-value";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { enumOptions } from "../../lib/enum-options";
 import { propertyLabel } from "../../lib/field-label";
@@ -466,10 +467,7 @@ export function EntryEditView({
 
         <div className="space-y-4">
           <SectionCard>
-            <SectionTitle
-              title={t(language, "entryEdit.meta")}
-              body={`${payload.entry.collection} / ${payload.entry.id}`}
-            />
+            <SectionTitle title={t(language, "entryEdit.meta")} body={payload.entry.collection} />
             <dl className="space-y-3 text-sm">
               {!isOperational && (
                 <MetaRow
@@ -478,6 +476,10 @@ export function EntryEditView({
                 />
               )}
               <MetaRow label={t(language, "collection.table.version")} value={`v${payload.entry.version}`} />
+              <MetaRow
+                label={t(language, "collection.table.id")}
+                value={<IdValue value={payload.entry.id} language={language} />}
+              />
             </dl>
           </SectionCard>
           <Slot

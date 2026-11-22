@@ -131,10 +131,20 @@ try {
       assert.ok(!adminTools.includes(hidden) && !publicTools.includes(hidden), hidden);
     step("approve/reject are admin-only: an employee gets 403 in Admin and the tools exist only on /mcp/admin");
 
-    const rejected = await mcp("/mcp/admin", admin, "reject_request", { id: chairs, expectedVersion: await version(chairs) });
+    const rejectionVersion = await version(chairs);
+    for (const reason of [undefined, "   "]) {
+      const refused = await mcp("/mcp/admin", admin, "reject_request", { id: chairs, expectedVersion: rejectionVersion, ...(reason === undefined ? {} : { reason }) });
+      assert.equal(refused.body.result.isError, true, JSON.stringify(refused.body));
+      assert.equal((await row(chairs)).status, "submitted");
+      assert.equal(await version(chairs), rejectionVersion);
+    }
+    const rejectionReason = "The department is deferring this purchase.";
+    const rejected = await mcp("/mcp/admin", admin, "reject_request", { id: chairs, expectedVersion: rejectionVersion, reason: rejectionReason });
     assert.equal(rejected.body.result.isError, undefined, JSON.stringify(rejected.body));
     assert.equal((await row(chairs)).status, "rejected");
+    assert.equal((await query(`SELECT rejectionReason AS reason FROM requests WHERE id = '${chairs}'`))[0].reason, rejectionReason);
     await waitForLog(/purchasing\.rejected → alice@example\.test[\s\S]*?Rejected: Chairs/);
+    await waitForLog(/The department is deferring this purchase\./);
     const guarded = await operation(admin, "approve-request", { id: chairs, expectedVersion: await version(chairs) });
     assert.equal(guarded.status, 409, JSON.stringify(guarded.body));
     assert.equal((await row(chairs)).status, "rejected");
