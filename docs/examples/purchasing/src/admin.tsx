@@ -16,9 +16,6 @@ function ApprovalDesk() {
       </AdminLink>
       {queue.status === "loading" ? <p role="status">Loading requests…</p> : null}
       {queue.status === "unavailable" ? <p role="status">The approval queue is unavailable.</p> : null}
-      {queue.status === "error" ? (
-        <p role="alert">Could not load all requests. Reload this page or retry loading more.</p>
-      ) : null}
       {queue.status === "ready" && queue.rows.length === 0 ? <p>No requests are waiting for approval.</p> : null}
       <ul className="grid gap-4 lg:grid-cols-2">
         {queue.rows.map(row => (
@@ -40,6 +37,9 @@ function ApprovalDesk() {
           </li>
         ))}
       </ul>
+      {queue.status === "error" ? (
+        <p role="alert">Could not load all requests. Reload this page or retry loading more.</p>
+      ) : null}
       {queue.hasMore ? (
         <Button disabled={queue.loadingMore} onClick={queue.loadMore}>
           {queue.loadingMore ? "Loading…" : "Load more requests"}
