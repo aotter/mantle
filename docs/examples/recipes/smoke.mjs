@@ -32,7 +32,7 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   };
   const publish = (collection, entry) => call("POST", `/admin/api/entries/${entry.id}/publish?collection=${collection}`, { cookie: admin, body: { expectedVersion: entry.version } });
   const parent = await create("recipes", recipe), translation = await create("recipe_translations", french);
-  step("admin creates a en recipe and its fr translation as drafts");
+  step("admin creates an English recipe and its French translation as drafts");
 
   for (const path of ["/en/recipes/scallion-pancake", "/en/recipes/scallion-pancake.md", "/fr/recipes/scallion-pancake"]) {
     const missing = await call("GET", path);
@@ -194,7 +194,8 @@ await smoke(async ({ origin, owner, call, signIn, step }) => {
   const islandSrc = elements(html, "div").find(e => e["data-island-src"])?.["data-island-src"];
   assert.match(islandSrc ?? "", hashed("save"), "the island's hashed URL is written into its markup");
   assert.ok(!html.includes("modulepreload") && !scripts.some(e => e.src === islandSrc), "the island's bundle is not loaded by the HTML");
-  assert.ok(has(html, "button", { type: "button" }, "儲存這道Recipes"), "the button is server-rendered");
+  assert.ok(has(html, "button", { type: "button" }, "Save this recipe"), "the English button is server-rendered");
+  assert.ok(has(fr.body, "button", { type: "button" }, "Enregistrer cette recette"), "the French button is server-rendered");
   const IMMUTABLE = "public, max-age=86400, immutable";
   const asset = async (path, cacheControl) => {
     const response = await fetch(`${origin}${path}`);
