@@ -104,6 +104,47 @@ fixes:
 
 Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
 
+## Accept Admin work in the browser
+
+When Admin is an intended surface, assign a fresh admin evaluator its signed-in
+Admin URL and a real browser. It must operate the UI; admin MCP calls, HTTP
+writes, seeded records and a rendered list do not establish Admin UI acceptance.
+Setup may seed fixtures before handoff, but no API, SQL or source-code shortcut
+may substitute for a missing UI control during the run.
+
+Before handing over, derive the private rubric from the original brief, not
+from the fields and buttons the current UI happens to show. For each required,
+authorized write workflow, record the business inputs the role must supply or
+change and the result it must read back. Score the browser evidence against
+that rubric, including requirements the evaluator did not discover:
+
+| Required browser evidence | What the author checks |
+| --- | --- |
+| Find the action from the role's normal entry point | A discoverable create button, collection action, row action or custom page starts the intended workflow. Knowing an API or a hidden URL is insufficient. |
+| Enter the business inputs | Every required user-supplied field or relation can be entered or changed in the relevant form, including custom input slots and operation dialogs. A storage field alone does not require an editable input. |
+| Submit and interpret the outcome | The evaluator actually uses the form, observes applicable validation/refusals and can distinguish success from failure. A toast alone does not prove a write. |
+| Reopen or reload and read back | The intended values, relations and resulting state persist and are visible to that role through the UI. Record the observed result, not just the submitted values. |
+
+Missing a required action or input is a product FAIL (P1, or P0 for authority,
+integrity or data loss), even when the API works. A requirement the evaluator
+never attempted remains uncovered; a browse-only report cannot converge a
+required write workflow. An unattempted workflow is UNVERIFIED; a browser/tool
+or execution-policy refusal is an environment BLOCKED, not a product defect.
+
+Judge controls against the intended role and workflow. Read-only collections,
+system-managed values and parent/locale values supplied by context need no
+generic create button or editable field. Operational collections may use
+declared [collection or row operations](native-admin.md#collection-navigation-and-operation-placement)
+instead of generic creation. Verify the intended operation in the browser;
+do not enable generic CRUD or widen permissions to satisfy this check. An
+unmet explicit requirement stays a gap until repaired or the user changes scope.
+
+Keep the business-input checklist with the author. The evaluator still gets
+only the role prompt below, not expected field names, button locations or
+steps. Record its browser/version, role, entry URL, interaction or screenshot
+references and persisted readbacks in the existing handoff, one coverage item
+per required workflow. Keep API/MCP results separate from browser results.
+
 ## Run role-only acceptance rounds until they converge
 
 The evaluator gets a role, not a task list. It works out what that role needs
