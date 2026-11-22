@@ -17,7 +17,7 @@ npm install --save-dev typescript @cloudflare/workers-types wrangler
 npx mantle generate cloudflare-d1 generated posts.yaml
 npx tsc --noEmit
 git init
-git add generated src public wrangler.jsonc
+git add generated src public wrangler.jsonc posts.yaml seed.sql package.json package-lock.json tsconfig.json
 git commit -m "Generate native website contracts"
 npx wrangler d1 execute mantle-generated-web --local --file generated/schema.sql
 npx wrangler d1 execute mantle-generated-web --local --file seed.sql

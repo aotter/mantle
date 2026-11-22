@@ -12,7 +12,7 @@ import { type FormEvent, type MouseEvent, type ReactNode, StrictMode, useCallbac
 import { createRoot } from "react-dom/client";
 import "./app.css";
 
-type PurchaseRequest = { id: string; title: string; amount: number; department: string; requestStatus: string; version: number; supplierOrderId?: string | null };
+type PurchaseRequest = { id: string; title: string; amount: number; department: string; requestStatus: string; version: number; supplierOrderId?: string | null; rejectionReason?: string | null };
 type Budget = { department: string; remaining: number };
 type Failure = { status: number; code?: string; message: string; path?: string };
 
@@ -197,6 +197,7 @@ function RequestDetail({ id, go }: { id: string; go: (to: string) => void }) {
               <dt>Amount</dt><dd className="tabular-nums">{request.amount}</dd>
               <dt>Department</dt><dd>{request.department}</dd>
               {request.supplierOrderId && <><dt>Supplier order</dt><dd>{request.supplierOrderId}</dd></>}
+              {request.rejectionReason && <><dt>Rejection reason</dt><dd className="break-words">{request.rejectionReason}</dd></>}
             </dl>
             {request.requestStatus === "submitted" && (
               <form onSubmit={change} noValidate className="mt-4">

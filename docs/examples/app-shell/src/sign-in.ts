@@ -26,15 +26,19 @@ const target = back && new URL(back, location.origin).origin === location.origin
 const post = (form, body) => fetch(form.action, { method: form.method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 email.onsubmit = async event => {
   event.preventDefault();
-  const response = await post(email, { email: email.email.value, type: "sign-in" });
-  status.textContent = response.ok ? "We sent a code to your email." : "Could not send a code. Try again later.";
-  code.hidden = !response.ok;
+  try {
+    const response = await post(email, { email: email.email.value, type: "sign-in" });
+    status.textContent = response.ok ? "We sent a code to your email." : "Could not send a code. Try again later.";
+    code.hidden = !response.ok;
+  } catch { status.textContent = "Could not reach the sign-in service. Try again."; }
 };
 code.onsubmit = async event => {
   event.preventDefault();
-  const response = await post(code, { email: email.email.value, otp: code.otp.value });
-  if (response.ok) location.assign(target);
-  else status.textContent = response.status === 403 ? "This email cannot sign up here." : "Wrong or expired code.";
+  try {
+    const response = await post(code, { email: email.email.value, otp: code.otp.value });
+    if (response.ok) location.assign(target);
+    else status.textContent = response.status === 403 ? "This email cannot sign up here." : "Wrong or expired code.";
+  } catch { status.textContent = "Could not reach the sign-in service. Try again."; }
 };
 </script>
 `, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });

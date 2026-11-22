@@ -96,7 +96,8 @@ spec:
     properties:
       id: { type: string, maxLength: 100 }
   sql: |
-    SELECT id, title, amount, department, requestStatus AS "requestStatus", supplierOrderId AS "supplierOrderId", version
+    SELECT id, title, amount, department, requestStatus AS "requestStatus", supplierOrderId AS "supplierOrderId",
+      rejectionReason AS "rejectionReason", version
     FROM requests WHERE id = input.id ORDER BY id
 ---
 # Each department and what its budget has left, for any signed-in employee: the app's new-request form shows it
@@ -263,6 +264,7 @@ kind: Procedure
 metadata: { name: reject-request }
 spec:
   title: Reject a purchase request
+  uiSchema: { fields: { reason: { widget: textarea } } }
   description: Reject a submitted request with a reason; keeps the department budget unchanged and notifies the requester.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: requests, id: id, version: expectedVersion }
