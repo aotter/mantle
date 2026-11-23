@@ -6,12 +6,12 @@ description: Scaffold an app with `mantle init`, run it on a local D1, sign in a
 Use Node.js 22.22 or newer and pnpm 9 or newer. In an empty directory:
 
 ```sh
-npx @aotter/mantle@alpha init .
+npx @aotter/mantle@0.2.2 init .
 pnpm install
 ```
 
-`@alpha` fetches the current prerelease ([Releases](../releases/index.md)); `init` pins every Mantle package in
-`package.json` to that exact version, and `pnpm exec mantle help` prints that version's handbook.
+`init` pins every Mantle package in `package.json` to the selected version, and `pnpm exec mantle help` prints that
+version's handbook. See [Releases](../releases/index.md) for other published versions.
 
 `init` writes the app once, with `src/index.ts` as its entry: email-code sign-in with `admin` and `user` roles, Admin at
 `/admin`, MCP at `/mcp` and `/mcp/admin`, generated REST, a member `/sign-in` page and the local acceptance kit. It writes
