@@ -57,5 +57,5 @@ employees' app (`src/client/`, `public/app/`) and its `wrangler.jsonc` secrets. 
 
 The app shell and its business examples use two roles: `admin` (the admin layer) and `user`.
 
-[Reference service](https://github.com/aotter/mantle/tree/v0.2.2-alpha.11/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
+[Reference service](https://github.com/aotter/mantle/tree/v0.2.2/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
 Projects on 0.1.x move with [the upgrade guide](../handbook/releases/upgrade-0.1-to-0.2.md).
