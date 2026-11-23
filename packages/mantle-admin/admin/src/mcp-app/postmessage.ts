@@ -55,7 +55,7 @@ const MODES: readonly unknown[] = ["inline", "fullscreen", "pip"];
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-function json(value: unknown): boolean {
+function json(value: unknown, allowOmittedFields = false): boolean {
   const active = new WeakSet<object>(),
     stack: [unknown, boolean][] = [[value, false]];
   while (stack.length) {
@@ -77,6 +77,7 @@ function json(value: unknown): boolean {
     stack.push([object, true]);
     for (const [key, child] of Object.entries(object)) {
       if (key === "__proto__") return false;
+      if (allowOmittedFields && child === undefined && !Array.isArray(item)) continue;
       stack.push([child, false]);
     }
   }
@@ -261,8 +262,10 @@ export function connectHost(
     return {};
   };
   const call: CallTool = async (name, args, signal) => {
-    if (!ready || closed || !name || !json(args)) throw new Error("Invalid tool call");
-    const answer = await app.callServerTool({ name, arguments: args }, { signal });
+    if (!ready || closed || !name || !json(args, true)) throw new Error("Invalid tool call");
+    // Match the JSON request body in Admin: a cleared optional field is omitted, even inside an object.
+    const arguments_ = JSON.parse(JSON.stringify(args)) as Record<string, unknown>;
+    const answer = await app.callServerTool({ name, arguments: arguments_ }, { signal });
     if (!result(answer)) throw new Error("Invalid tool result");
     return answer;
   };

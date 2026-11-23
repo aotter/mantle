@@ -46,6 +46,40 @@ describe("row operation form", () => {
 });
 
 describe("createOperationController (ADR-0029)", () => {
+  it("uses the unchecked value for a new operation but does not assume it for a bound row", async () => {
+    const schema: JsonSchema = {
+      type: "object",
+      required: ["done"],
+      properties: {
+        done: { type: "boolean" },
+        note: { type: "string" },
+        score: { type: "integer" },
+        cleared: { type: ["boolean", "null"] },
+      },
+    };
+    const send = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ ok: true }));
+    try {
+      const create = createOperationController(operation("create", { input: schema }), undefined, undefined, undefined);
+      await create.open();
+      create.edit("score", 0);
+      create.edit("note", "");
+      create.edit("cleared", null);
+      await create.submit();
+      expect(JSON.parse(String(send.mock.calls[0]?.[1]?.body))).toEqual({
+        done: false, score: 0, note: "", cleared: null,
+      });
+
+      const update = createOperationController(operation("update", { input: schema }), target, undefined, {
+        id: "p1", version: 4, done: true,
+      });
+      await update.open();
+      expect(update.getSnapshot().draft).not.toHaveProperty("done");
+      expect(operationFormSchema(schema, [], true).properties?.["done"]?.enum).toEqual([true, false]);
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it("binds the row and locks the version the person reviews, from the declared interaction only", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({
       entry: { id: "p1", version: 4, data: { delta: 0 } },

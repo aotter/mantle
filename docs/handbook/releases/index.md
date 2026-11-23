@@ -34,6 +34,18 @@ move, and never booting 0.2 against a 0.1.x database.
 
 ## 0.2.2 — in preparation
 
+### Upgrading to 0.2.2-alpha.11
+
+Pin the three Mantle packages to `0.2.2-alpha.11` and regenerate with your application's command.
+
+- An unchecked required boolean in an unbound Admin operation is submitted as false unless the schema declares true
+  as its default. Operations bound to an existing row ask for an explicit choice, so opening the form does not reset
+  the reviewed value.
+- Optional booleans can be cleared in Admin and its MCP App. The App omits cleared optional inputs and preserves an
+  explicit null when the input allows it.
+
+The task workflow needs no schema migration. Production upgrade and soak remain unverified.
+
 ### Upgrading to 0.2.2-alpha.10
 
 Pin the three Mantle packages to `0.2.2-alpha.10` and regenerate with your
