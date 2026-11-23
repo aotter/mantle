@@ -1,5 +1,3 @@
-
-
 /**
  * Per-purpose policy. `name` is the slug consumers reference from
  * `create_media_upload`; `required` is the closed set of mime types
@@ -24,6 +22,9 @@ export interface MediaPurposePolicy {
    *   - comma-list of mimes: `"image/jpg,image/png"` (either is OK)
    *   - shorthand subtype:   `"webp"` → `"image/webp"`,
    *                          `"jpg"` → `"image/jpeg"`
+   *   - wildcard:            `"video/*"`, or `"*\/*"` for any type; a
+   *                          variant fills the slot naming its own type
+   *                          first, then its `type/*`, then `*\/*`
    *
    * Slot position does NOT determine variant role. Per-asset, the
    * agent picks ONE mime per slot from that slot's acceptable set
@@ -46,12 +47,15 @@ export interface MediaPurposePolicy {
    */
   readonly required: readonly string[];
   /** Per-mime byte cap, keyed by FULLY-EXPANDED mime type (e.g.
-   *  `"image/jpeg"`, not the shorthand `"jpg"`). MUST cover every
+   *  `"image/jpeg"`, not the shorthand `"jpg"`) or wildcard (`"*\/*"`). MUST cover every
    *  mime that appears in any slot of `required` after parsing.
    *  Mimes outside the expanded set are ignored. The use case
    *  rejects with `MEDIA_VARIANT_SIZE_EXCEEDED` when a variant's
    *  declared `byteSize` exceeds its cap. */
   readonly maxBytes: Readonly<Record<string, number>>;
+  /** `"public"` (the default) or `"private"`: a private purpose's assets go to
+   *  the private storage of the `media` option and carry no public URL. */
+  readonly visibility?: "public" | "private";
 }
 
 /**

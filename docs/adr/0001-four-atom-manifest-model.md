@@ -16,6 +16,13 @@ the fixed `site.yaml` file contract is superseded by ADR-0019.
 > in lexicographic order. `manifests/site.yaml` remains only a starter
 > convention. Fixed-file statements below are retained as decision history.
 
+> **2026-11-10 amendment:** the closed Trigger-source grammar is `http` and
+> `mcp` only. A `schedule` or `lifecycle` source fails parsing with
+> `INVALID_MANIFEST_ENVELOPE` at `/spec/source/kind` and says what to write
+> instead (`scheduled()` or a custom handler); generation had refused both
+> since 0.2.0, so no generated application changes. Statements below that list
+> `lifecycle` as a source kind are decision history.
+
 ---
 
 ## Context

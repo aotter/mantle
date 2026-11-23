@@ -22,7 +22,7 @@ was overwritten.
 
 Admin rendered `expectedVersion` as an editable number. Operators had to type
 a technical version, or a handler that re-read at submit time quietly dropped
-read-time protection. Downstream (mantle-home organization quota) reproduced
+read-time protection. A downstream application (an organization quota) reproduced
 this.
 
 The intended contract: callers POST the **observed** native `entry.version`

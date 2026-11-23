@@ -13,13 +13,12 @@ checkout dependency; the frozen legacy line is never changed by one.
 Prepare a same-repository release PR: prove the new version/tag unused,
 preview native release notes and correct PR metadata, align package/plugin
 versions and the versioned reference-service links (see
-docs/release-process.md step 2), inspect the packed docs payload, run `pnpm check` and
+docs/release-process.md step 2), inspect the packed docs payload, run `pnpm check:pg` and
 `pnpm check:init-audit` (the `mantle init` app installs without high or critical advisories;
 needs the network) and review its exact SHA. The reference consumer gate runs
-from packed packages outside workspace links. Bump `MANTLE_VERSION`
-(`packages/mantle/src/build/core/version.ts`) with `package.json`, then regenerate
+from packed packages outside workspace links. After bumping `package.json`, regenerate
 `docs/examples/reference-service` using that example's native generation command.
-Keep compiler version metadata and the committed generated artifacts fresh.
+Keep the committed generated artifacts fresh.
 Merge into develop for every
 version; 0.2 work on `0.2.x` reaches a release only after a `0.2.x` -> develop
 PR merges (docs/release-process.md). Beta, RC and stable then follow "Promote to main" in
@@ -27,7 +26,19 @@ docs/release-process.md: pin
 `promote/<version>` at that develop merge SHA, PR it into main, merge with a
 merge commit, dispatch with `--ref main`. Stable also needs recorded owner
 acceptance on the version's release-gate issue, and its entry added to
-docs/handbook/releases/index.md. Do not infer permission to publish from an
+docs/handbook/releases/index.md. That page keeps stable-to-stable upgrade
+notes: a prerelease entry stays brief (what to pin, what a tester must change,
+what is unverified) but every breaking item keeps one before → after line and
+either its replacement or "no replacement yet" with an issue link; at stable the
+line's prerelease subsections are replaced by one "Upgrading from `<previous
+stable>`" section describing the final state with full upgrade notes
+(docs/release-process.md, "What the handbook's release notes keep"). Before
+freezing the version PR, run `node scripts/check-breaking.mjs --release-notes
+<version> [--since <tag>]`: every PR labelled `breaking-change` since `--since`
+(default: the previous tag, or the previous stable tag for a stable) must be
+marked breaking in that version's section. Delete removed-subpath stubs whose
+`removeAfter` the new version passes (`pnpm check` fails until you do;
+CONTRIBUTING.md, "Removed public subpaths"). Do not infer permission to publish from an
 implementation PR. Before every release, alpha included, run Linux Full checks
 on the frozen version PR head (docs/release-process.md step 4). Before an alpha
 or beta, also run the startup and request-cost checkpoint below.
@@ -77,9 +88,13 @@ gates remain unchanged.
    record the first request in a new isolate and a repeat in the same isolate,
    separating authority reads, business queries and refresh writes:
    - health or another fixed no-data route: 0 DB and 0 DDL;
+   - anonymous OAuth protected-resource discovery (`GET /.well-known/oauth-protected-resource/mcp`):
+     0 DB and 0 DDL cold and warm (discovery is exempt from Better Auth's database rate limiter);
    - `/api/auth/get-session`;
-   - cookie-authenticated REST read, with cookie cache off and on;
-   - MCP `initialize`;
+   - cookie-authenticated REST read (`GET /api/views/my-orders`): 3 DB round trips cold and warm
+     with cookie cache off (joined session/user, current user, business), 2 cold and warm on a
+     valid signed cache hit (current user, business);
+   - MCP connect in both protocol eras: `initialize` (2025) and `server/discover` (2026-07-28);
    - MCP `tools/list`;
    - one successful authenticated write.
 
@@ -108,6 +123,11 @@ without v. Watch all gates, not only publication:
    publish attaches it, promote leaves it pointing at the last published
    candidate, and consumers must not install it. The GitHub prerelease or
    release succeeds.
+
+After the release is published, the `issues` job comments `Released in
+<version>.` on the closed `pending-release` issues and removes the label. Check
+its log, and the manual cases in docs/release-process.md, "Close the shipped
+issues" (completed issues whose PR used `Refs`; reverted PRs).
 
 For stable acceptance, give an agent only the version-matched consumer
 instructions and confirm a directly authored application reaches a running

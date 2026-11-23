@@ -7,12 +7,24 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | Example | Shows |
 |---|---|
 | [App shell](./app-shell/README.md) | Better Auth (email OTP, `admin` + `user`), one Worker fetch, Admin, MCP, REST, local acceptance kit. No business manifests. |
-| [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media. |
+| [Recipes](./recipes/README.md) | Publishing (draft → publish), translations, visitor pages with SEO, JSON-LD, `llms.txt`, Markdown and hreflang alternates, R2 media; pages rendered by React on the server, with `.md`, `llms.txt` and the sitemap from `web()`, and a save button hydrated in the browser and loaded late. |
 | [Club events](./club-events/README.md) | Members who see and change only their own rows, no duplicates, capacity that never oversells, a handler that checks before writing, a member MCP tool, members-only sign-up. |
 | [Posts and revisions](../handbook/guides/revisions.md) | A focused recipe for live editing without downtime: editable revisions, frozen preview, atomic selection, immutable history and rollback. |
 | [Frontend MCP App](./frontend-mcp-app/README.md) | An application-owned interactive MCP App with its own frontend entry and authorized tools. |
-| [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron. |
+| [Purchasing](./purchasing/README.md) | An internal workflow: guarded status transitions, admin-only approval (Admin and admin MCP), optimistic concurrency, several writes in one transaction, an external API with a signed callback, email and cron; the employees' area is a React single-page app under `/app`. |
 | [Generated website](./generated-web/README.md) | The smallest public site: list and detail pages, REST, `llms.txt`, sitemap, Markdown alternates. |
+
+## Built-in and custom Admin
+
+Start with the built-in Admin: Recipes uses its publishing forms, translations and media; Club events uses its
+record forms, operations and reports. Neither has a custom Admin entry. Prefer manifest labels, descriptions,
+list columns and navigation before writing a component.
+
+Purchasing deliberately shows customization: `src/admin.tsx` adds an Approval desk with request cards using typed
+`useView` and kit components, and groups the approver's navigation. Cards link to the built-in record workspace for
+review and decisions; budget forms and reports remain built-in. The [revisions recipe](../handbook/guides/revisions.md)
+shows a more specialized custom preview and switch workflow. Keep these as examples of when a custom surface helps,
+rather than rebuilding the default forms in every app.
 
 ## Combining
 
@@ -32,16 +44,18 @@ take the pattern into your own manifests and `src/`. Do not copy an example dire
 | A third-party API that answers later (webhooks, callbacks) | purchasing's `src/routes.ts`: verify the raw request, then call a Procedure |
 | Edit published content without downtime, preview the exact revision and roll back | [Posts and revisions](../handbook/guides/revisions.md): a stable publishing parent, operational revisions, a same-row seal and atomic pointer switch |
 | An interactive frontend inside an MCP host | [Frontend MCP App](./frontend-mcp-app/README.md): an app-owned renderer and authorized tools |
-| Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts` |
+| Public, multilingual, search- and AI-friendly pages | recipes' `src/routes.ts`, `src/pages.tsx`, `src/html.tsx` |
+| One interactive part on a public page (save, favourite, add to cart) | recipes' save button: `src/client/page.ts` (late loader), `src/client/save.tsx` (island), `manifests/saved-recipes.yaml` |
+| A highly interactive signed-in area (a cart, a checkout, a dashboard, a form with live state) | purchasing's `/app`: `src/client/app.tsx`, the shell `public/app/index.html` and `appShell` in `src/routes.ts` |
 | Invite-only or members-only sign-up | club-events' `members` allowlist + `src/signup.ts` |
 | Notifications and reminders | purchasing's `EmailSender` call and `src/schedule.ts` |
 
 If you do copy an example's files, delete what your app does not need. Copying club-events, for example, also brings its `members` allowlist and `src/signup.ts` (members-only sign-up); remove both, or restore the
 shell's allow-all `src/signup.ts`, unless sign-up should be invite-only. Purchasing brings its supplier callback
-(`src/routes.ts`, `src/supplier.ts`), email (`src/notify.ts`), cron (`src/schedule.ts` and `triggers.crons`) and its
-`wrangler.jsonc` secrets. `pnpm generate` and `tsc` point at leftovers that reference removed Schemas.
+(`src/routes.ts`, `src/supplier.ts`), email (`src/notify.ts`), cron (`src/schedule.ts` and `triggers.crons`), the
+employees' app (`src/client/`, `public/app/`) and its `wrangler.jsonc` secrets. `pnpm generate` and `tsc` point at leftovers that reference removed Schemas.
 
-Every example uses two roles: `admin` (the admin layer) and `user`.
+The app shell and its business examples use two roles: `admin` (the admin layer) and `user`.
 
-[Reference service](https://github.com/aotter/mantle/tree/v0.2.1/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
+[Reference service](https://github.com/aotter/mantle/tree/v0.2.2/docs/examples/reference-service) is the release smoke test for packed packages, not a starting point. Its source lives in the tagged repository; it is not included in the npm docs.
 Projects on 0.1.x move with [the upgrade guide](../handbook/releases/upgrade-0.1-to-0.2.md).

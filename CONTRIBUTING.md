@@ -43,9 +43,96 @@ resources and enforces endpoint/renderer ownership; Admin owns its built-asset
 identity and thin official-client adapter. Do not add another bridge package,
 provider, slot registry or query cache beside the application-built composition.
 
+Extension points are opened on evidence. An application that works around the SDK
+(re-implementing its logic, patching a package, importing an undocumented entry)
+files an "Extension point request" and marks the workaround
+`drop when aotter/mantle#N`. Repeated requests for one need decide the design.
+Before filing, or before proposing any Core change, check
+[what Core does, and what it does not](docs/handbook/concepts/core-boundary.md): the tests a request must pass and the
+needs Core has decided are the application's, each with its pattern. A request answered there is not filed again
+without the evidence its decision names.
+Values the SDK returns are in one normal form; accept unions only in parameters,
+so wrapping a returned value never needs the SDK's own normalisation.
+
 `skills/*` are versioned consumer product artifacts. Maintainer instructions
 live at the repository root and in `.agents/skills`; do not merge the two
 audiences or copy maintainer policy into shipped skills.
+
+### Application seams
+
+Some public entry points are required by applications although Core has no internal use for them. They are listed in
+[`packages/mantle/tests/application-seams.ts`](packages/mantle/tests/application-seams.ts) (ids pinned in
+`application-seams.ids.json`), and their source carries the marker "Application seam: applications depend on this".
+`application-seams.test.ts` in Core and Admin, part of `pnpm test` and of PR CI, checks each one's consumer module
+(public subpaths that resolve to `dist`, no casts), typechecks it on each of its stacks and executes it unless it is
+marked typecheck-only: bun-sqlite on bun:sqlite, cloudflare-d1 on the D1 stand-in over bun:sqlite (not workerd), and
+the PostgreSQL stacks with postgres.js and Bun.SQL under Bun when the PostgreSQL URLs are set (the test prints what did
+not run otherwise). workerd and Hyperdrive are covered by `test:native`.
+
+- Do not remove, move or narrow a registered seam because Core has no use for it. Doing so needs an accepted ADR or
+  ADR-lite and a migration note that names the replacement
+  ([decision](docs/adr/adr-lite-application-seams.md)).
+- New public surface that applications depend on adds a registry entry, its id and its consumer module in the same PR.
+- Entries, consumer modules and tests say that a seam is required, not what it is for; fixtures stay minimal and
+  neutral.
+
+### Breaking changes
+
+A breaking change is a checked state, not only a label. `scripts/check-breaking.mjs` compares a PR with its base and
+finds, in every published package: an `exports` key removed, moved under `./internal/`, newly resolving to a stub under
+`./dist/removed/`, or losing a condition (`types`, `import`, a plain target that no longer has `default`); a `bin` name
+removed or renamed; a peer dependency range changed (after resolving `catalog:`), a required peer added, or an optional
+peer made required; a stub deleted before its `removeAfter`; and a commit subject with `!`. Adding exports or
+conditions, moving a target file while keeping its conditions, moving or removing `./internal/*` keys, deleting a stub
+after its `removeAfter`, adding an optional peer, and the release version PR's lockstep peer bump (every published
+version changes and the peer follows its workspace package) are not breaking.
+
+Each item is declared in the PR body's "Migration" section, one line per item: `before` → `after`, where the after side
+names the replacement in backticks or says "no replacement". The line for an export, `bin` name or peer must name it.
+A `!` commit says something broke but not what, so the guard only counts: the section needs at least as many complete
+lines as there are `!` commits, and a line that already names an export or peer counts towards that. The PR also carries
+the `breaking-change` label, and a PR with that label needs at least one Migration line.
+
+The guard runs in its own PR workflow, "Breaking changes declared" (`.github/workflows/breaking-changes.yml`), on the
+PR merge commit: its first parent is the current base and `HEAD^1..HEAD^2` are the PR's own commits, so changes that
+reached `develop` meanwhile, or that a branch merged in from `develop`, are not blamed on the PR. It reads the body and
+labels from the event payload and reruns when they change. `pnpm check` runs its self-test and the guard against
+`origin/develop`; locally it lists what it found and prints a notice that the body was not checked, unless
+`--body <file>` or `MANTLE_PR_BODY` names one: `node scripts/check-breaking.mjs --body pr-body.md`. A stub past its
+`removeAfter` fails in every mode.
+
+The guard cannot see, so the author declares by hand (label plus Migration line): `engines`, `type` or `main` changes,
+narrower wildcard (`./x/*`) patterns, `BREAKING CHANGE:` footers without `!`, removed or renamed named exports inside
+a kept subpath, type changes, behaviour changes and generated output.
+
+A Dependabot update that changes a published peer range (Core peers on exact Better Auth versions from the default
+catalog, so their patch bumps do) fails the guard and stalls its auto-merge. A maintainer adds the `breaking-change`
+label and a Migration line such as ``- `better-auth` `1.7.14` → `1.7.15` `` with the upgrade note; the body edit reruns
+the check and the queued merge proceeds.
+
+### Removed public subpaths
+
+A public subpath (any exports key outside `./internal/`) that is removed or moved while an application-facing
+replacement exists keeps a throwing stub. Without such a replacement, the Migration line says "no replacement" and no
+stub is added.
+
+- **Shape.** The exports key stays and resolves to `./dist/removed/<name>.js`, built from `src/removed/<name>.ts`, which
+  imports nothing (so no surface's startup bytes change), declares the old value names so an import links, and throws
+  on evaluation: `<specifier> was removed in <version>: <replacement>`. The replacement names the new export and module,
+  or the handbook section to follow, and says which old names have none. Every call of a declared value is a type
+  error, and one with arguments shows the message as the expected type. An old type name stays as an alias of the
+  message, so `import type` still compiles and a value of that type shows the message; a type that existed only to be
+  imported, never used, stays silent.
+- **Registered and tested.** `removed-subpaths.json` beside the package's package.json records `removedIn`,
+  `replacement` and `removeAfter`. For Core, `tests/public-surface.test.ts` classifies the key from it and imports the
+  stub to prove it throws exactly that message, and the seam guard refuses a consumer module that imports a stub.
+- **How long.** `removeAfter` is the first stable release at or after the removal, so an upgrade from one stable to the
+  next always meets the stub. `scripts/check-breaking.mjs` (in `pnpm check` and the PR workflow) fails once the package
+  version is past `removeAfter`, and treats deleting the stub earlier as a breaking change to declare.
+- **Removal.** The first version PR after `removeAfter` deletes the exports key, the source file and the registry entry,
+  with a one-line release note.
+- **Declared.** The Migration line names the replacement and may say "removed with stub", which the guard checks
+  against the exports map. A removal whose line names a replacement but adds no stub fails the guard.
 
 ## Hard invariants
 
@@ -65,6 +152,9 @@ audiences or copy maintainer policy into shipped skills.
 - Scope/auth, publishing visibility, explicit OCC, atomic writes and uncertain
   commit outcomes remain enforced. Input at transport boundaries uses generated
   checks; never remove data-loss protection, security or accessibility to meet size.
+- Every `exports` subpath of `@aotter/mantle` is classified in `packages/mantle/tests/public-surface.test.ts`: developer
+  API (documented, a compatibility promise), host platform contract (versioned, names and paths stay), or generated-code
+  plumbing under `./internal/*` (no promise; only `mantle generate` output imports it).
 - Generated module imports perform no kernel initialization. Store metadata is
   initialized once on first `store()`, with database/Caller/handlers bound per call.
 
@@ -76,6 +166,11 @@ kernel <- domain <- usecase <- infrastructure
 ```
 
 - `kernel/` contains native request primitives. `auth/` owns selected Auth integration.
+- `domain/`, `usecase/` and `infrastructure/` are the layers of the generator, not of a request: `domain/` is the
+  generator's model and may read `build/` and `kernel/`.
+- Inside `kernel/` the surfaces and media are tops, held by file name: `mcp*`, `rest*`, `web*` and
+  `media*`/`r2-media`/`site*` (the leaves `media-type` and `site-types` are shared). No other kernel file imports
+  them and they do not import each other; what two of them share goes in a shared kernel file. `scripts/check-boundaries.mjs` enforces this and the folder rules.
 - `domain/` does not import `usecase/` or `infrastructure/`; `usecase/` does not
   import `infrastructure/`. Build-time layers may consume the one private compiler.
 - Infrastructure owns source loading, CLI envelopes and deployment assembly.
@@ -90,41 +185,83 @@ Requirements: Node.js 22.22 or newer and pnpm 9 or newer.
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm check
+pnpm check:pg   # pnpm check + test:native against a throwaway PostgreSQL
 ```
+
+Formatting is owned by Biome: run `pnpm format`, and `pnpm check` fails on
+unformatted source. Brevity is measured in logic, not characters: "one line"
+and "shortest diff" mean the least logic, never the fewest physical lines or
+the shortest identifiers. Startup budgets are measured on minified output, so
+readable names and layout are free; the one exception is the runtime kernel,
+where object property names and string literals survive minification and do
+cost bytes.
 
 `pnpm check` runs the boundary, skill, plugin-manifest and release
 self-checks, builds, compiles the documented examples, typechecks, tests the
 workspace and runs the reference service from exact packed tarballs. Use
-package filters while iterating. PostgreSQL tests skip unless `MANTLE_PG_URL`
-names a disposable database; native Bun conformance is separate
-(`pnpm --filter @aotter/mantle test:native`, Bun 1.3.14).
+package filters while iterating. Native four-target conformance is separate
+(`pnpm --filter @aotter/mantle test:native`, Bun 1.4.5).
 
-Maintainers merge on a local `pnpm check` (judge by its exit code) plus review; CI does not gate their PRs, and a
-failure found later is fixed forward. PR CI runs only for PRs from outside the organization (forks, bots).
-PR CI builds once in each of two parallel jobs: typecheck plus boundaries,
-skills, plugin manifests, startup graphs/budgets and release/packed-consumer
-self-tests; and the three packages’ tests running concurrently. Both jobs use
-the pnpm store cache and must pass the combined required status.
-PR tests skip PostgreSQL; Full checks retains PostgreSQL-backed coverage.
+Mantle commits to four stacks, its four targets: `cloudflare-d1`, `cloudflare-postgres` (postgres.js, usually
+through Hyperdrive), `bun-postgres` (Bun.SQL) and `bun-sqlite` (bun:sqlite). A change that touches what applications
+run works, is typed and is tested on all four; a capability that is inherently dialect-specific (D1 has no interactive
+transaction, for example) says which of them it covers.
+
+PostgreSQL is a first-class target. Its tests skip unless `MANTLE_PG_URL`,
+`MANTLE_NEXT_BUN_PG_URL` and `MANTLE_NEXT_WORKER_PG_URL` name a disposable
+database, and `pnpm check` then ends with a `PostgreSQL tests SKIPPED` line.
+`pnpm check:pg` runs `pnpm check` and `test:native` against a throwaway local
+cluster (`scripts/with-postgres.mjs`: initdb in a temp directory, deleted
+afterwards; as root it runs the server as `postgres` or `nobody`); with the
+three variables already set (for example a `postgres:16` container) it uses
+them instead. `pnpm with-pg <command>` runs any command the same way, such as
+`pnpm with-pg pnpm --filter @aotter/mantle test`. A PR's local evidence is
+`pnpm check:pg`, and the PR body states whether that or plain `pnpm check` ran.
+
+Every ready PR into `develop` runs the PR CI (`.github/workflows/ci.yml`), for every author; drafts skip until marked
+ready. It builds once in each of two parallel jobs: typecheck plus boundaries, skills, plugin manifests, startup
+graphs/budgets and release/packed-consumer self-tests; and the three packages’ tests, including every PostgreSQL test,
+against a PostgreSQL 16 service, then `test:native`. Both must pass the required `Typecheck + tests` status. Dependabot
+patch and digest bumps merge automatically once it is green. A PR into `main` (promotion or hotfix) runs the
+**Full checks** workflow instead, which calls the PR CI's two jobs (as `PR CI / …`) beside its own two, and there
+`Typecheck + tests` passes only when all of them do.
 Build typechecks library sources; `pnpm typecheck` checks the remaining test,
 app, example and config roots (including their imports). Run build first.
 Build before running package tests locally; `pnpm test` does not rebuild or pack.
 Package and upload bytes are reports; cold-start checks remain gates.
 
-Run the **Full checks** workflow (`.github/workflows/full-checks.yml`) by hand
-(Actions → Full checks → Run workflow on the branch) before every release, alpha included, or when a change to drivers, auth,
-generator output or Admin UI may behave differently on Linux. It runs native
-four-target and Wrangler/D1 integrations, packed-consumer checks, doc examples,
-OSS plugin validation, the two Chrome sandbox-boundary tests (design preview
-and MCP App host bridge), and size reports. Run the boundaries locally with
+Full checks (`.github/workflows/full-checks.yml`) also runs by hand
+(Actions → Full checks → Run workflow on the branch). Do that before every release, alpha included (an alpha releases
+from `develop` and never passes the `main` gate), before merging a change to the PostgreSQL driver/dialect, auth, the
+kernel request pipeline or generator output, or when an Admin UI change may behave differently on Linux. It runs only
+what neither the PR CI nor local `pnpm check` runs, in two parallel jobs: the four example runs from packed packages
+(`node scripts/check-examples.mjs recipes club-events purchasing`: recipes on `cloudflare-d1` and on
+`cloudflare-postgres`, club-events, purchasing; lockfile-free installs that skip versions published minutes ago,
+[release process](docs/release-process.md)); and the Wrangler/D1 integrations, the Wrangler CLI and Admin D1
+integrations and the Admin browser tests, including the two Chrome sandbox boundaries (design preview and MCP App host
+bridge). A manual run does not repeat the PR CI, which already ran on the PR, and reports `Full checks` rather than
+`Typecheck + tests`. The fresh-install matrix (`check-examples.mjs --fresh`, npm and pnpm 10) and the Admin build under
+`npm ci --ignore-scripts` (`check-admin-build.mjs`) run only in the release workflow, so a failure there shows first at
+release; the packed worker-consumer smoke, doc examples, OSS plugin validation and size reports run in `pnpm check`,
+locally and in the release workflow. Run the browser tests locally with
 `pnpm --filter @aotter/mantle-admin test:browser` and Chrome installed. The
 Admin sign-in/list/edit/publish/translation browser flow is covered by maintainer
 manual acceptance; the packed worker-consumer smoke checks the service and Admin
 API round trip. Shared Store, publishing and search scenarios run through
 `test:native`; focused unit tests retain security and correctness invariants.
-`pnpm check` remains the broad local/release check; the release workflow is
-unchanged.
+`pnpm check:pg` is the broad local/release check.
+
+The `cloudflare-postgres` target runs the generated code in workerd under local
+Wrangler with a Hyperdrive binding whose `localConnectionString` points at the
+test database. Cloudflare documents that this mode connects "directly to the
+database without going through Hyperdrive" and that "Hyperdrive's connection
+pooling and query caching do not take effect". It therefore shows the Worker
+runtime, `nodejs_compat`, postgres.js and transactions, but not Hyperdrive's
+transaction-mode pooling, named prepared statements through the pooler, query
+caching, or its connection and statement limits. A claim about those needs a
+deployed Hyperdrive configuration; `wrangler dev --remote` uses one, but runs on
+Cloudflare against that configuration's real database, so it is an opt-in
+maintainer check with a dedicated database, never CI.
 
 ## Branches, commits, and pull requests
 
@@ -142,10 +279,16 @@ unchanged.
   minor and major dependency updates require human review. Do not squash.
 - Before merge, update the branch with its base and pass the required checks on
   that combined state.
+- Before planning or proposing work on an issue, check `develop` for a merged PR for it
+  (`git log origin/develop --grep "issue-<N>"`, the issue's linked PRs): an open issue is not proof the work is undone.
 - Start non-trivial work from an issue. Use the templates and labels described
   in [`docs/labels.md`](docs/labels.md).
 - A PR body states outcome, scope/non-goals, commands actually run, omitted
-  checks, and related issues/ADRs. Use `Closes #N` only when complete.
+  checks, and related issues/ADRs. `Closes #N`, one keyword per issue, only when the PR
+  completes the issue: it closes on merge into `develop` and gets `pending-release`
+  until a release ships it. Use `Refs #N` when it does not; split an issue with
+  several independent items rather than half-closing it. A
+  breaking change also fills its Migration section ([Breaking changes](#breaking-changes)).
 - Architecture, grammar, persistence, trust-boundary, auth, MCP, and public
   transport changes need an existing accepted decision or an ADR-lite/ADR as
   appropriate.

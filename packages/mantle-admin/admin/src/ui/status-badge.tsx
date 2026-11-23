@@ -30,10 +30,7 @@ export function StatusBadge({
   return (
     <Badge
       variant="secondary"
-      className={cn(
-        known ? STATUS_CLASS[status] : "bg-accent text-accent-foreground",
-        className,
-      )}
+      className={cn(known ? STATUS_CLASS[status] : "bg-accent text-accent-foreground", className)}
     >
       {labelKey ? t(language, labelKey) : status}
     </Badge>

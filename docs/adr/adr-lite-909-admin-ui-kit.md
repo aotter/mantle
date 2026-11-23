@@ -30,7 +30,7 @@ optional legal links.
 ## Consequences
 
 - Applications can share Mantle controls and visual tokens without depending
-  on Builder internals or duplicating Admin CSS.
+  on a host's internals or duplicating Admin CSS.
 - The static Admin SPA remains unchanged and optional.
 - New public kit components require package-level contract and rendering tests.
 - Authentication and legal-consent policy remain application concerns, not UI

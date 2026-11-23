@@ -22,12 +22,7 @@ export type ApiVersion = typeof API_VERSION;
 export type MediaMcpHint = "media" | "media-image" | "media-video" | "media-file";
 
 export function isMediaMcpHint(value: unknown): value is MediaMcpHint {
-  return (
-    value === "media" ||
-    value === "media-image" ||
-    value === "media-video" ||
-    value === "media-file"
-  );
+  return value === "media" || value === "media-image" || value === "media-video" || value === "media-file";
 }
 
 /** Loose JSON Schema shape — we don't constrain it at the type level.
@@ -53,6 +48,8 @@ export type JsonSchema = {
   readonly pattern?: string;
   readonly minLength?: number;
   readonly maxLength?: number;
+  /** Custom: the most UTF-8 bytes a string input may encode to (`maxLength` counts code points). */
+  readonly "x-mantle-maxBytes"?: number;
   readonly minimum?: number;
   readonly maximum?: number;
   readonly minItems?: number;
@@ -64,6 +61,13 @@ export type JsonSchema = {
   readonly readOnly?: boolean;
   readonly default?: unknown;
   readonly additionalProperties?: boolean | JsonSchema;
+  readonly minProperties?: number;
+  readonly maxProperties?: number;
+  readonly propertyNames?: {
+    readonly pattern?: string;
+    readonly maxLength?: number;
+    readonly not?: { readonly enum: readonly string[] };
+  };
   /** Standard JSON Schema keyword: help text for this property, shown
    *  under the admin-UI form field (`entry-edit-view.tsx`) and the
    *  row-operation dialog's bound-field label fallback
@@ -99,11 +103,14 @@ export const MANTLE_REF_KEYWORD = "x-mantle-ref" as const;
  * A property's string options: its `enum`, or a `oneOf` whose every branch is a string `const` (the standard way to give each
  * option a `title`). Undefined when the property is neither.
  */
-export function enumOptions(property: JsonSchema | undefined): { readonly value: string; readonly title?: LocalizedText }[] | undefined {
-  if (property?.enum?.length && property.enum.every((v) => typeof v === "string")) return property.enum.map((value) => ({ value: value as string }));
+export function enumOptions(
+  property: JsonSchema | undefined,
+): { readonly value: string; readonly title?: LocalizedText }[] | undefined {
+  if (property?.enum?.length && property.enum.every(v => typeof v === "string"))
+    return property.enum.map(value => ({ value: value as string }));
   const branches = property?.oneOf;
-  if (!branches?.length || !branches.every((b) => typeof b.const === "string")) return undefined;
-  return branches.map((b) => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
+  if (!branches?.length || !branches.every(b => typeof b.const === "string")) return undefined;
+  return branches.map(b => ({ value: b.const as string, ...(b.title !== undefined ? { title: b.title } : {}) }));
 }
 
 /** Object form of `x-mantle-ref`: which Schema the value points at, and
@@ -140,8 +147,6 @@ export const MANTLE_BIND_KEYWORD = "x-mantle-bind" as const;
  * with `resolveLocalizedText`.
  */
 export type LocalizedText = string | Readonly<Record<string, string>>;
-/** A non-empty string or a non-empty `{ locale: non-empty string }` map. */
-export const isLocalizedText = (v: unknown): v is LocalizedText => (typeof v === "string" && v.length > 0) || (typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v).length > 0 && Object.values(v).every((x) => typeof x === "string" && x.length > 0));
 
 /**
  * Resolve a `LocalizedText` value to a single displayable string for
@@ -335,7 +340,7 @@ export interface ViewManifestSpec {
    *  predicate check. When present, ALL predicates must hold; the
    *  runtime enforces with `evaluateAuthAll`. Closed predicate
    *  vocabulary: `ctx.user`, `ctx.admin`, `ctx.auth`, and
-   *  `ctx.auth.scope`; an optional guard names one consumer Procedure. */
+   *  `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
   readonly restrict?: Readonly<Record<string, string>>;
@@ -365,8 +370,7 @@ export interface ProcedureManifestSpec {
    *  field (replaces the pre-#430 hack of reading
    *  `spec.input.description`). */
   readonly description?: LocalizedText;
-  /** Authorization via `requires.auth.all` plus one optional
-   *  `requires.guard.procedure`; static predicates are closed to
+  /** Authorization via `requires.auth.all`; static predicates are closed to
    *  `ctx.user`, `ctx.admin`, `ctx.auth`, and `ctx.auth.scope`. */
   readonly requires?: AuthorizationRequirements;
   /** Extra row terms per Schema this target reads (ADR-0046): AND-ed onto that Schema's scope; never widens. */
@@ -381,6 +385,8 @@ export interface ProcedureManifestSpec {
   /** Handler binding: `{ ref }` (consumer supplies a handler map) or
    *  `{ sql }` (write statements, compiled to the plan's IR; ADR-0034). */
   readonly handler: HandlerBinding;
+  /** Ref handler native database capability. Omit for Store-only code (ADR-0045 amendment #2048). */
+  readonly db?: "native";
   /** MCP tool annotations the author declares because Core cannot infer
    *  them for a `ref` handler (#972). They override the generated defaults
    *  (`procedureAnnotations`);
@@ -429,17 +435,22 @@ export interface HandlerSqlBinding {
 }
 
 /** One statement of a `steps` program. `onNoRows: conflict`: a set-op write that writes no row is
- *  `CONFLICT` kind "row" and the whole program rolls back. */
+ *  `CONFLICT` kind "row" and the whole program rolls back. `name` (#1974): a row conflict of this step carries
+ *  `fields.step`, which tells the caller which guard failed, so name a step only when that is not a secret. */
 export interface HandlerStep {
   readonly sql: string;
   readonly onNoRows?: "conflict";
+  readonly name?: string;
 }
-export const HANDLER_STEP_KEYS = ["sql", "onNoRows"] as const;
+export const HANDLER_STEP_KEYS = ["sql", "onNoRows", "name"] as const;
 
 /** The program `steps` compile as: the statements in order, each on its own lines. `lines[i]` is the 0-based line step i starts
  *  on, so a diagnostic in the program points back into its step. A step's own trailing `;` is dropped; after a step ending in a
  *  `--` comment the separator goes on the next line, where the comment cannot swallow it. */
-export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: string; readonly lines: readonly number[] } {
+export function stepProgram(steps: readonly HandlerStep[]): {
+  readonly sql: string;
+  readonly lines: readonly number[];
+} {
   let sql = "";
   const lines: number[] = [];
   for (const [i, step] of steps.entries()) {
@@ -456,17 +467,9 @@ export function stepProgram(steps: readonly HandlerStep[]): { readonly sql: stri
  */
 export interface AuthorizationRequirements {
   readonly auth?: { readonly all: readonly AuthPredicate[] };
-  /** Dynamic, consumer-owned authorization check. The named Procedure
-   *  receives the target's validated input/params and the same
-   *  HandlerContext before the target executes. */
-  readonly guard?: { readonly procedure: string };
 }
 
-export type AuthPredicate =
-  | CtxUserPredicate
-  | "ctx.admin"
-  | CtxAuthPredicate
-  | CtxAuthScopePredicate;
+export type AuthPredicate = CtxUserPredicate | "ctx.admin" | CtxAuthPredicate | CtxAuthScopePredicate;
 export type CtxUserPredicate = "ctx.user";
 /** Requires any verified credential normalized into HandlerContext.auth. */
 export type CtxAuthPredicate = "ctx.auth";
@@ -474,12 +477,6 @@ export type CtxAuthPredicate = "ctx.auth";
  *  multiple required scopes. */
 export interface CtxAuthScopePredicate {
   readonly "ctx.auth.scope": string;
-}
-
-/** Role names are application-owned; the privileged layer comes from Better Auth. */
-export type AdminRole = string;
-export function isAdminRole(s: string): s is AdminRole {
-  return /^[a-z][a-zA-Z0-9_]{0,62}$/.test(s);
 }
 
 /* ─── Trigger ─── */
@@ -492,19 +489,8 @@ export interface TriggerManifestSpec {
   readonly target: { readonly procedure: string };
 }
 
-/** Supported Trigger sources. */
-export type TriggerSource =
-  | HttpTriggerSource
-  | LifecycleTriggerSource
-  | McpTriggerSource
-  | ScheduleTriggerSource;
-
-/** Five-field POSIX cron expression in UTC (weekday 0 = Sunday). Registration remains host-owned. */
-export interface ScheduleTriggerSource {
-  readonly kind: "schedule";
-  readonly cron: string;
-  readonly enabled?: boolean;
-}
+/** Supported Trigger sources. Scheduling and lifecycle hooks are application code, not Trigger sources. */
+export type TriggerSource = HttpTriggerSource | McpTriggerSource;
 
 export interface HttpTriggerSource {
   readonly kind: "http";
@@ -512,29 +498,6 @@ export interface HttpTriggerSource {
   /** OpenAPI `{param}` syntax. Path params auto-bind to identically-named
    *  fields on the target Procedure's `input`. No optional segments. */
   readonly path: string;
-}
-
-/** Shipped v0.1 lifecycle hook vocabulary: before/after ×
- *  create/update/delete plus the publish boundary. New entries require an
- *  explicit grammar-revise round. */
-export const LIFECYCLE_HOOKS = [
-  "before_create",
-  "after_create",
-  "before_update",
-  "after_update",
-  "before_delete",
-  "after_delete",
-  "before_publish",
-  "after_publish",
-] as const;
-export type LifecycleHook = (typeof LIFECYCLE_HOOKS)[number];
-
-export interface LifecycleTriggerSource {
-  readonly kind: "lifecycle";
-  /** Schema this Trigger watches (`Schema.metadata.name`). */
-  readonly schema: string;
-  /** Hooks bound by this Trigger. Non-empty. */
-  readonly on: readonly LifecycleHook[];
 }
 
 /** Surfaces an MCP-source Trigger can be bound to. `admin` ⇒
@@ -565,14 +528,7 @@ export type Manifest = SchemaManifest | ViewManifest | ProcedureManifest | Trigg
  *  than `json_extract`) and by the type emitter (to surface them on
  *  every Entry interface). Adding a new reserved column is a grammar
  *  revise — touch this constant + every consumer. */
-export const RESERVED_ENTRY_COLUMNS = [
-  "id",
-  "status",
-  "version",
-  "createdAt",
-  "updatedAt",
-  "authorId",
-] as const;
+export const RESERVED_ENTRY_COLUMNS = ["id", "status", "version", "createdAt", "updatedAt", "authorId"] as const;
 
 /**
  * Reserved Procedure input wire names. `expectedVersion` is the observed
@@ -583,6 +539,15 @@ export const RESERVED_ENTRY_COLUMNS = [
  */
 export const EXPECTED_VERSION_PROPERTY = "expectedVersion" as const;
 /** Rules between an input object's fields: only View and Procedure input takes them, and AI tool catalogues advertise them as sentences. */
-export const INPUT_RULE_KEYWORDS = ["dependentRequired", "anyOf", "if", "then", "else"] as const;
+export const INPUT_RULE_KEYWORDS = [
+  "dependentRequired",
+  "anyOf",
+  "if",
+  "then",
+  "else",
+  "minProperties",
+  "maxProperties",
+  "propertyNames",
+] as const;
 
 export const RESERVED_PROCEDURE_INPUT_NAMES = [EXPECTED_VERSION_PROPERTY] as const;

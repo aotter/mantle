@@ -1,0 +1,23 @@
+[
+  "transaction-handle",
+  "json-body",
+  "origin-rule-and-errors",
+  "call-tool",
+  "input-conversion",
+  "procedure-input",
+  "tool-meta",
+  "app-resource-meta",
+  "managed-grant",
+  "host-tools",
+  "admin-app-tools",
+  "page-renders-tool",
+  "mcp-app-inspect",
+  "upload-card-tool",
+  "mcp-app-host-context",
+  "client-entries",
+  "ref-handler-result",
+  "tool-call-signal-progress",
+  "client-assets",
+  "admin-brand-placement",
+  "consent-page-brand"
+]

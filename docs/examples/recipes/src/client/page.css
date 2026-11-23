@@ -1,0 +1,6 @@
+/* The site's one stylesheet: the kit's compiled classes and tokens, plus the layout rules it has no class for. Every
+   class the server-rendered pages use must exist here (smoke.mjs checks it). */
+@import "@aotter/mantle-ui/kit.css";
+
+.page { max-width: 42rem; margin-inline: auto; padding: 2rem 1rem; }
+.steps { list-style: decimal; }

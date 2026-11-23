@@ -4,19 +4,95 @@ import { AuthCard, Button, CardContent, CardDescription, CardHeader, CardTitle, 
 import { usePreferences } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { signOut } from "../../lib/auth";
-import { ThemeToggle } from "../../layout/preference-controls";
+import { LanguagePreferenceDropdown, ThemeToggle } from "../../layout/preference-controls";
+import { Empty, Slot, useHasSlot } from "../../app/slots";
+import type { BrandPlacement } from "../../app/slot-props";
 
-export function GateLoading(): React.ReactElement {
+export function AdminAuthCard({
+  children,
+  wide,
+  placement,
+}: React.PropsWithChildren<{ wide?: boolean; placement: BrandPlacement }>) {
   return (
-    <AuthCard action={<ThemeToggle />}>
-      <CardHeader>
-        <Skeleton className="h-4 w-24" />
-      </CardHeader>
-      <CardContent className="space-y-2" aria-busy="true">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-2/3" />
-      </CardContent>
+    <AuthCard
+      wide={wide}
+      className="[&>[data-slot=card-header]]:pe-24"
+      action={
+        <div className="flex items-center gap-1">
+          <LanguagePreferenceDropdown compact />
+          <ThemeToggle />
+        </div>
+      }
+    >
+      <PreAuthBrand placement={placement} className="px-(--card-spacing) pe-24" />
+      {children}
     </AuthCard>
+  );
+}
+
+/**
+ * The application's `Brand` outside the console, in a box at most 40px high; nothing when it supplies none (#1943). The
+ * box collapses (`empty:hidden`) when the component renders nothing here: one that returns null for this placement, or
+ * one written for the sidebar that throws here (one that needs the sidebar's context). The box is a `peer`, so a
+ * placeholder after it shows only then.
+ */
+function PreAuthBrand({
+  placement,
+  className = "",
+}: {
+  placement: BrandPlacement;
+  className?: string;
+}): React.ReactNode {
+  if (!useHasSlot("Brand")) return null;
+  return (
+    <div className={`peer flex max-h-10 min-w-0 items-center overflow-hidden empty:hidden ${className}`}>
+      <BrandBoundary>
+        <AppBrand placement={placement} />
+      </BrandBoundary>
+    </div>
+  );
+}
+
+function AppBrand({ placement }: { placement: BrandPlacement }): React.ReactElement {
+  const { language } = usePreferences();
+  return (
+    <Slot
+      name="Brand"
+      Default={Empty}
+      props={{ title: t(language, "admin.consoleTitle"), href: "/admin", placement }}
+    />
+  );
+}
+
+class BrandBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render(): React.ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/**
+ * While the session, `me` or a lazy page loads: a neutral page frame, not the sign-in card. A signed-in user who lands
+ * here from an app's own sign-in page would otherwise read the card as a second sign-in step (#1943). With `brand`, for
+ * the frames shown before the console, the bar shows the application's `Brand` when it renders one there; inside the
+ * console the sidebar shows it, so the bar keeps its placeholder.
+ */
+export function GateLoading({ brand = false }: { brand?: boolean }): React.ReactElement {
+  return (
+    <div role="status" aria-busy="true" className="min-h-svh bg-background">
+      <div className="flex h-14 items-center border-b px-4">
+        {brand && <PreAuthBrand placement="loading" />}
+        <Skeleton className="h-5 w-32 peer-not-empty:hidden" />
+      </div>
+      <div className="space-y-3 p-6">
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-full max-w-xl" />
+        <Skeleton className="h-4 w-2/3 max-w-md" />
+      </div>
+    </div>
   );
 }
 
@@ -24,25 +100,21 @@ export function GateError({ error }: { error: unknown }): React.ReactElement {
   const { language } = usePreferences();
   const message = error instanceof Error ? error.message : t(language, "common.unknownError");
   return (
-    <AuthCard action={<ThemeToggle />}>
+    <AdminAuthCard placement="error">
       <CardHeader className="text-center">
         <CardTitle className="text-xl">
           <h1>{t(language, "auth.error.title")}</h1>
         </CardTitle>
         <CardDescription role="alert">{message}</CardDescription>
       </CardHeader>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
 
-export function AccessDeniedView({
-  login,
-}: {
-  login: string | null;
-}): React.ReactElement {
+export function AccessDeniedView({ login }: { login: string | null }): React.ReactElement {
   const { language } = usePreferences();
   return (
-    <AuthCard action={<ThemeToggle />} wide>
+    <AdminAuthCard wide placement="access-denied">
       <CardHeader className="text-center">
         <div className="mx-auto mb-3 inline-flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
           <AlertTriangle className="size-5" aria-hidden />
@@ -57,12 +129,8 @@ export function AccessDeniedView({
         ) : null}
       </CardHeader>
       <CardContent className="text-center">
-        <p className="mb-1 text-sm text-muted-foreground">
-          {t(language, "auth.accessDenied.noAdmin")}
-        </p>
-        <p className="mb-6 text-sm text-muted-foreground">
-          {t(language, "auth.accessDenied.askOwner")}
-        </p>
+        <p className="mb-1 text-sm text-muted-foreground">{t(language, "auth.accessDenied.noAdmin")}</p>
+        <p className="mb-6 text-sm text-muted-foreground">{t(language, "auth.accessDenied.askOwner")}</p>
         <Button variant="outline" className="mb-2 w-full" asChild>
           <a href="/admin/connected-apps">{t(language, "oauth.connectedApps")}</a>
         </Button>
@@ -71,7 +139,6 @@ export function AccessDeniedView({
           {t(language, "common.signOut")}
         </Button>
       </CardContent>
-    </AuthCard>
+    </AdminAuthCard>
   );
 }
-

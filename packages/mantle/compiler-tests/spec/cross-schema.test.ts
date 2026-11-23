@@ -15,7 +15,11 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
       title: name,
       schema: {
         type: "object",
-        properties: { slug: { type: "string" }, title: { type: "string" }, ...(spec.localized ? { locale: { type: "string" } } : {}) },
+        properties: {
+          slug: { type: "string" },
+          title: { type: "string" },
+          ...(spec.localized ? { locale: { type: "string" } } : {}),
+        },
       },
       ...spec,
     } as SchemaManifest["spec"],
@@ -23,7 +27,6 @@ function schema(name: string, spec: Partial<SchemaManifest["spec"]>): SchemaMani
 }
 
 describe("checkTranslatesReferences — TRANSLATES_PARENT_UNKNOWN", () => {
-
   it("includes candidates in the diagnostic for did-you-mean suggestions", () => {
     const parent = schema("posts", {});
     const child = schema("post-translations", {
@@ -31,7 +34,7 @@ describe("checkTranslatesReferences — TRANSLATES_PARENT_UNKNOWN", () => {
       translates: { parent: "post", on: "slug" }, // typo: missing 's'
     });
     const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
-    const d = diags.find((x) => x.code === "TRANSLATES_PARENT_UNKNOWN");
+    const d = diags.find(x => x.code === "TRANSLATES_PARENT_UNKNOWN");
     expect(d?.candidates).toContain("posts");
     expect(d?.suggestion).toBe("posts");
   });
@@ -45,7 +48,7 @@ describe("checkTranslatesReferences — TRANSLATES_PARENT_IS_LOCALIZED", () => {
       translates: { parent: "posts", on: "slug" },
     });
     const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
-    expect(diags.map((d) => d.code)).toContain("TRANSLATES_PARENT_IS_LOCALIZED");
+    expect(diags.map(d => d.code)).toContain("TRANSLATES_PARENT_IS_LOCALIZED");
   });
 });
 
@@ -65,22 +68,19 @@ describe("checkTranslatesReferences — TRANSLATES_FIELD_NOT_IN_PARENT", () => {
       translates: { parent: "products", on: "slug" }, // parent has no slug
     });
     const diags = validateManifests({ manifests: [parent, child] }).diagnostics;
-    expect(diags.map((d) => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_PARENT");
+    expect(diags.map(d => d.code)).toContain("TRANSLATES_FIELD_NOT_IN_PARENT");
   });
-
 });
 
 describe("checkTranslatesReferences — happy path (parent + child correctly wired)", () => {
-
   it("parses and validates the shipped parent/translation golden manifest", () => {
-    const yaml = readFileSync(
-      new URL("./fixtures/i18n-parent-child/manifests/site.yaml", import.meta.url),
-      "utf8",
-    );
+    const yaml = readFileSync(new URL("./fixtures/i18n-parent-child/manifests/site.yaml", import.meta.url), "utf8");
     const parsed = parseManifests(yaml);
     expect(parsed.diagnostics).toEqual([]);
-    expect(validateManifests({
-      manifests: parsed.manifests,
-    }).diagnostics).toEqual([]);
+    expect(
+      validateManifests({
+        manifests: parsed.manifests,
+      }).diagnostics,
+    ).toEqual([]);
   });
 });

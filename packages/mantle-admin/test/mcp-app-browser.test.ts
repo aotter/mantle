@@ -6,11 +6,43 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const catalog = {
-  views: { pending: { columns: { item: { type: "string" }, date: { type: "string", format: "date-time", title: "When" }, link: { type: "string", format: "uri", title: "Link" } }, list: { columns: ["item", "date", "link"] }, actions: ["review_requisition"] } },
-  actions: { review_requisition: { capability: "review_requisition", title: "Review", inputSchema: { type: "object", properties: { id: { type: "string" }, expectedVersion: { type: "number" }, date: { type: "string", format: "date-time", title: "Date" } } }, bind: [{ input: "id", field: "id" }], version: "expectedVersion", mutates: true } },
+  views: {
+    pending: {
+      columns: {
+        item: { type: "string" },
+        date: { type: "string", format: "date-time", title: "When" },
+        link: { type: "string", format: "uri", title: "Link" },
+      },
+      list: { columns: ["item", "date", "link"] },
+      actions: ["review_requisition"],
+    },
+  },
+  actions: {
+    review_requisition: {
+      capability: "review_requisition",
+      title: "Review",
+      inputSchema: {
+        type: "object",
+        required: ["notify"],
+        properties: {
+          id: { type: "string" },
+          expectedVersion: { type: "number" },
+          date: { type: "string", format: "date-time", title: "Date" },
+          notify: { type: "boolean", title: "Notify" },
+          optionalFlag: { type: "boolean", title: "Optional flag" },
+          nullableFlag: { type: ["boolean", "null"], title: "Nullable flag" },
+        },
+      },
+      bind: [{ input: "id", field: "id" }],
+      version: "expectedVersion",
+      mutates: true,
+    },
+  },
 };
 
-const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8")) as { version: string };
+const { version } = JSON.parse(readFileSync(resolve(import.meta.dirname, "../package.json"), "utf8")) as {
+  version: string;
+};
 // The App as an application gets it: `buildAdmin` builds `mcp-app.html` from the application's own entry (`fixtures/admin.tsx`: an
 // override of the `pending` View's `item` cell, a page for the `queue` View, and CSS that sets the brand colours).
 const out = mkdtempSync(join(tmpdir(), "mantle-mcp-app-browser-"));
@@ -23,18 +55,30 @@ beforeAll(async () => {
 afterAll(() => rmSync(out, { recursive: true, force: true }));
 const serveApp = async (page: import("playwright").Page) => {
   await page.route("**/mcp-app.html", async route => {
-    await route.fulfill({ contentType: "text/html", body: appHtml.replace('<div id="root">', `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`) });
+    await route.fulfill({
+      contentType: "text/html",
+      body: appHtml.replace(
+        '<div id="root">',
+        `<script type="application/json" id="mantle-catalog">${JSON.stringify(catalog)}</script><div id="root">`,
+      ),
+    });
   });
 };
 // only the host page and its bridge are served by Vite; the App is the built file
-const hostServer = () => createServer({ configFile: false, root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
+const hostServer = () =>
+  createServer({ configFile: false, root: resolve(import.meta.dirname, ".."), server: { host: "127.0.0.1", port: 0 } });
 
 it("interoperates with the official ext-apps AppBridge: context, results, native dates and server tools", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await serveApp(page);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
     await page.waitForFunction(() => (window as any).host?.ready);
@@ -43,73 +87,176 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await page.evaluate(async () => {
       const { bridge } = (window as any).host;
       await bridge.sendToolInput({ arguments: { limit: 5 } });
-      await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z", link: "https://example.com/r1" }] }, _meta: { "net.aotter.mantle/tool": "pending" } });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: {
+          rows: [
+            { id: "r1", version: 3, item: "Laptops", date: "2026-10-01T15:20:00.000Z", link: "https://example.com/r1" },
+          ],
+        },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
     });
     await app.getByText("Laptops").waitFor();
     // the application's override renders the cell in the `mcp-app` surface, with a Tailwind class only the application uses
     const cell = app.locator("mark");
-    expect([await cell.getAttribute("data-surface"), await cell.innerText(), await cell.evaluate(node => getComputedStyle(node).backgroundColor)]).toEqual(["mcp-app", "Laptops", "rgb(254, 220, 186)"]);
-    expect(await page.evaluate(() => ({ info: (window as any).host.bridge.getAppVersion(), capabilities: (window as any).host.bridge.getAppCapabilities() })))
-      .toEqual({ info: { name: "mantle", version }, capabilities: { availableDisplayModes: ["inline", "fullscreen"] } });
+    expect([
+      await cell.getAttribute("data-surface"),
+      await cell.innerText(),
+      await cell.evaluate(node => getComputedStyle(node).backgroundColor),
+    ]).toEqual(["mcp-app", "Laptops", "rgb(254, 220, 186)"]);
+    expect(
+      await page.evaluate(() => ({
+        info: (window as any).host.bridge.getAppVersion(),
+        capabilities: (window as any).host.bridge.getAppCapabilities(),
+      })),
+    ).toEqual({
+      info: { name: "mantle", version },
+      capabilities: { availableDisplayModes: ["inline", "fullscreen"], tools: { listChanged: true } },
+    });
     // the host's time zone and language, not the iframe's
     expect(await app.locator("time").innerText()).toMatch(/^2026\/10\/1\s晚上11:20$/);
     // the sandbox blocks navigation: the link opens through the host
     await app.getByRole("link", { name: "https://example.com/r1" }).click();
     await expect.poll(() => page.evaluate(() => (window as any).host.links)).toEqual(["https://example.com/r1"]);
     const look = await app.getByRole("button", { name: "Review: r1" }).evaluate(node => {
-      const style = getComputedStyle(node), root = getComputedStyle(document.documentElement);
-      return { radius: style.borderTopLeftRadius, weight: style.fontWeight, dark: document.documentElement.classList.contains("dark"), inset: root.paddingBottom };
+      const style = getComputedStyle(node),
+        root = getComputedStyle(document.documentElement);
+      return {
+        radius: style.borderTopLeftRadius,
+        weight: style.fontWeight,
+        dark: document.documentElement.classList.contains("dark"),
+        inset: root.paddingBottom,
+        // a mouse: the compact size; a touch screen gets 44 px (the phone-width test)
+        compact: node.getBoundingClientRect().height < 44,
+      };
     });
-    expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px" });
+    expect(look).toEqual({ radius: "3px", weight: "550", dark: true, inset: "24px", compact: true });
+    // no background of its own: the conversation shows through html and body; the shell declares both schemes for the
+    // first paint, and the dark theme the host sent is the root's scheme
+    expect(
+      await app
+        .locator("html")
+        .evaluate(html => [
+          getComputedStyle(html).backgroundColor,
+          getComputedStyle(document.body).backgroundColor,
+          document.querySelector('meta[name="color-scheme"]')?.getAttribute("content"),
+          getComputedStyle(html).colorScheme,
+        ]),
+    ).toEqual(["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)", "light dark", "dark"]);
     await app.getByRole("button", { name: "全螢幕" }).click();
-    await app.getByRole("button", { name: "結束全螢幕" }).waitFor();
+    // the host reports `fullscreen` in its side panel too: the way back names the conversation
+    const back = app.getByRole("button", { name: "返回對話" });
+    await back.waitFor();
     expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+    // a refusal answers the current mode: the App says so and keeps its mode
+    await page.evaluate(() => (window as any).host.modeAnswers.push("fullscreen"));
+    await back.click();
+    await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+    expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen", "inline"]);
+    expect(await back.count()).toBe(1);
     await app.getByRole("button", { name: "Review: r1" }).click();
+    // A row action must choose its required boolean. Both optional checkboxes can be unset after an edit.
+    const notify = app.getByRole("combobox", { name: "Notify" });
+    expect(await notify.inputValue()).toBe("");
+    await notify.selectOption("false");
+    await app.getByRole("checkbox", { name: "Optional flag" }).click();
+    await app.getByRole("checkbox", { name: "Nullable flag" }).click();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en" }));
+    await app.getByRole("button", { name: "Not set", exact: true }).first().click();
+    await app.getByRole("button", { name: "Not set", exact: true }).click();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
     await app.getByRole("button", { name: "Date", exact: true }).click();
-    const date = app.locator('input[type="date"]'); await date.waitFor();
+    const date = app.locator('input[type="date"]');
+    await date.waitFor();
     expect(await date.evaluate(node => getComputedStyle(node).paddingTop)).toBe("12px");
     await date.fill("2026-10-15");
     await app.locator('input[type="time"]').fill("12:34");
     // Closing the popover leaves the selected day in the shared form draft.
     await date.press("Escape");
     // the primary colour is the application's own (its CSS, here the dark theme's), not the host's inverse background; the host's neutrals sit over the tokens
-    expect(await app.getByRole("button", { name: "執行", exact: true }).evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(200, 210, 220)");
+    expect(
+      await app
+        .getByRole("button", { name: "執行", exact: true })
+        .evaluate(node => getComputedStyle(node).backgroundColor),
+    ).toBe("rgb(200, 210, 220)");
     expect(await app.locator("body").evaluate(node => getComputedStyle(node).color)).toBe("rgb(1, 2, 3)");
+    // The host can change language mid-form without resetting the draft.
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "ja" }));
+    await app.getByRole("button", { name: "実行", exact: true }).waitFor();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
     await app.getByRole("button", { name: "執行", exact: true }).click();
     await page.waitForFunction(() => (window as any).host.calls.length >= 2);
-    const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors, sizes: (window as any).host.sizes }));
+    const state = await page.evaluate(() => ({
+      calls: (window as any).host.calls,
+      errors: (window as any).host.errors,
+      sizes: (window as any).host.sizes,
+    }));
     expect(state.errors).toEqual([]);
     // the model learns of the change at its next turn; the App never speaks for the user
-    await expect.poll(() => page.evaluate(() => (window as any).host.contexts)).toEqual([{
-      content: [{ type: "text", text: "review_requisition succeeded on row r1." }],
-      structuredContent: { tool: "review_requisition", id: "r1", outcome: "succeeded" },
-    }]);
+    await expect
+      .poll(() => page.evaluate(() => (window as any).host.contexts))
+      .toEqual([
+        {
+          content: [{ type: "text", text: "review_requisition succeeded on row r1." }],
+          structuredContent: { tool: "review_requisition", id: "r1", outcome: "succeeded" },
+        },
+      ]);
     expect(await page.evaluate(() => (window as any).host.messages)).toEqual([]);
-    expect(state.calls[0]).toMatchObject({ name: "review_requisition", arguments: { id: "r1", expectedVersion: 3 } });
+    expect(state.calls[0]).toMatchObject({
+      name: "review_requisition",
+      arguments: { id: "r1", expectedVersion: 3, notify: false, nullableFlag: null },
+    });
+    expect(state.calls[0].arguments).not.toHaveProperty("optionalFlag");
     expect(state.calls[0].arguments.date).toBe(await page.evaluate(() => new Date(2026, 9, 15, 12, 34).toISOString()));
     expect(state.calls[1]).toMatchObject({ name: "pending", arguments: { limit: 5 } });
     expect(["number", "string"]).toContain(typeof state.calls[0]._meta.progressToken);
     expect(state.sizes.length).toBeGreaterThan(0);
-    const root = await app.locator("html").evaluate(node => ({ lang: node.lang, theme: node.dataset.theme, color: node.style.getPropertyValue("--color-text-primary") }));
+    // height only: the host owns the frame's width, so a frame mounted too wide is never held at that width (#1931)
+    expect(state.sizes.filter((size: { width?: number }) => size.width !== undefined)).toEqual([]);
+    const root = await app.locator("html").evaluate(node => ({
+      lang: node.lang,
+      theme: node.dataset.theme,
+      color: node.style.getPropertyValue("--color-text-primary"),
+    }));
     expect(root).toEqual({ lang: "zh-TW", theme: "dark", color: "rgb(1, 2, 3)" });
-    // a bounded container: the App scrolls and reports a height within the bound
+    // only a maximum height while the App is still in full screen (the inline request above was refused): a host may
+    // give only that there, so it bounds the root, which scrolls
+    const bounds = () => app.locator("html").evaluate(html => [html.style.maxHeight, getComputedStyle(html).overflowY]);
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { maxHeight: 200 } }));
-    await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBeLessThanOrEqual(200);
+    await expect.poll(bounds).toEqual(["200px", "auto"]);
+    // in the conversation the same cap is the host's: it clips the frame, so the App is no scroll container (this
+    // asserted a bounded, scrolling root before #2003; the phone-width test covers the fit)
+    await page.evaluate(() =>
+      (window as any).host.bridge.setHostContext({ displayMode: "inline", containerDimensions: { maxHeight: 200 } }),
+    );
+    await expect.poll(bounds).toEqual(["", "visible"]);
     // a fixed height bounds the reported size too
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { height: 120 } }));
     await expect.poll(() => page.evaluate(() => (window as any).host.sizes.at(-1).height)).toBe(120);
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "ar" }));
+    await expect.poll(() => app.locator("html").getAttribute("dir")).toBe("rtl");
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en", theme: "light" }));
     await expect.poll(() => app.locator("html").getAttribute("lang")).toBe("en");
+    await expect.poll(() => app.locator("html").getAttribute("dir")).toBe("ltr");
     await expect.poll(() => app.locator("html").getAttribute("data-theme")).toBe("light");
-  } finally { await browser.close(); await server.close(); }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
-it("loads the next page of a View through the host and appends its rows", async () => {
+it("loads the next page of a View through the host and appends its rows, and exports them all through the host", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await serveApp(page);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
     await page.waitForFunction(() => (window as any).host?.ready);
@@ -117,31 +264,580 @@ it("loads the next page of a View through the host and appends its rows", async 
     await page.evaluate(async () => {
       const { bridge } = (window as any).host;
       await bridge.sendToolInput({ arguments: { limit: 1 } });
-      await bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" }, _meta: { "net.aotter.mantle/tool": "pending" } });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
     });
     await app.getByText("Laptops").waitFor();
     await app.getByRole("button", { name: "載入更多" }).click();
     await app.getByText("Desks").waitFor();
     // the first page stays, the same tool is called with the same input and the cursor, and the last page has no button
     expect(await app.getByText("Laptops").count()).toBe(1);
-    expect(await page.evaluate(() => (window as any).host.calls)).toMatchObject([{ name: "pending", arguments: { limit: 1, cursor: "c2" } }]);
+    expect(await page.evaluate(() => (window as any).host.calls)).toMatchObject([
+      { name: "pending", arguments: { limit: 1, cursor: "c2" } },
+    ]);
     expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
     expect(await app.locator("body").evaluate(() => document.activeElement === document.body)).toBe(false);
-  } finally { await browser.close(); await server.close(); }
+    // `ui/download-file` with the rows held, Load more's included; no server tool is called for it
+    await app.getByRole("button", { name: "匯出 CSV" }).click();
+    await expect
+      .poll(() => page.evaluate(() => (window as any).host.downloads))
+      .toEqual([
+        {
+          contents: [
+            {
+              type: "resource",
+              resource: {
+                uri: "file:///pending.csv",
+                mimeType: "text/csv",
+                text: "\uFEFFitem,date,link\r\nLaptops,,\r\nDesks,,\r\n",
+              },
+            },
+          ],
+        },
+      ]);
+    expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(1);
+    // an answer without an error says only that the host took the request: nothing is shown. An error answer did not
+    // finish; an error the App cannot read as the host's refusal is not reported as a failure
+    const button = app.getByRole("button", { name: "匯出 CSV" }),
+      refused = app.getByText("下載未完成。"),
+      unconfirmed = app.getByText("無法確認是否已下載。", { exact: false });
+    // the button is disabled only while the request is pending, and nothing is shown then either: wait for the answer
+    await expect.poll(() => button.isEnabled()).toBe(true);
+    expect((await refused.count()) + (await unconfirmed.count())).toBe(0);
+    await page.evaluate(() => (window as any).host.downloadAnswers.push({ isError: true }));
+    await button.click();
+    await refused.waitFor();
+    await page.evaluate(() => (window as any).host.downloadAnswers.push(new Error("The dialog went away.")));
+    await button.click();
+    await unconfirmed.waitFor();
+    expect(await refused.count()).toBe(0);
+    await button.click();
+    await expect.poll(() => button.isEnabled()).toBe(true);
+    expect(await unconfirmed.count()).toBe(0);
+    expect(await refused.count()).toBe(0);
+    expect(await page.evaluate(() => (window as any).host.downloads)).toHaveLength(4);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }] },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByRole("button", { name: "匯出 CSV" }).click();
+    expect(await app.getByRole("textbox", { name: "匯出 CSV" }).inputValue()).toContain("Laptops");
+    expect(await page.evaluate(() => (window as any).host.downloads)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
-it("renders an application's pages[].mcp page for its View's tool, not the rows, and its data comes through the host's tools", async () => {
+it("fits the conversation's height cap at phone width: nothing scrolls in the frame, and every row is reached in full screen", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  // twelve rows, more than a 600 px cap holds at phone width, and a next page
+  const CAP = 600,
+    WIDTH = 358;
+  const rows = Array.from({ length: 12 }, (_, i) => ({ id: `r${i + 1}`, version: 1, item: `Item ${i + 1}` }));
+  const open = async (extra: Record<string, unknown> = {}) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    // a phone's inline frame: the host's width, and as tall as the cap allows
+    await page.evaluate(
+      async ([rows, cap, width, extra]) => {
+        const { bridge } = (window as any).host;
+        Object.assign(document.querySelector("iframe")!.style, { width: `${width}px`, height: `${cap}px` });
+        await bridge.setHostContext({ containerDimensions: { width, maxHeight: cap }, ...extra });
+        await bridge.sendToolInput({ arguments: { limit: 12 } });
+        await bridge.sendToolResult({
+          content: [],
+          structuredContent: { rows, nextCursor: "c2" },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+      },
+      [rows, CAP, WIDTH, extra] as const,
+    );
+    const app = page.frameLocator("iframe");
+    await app.getByText("Item 1", { exact: true }).waitFor();
+    const items = app.locator('[data-slot="app-rows"] > li');
+    // the frame is not a scroll container: its content fits the cap and is the height it reports
+    const frame = () =>
+      app.locator("html").evaluate(html => ({
+        overflow: getComputedStyle(html).overflowY,
+        maxHeight: html.style.maxHeight,
+        scrolls: html.scrollHeight > html.clientHeight,
+        height: Math.ceil(html.getBoundingClientRect().height),
+      }));
+    const reported = () => page.evaluate(() => (window as any).host.sizes.at(-1)?.height as number);
+    return { context, page, app, items, frame, reported };
+  };
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    {
+      const { page, app, items, frame, reported } = await open();
+      const shown = await items.count();
+      expect(shown).toBeGreaterThan(1);
+      expect(shown).toBeLessThan(rows.length);
+      const more = app.getByRole("button", { name: `還有 ${rows.length - shown}+ 筆：以全螢幕開啟` });
+      await more.waitFor();
+      const inline = await frame();
+      expect(inline).toMatchObject({ overflow: "visible", maxHeight: "", scrolls: false });
+      expect(inline.height).toBeLessThanOrEqual(CAP);
+      await expect.poll(reported).toBe(inline.height);
+      // a coarse pointer: 44 px targets
+      expect(await app.locator("html").evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+      for (const button of [
+        more,
+        app.getByRole("button", { name: "Review: r1" }),
+        app.getByRole("button", { name: "全螢幕", exact: true }),
+      ])
+        expect(await button.evaluate(node => (node as HTMLElement).offsetHeight)).toBeGreaterThanOrEqual(44);
+      // the model's tools describe every row held, and say which the conversation shows
+      const tool = (name: string, args = {}) =>
+        page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+          name,
+          args,
+        ] as const);
+      expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({
+        rows: 12,
+        inline: shown,
+        ids: rows.map(row => row.id),
+      });
+      expect((await tool("view_focus", { id: "r12" })).content[0].text).toMatch(
+        /^Row r12 is held but the conversation/,
+      );
+      // the documented path: the button asks for full screen from the tap; the host grants it and sends its size
+      await more.tap();
+      await expect.poll(() => page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+      // granted, before the host has measured full screen's container: only the inline cap is known, and it bounds a
+      // root that scrolls, so every row and Load more are reachable
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: `${CAP}px`, scrolls: true });
+      await app.getByRole("button", { name: "載入更多" }).scrollIntoViewIfNeeded();
+      expect(await app.getByRole("button", { name: "載入更多" }).isVisible()).toBe(true);
+      await page.evaluate(async width => {
+        const { bridge } = (window as any).host;
+        await bridge.setHostContext({
+          displayMode: "fullscreen",
+          containerDimensions: { width, height: 700 },
+        });
+      }, WIDTH);
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: "700px" });
+      // the row the model asked for, past the cap, is highlighted and scrolled to in full screen
+      expect(await items.nth(11).getAttribute("aria-current")).toBe("true");
+      await expect.poll(() => items.nth(11).isVisible()).toBe(true);
+      // back in the conversation the rows fit the cap again
+      await page.evaluate(async cap => {
+        const { bridge } = (window as any).host;
+        await bridge.setHostContext({
+          displayMode: "inline",
+          containerDimensions: { width: 358, maxHeight: cap },
+        });
+      }, CAP);
+      await expect.poll(() => items.count()).toBe(shown);
+      await expect.poll(frame).toMatchObject({ overflow: "visible", maxHeight: "", scrolls: false });
+      expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+    }
+    // a host that offers no full screen: the bounded, scrolling root holds every row, with no button to open the rest
+    {
+      const { app, items, frame } = await open({ availableDisplayModes: ["inline"] });
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: `${CAP}px`, scrolls: true });
+      expect(await app.getByRole("button", { name: /^還有 / }).count()).toBe(0);
+      await items.nth(11).scrollIntoViewIfNeeded();
+      expect(await items.nth(11).isVisible()).toBe(true);
+    }
+    // a host that refuses full screen: the App falls back to scrolling inside the cap, showing every row
+    {
+      const { page, app, items, frame } = await open();
+      const shown = await items.count();
+      await page.evaluate(() => (window as any).host.modeAnswers.push("inline"));
+      await app.getByRole("button", { name: `還有 ${rows.length - shown}+ 筆：以全螢幕開啟` }).tap();
+      await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+      await expect.poll(() => items.count()).toBe(rows.length);
+      await expect.poll(frame).toMatchObject({ overflow: "auto", maxHeight: `${CAP}px`, scrolls: true });
+      await items.nth(11).scrollIntoViewIfNeeded();
+      expect(await items.nth(11).isVisible()).toBe(true);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+      // a row action asks no more once refused; its form opens in the scrolling frame
+      await app.getByRole("button", { name: "Review: r12" }).tap();
+      await app.getByRole("button", { name: "執行", exact: true }).waitFor();
+      expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+    }
+    // content that grows with no render of the App's own (a host font arriving late): still within the cap, button shown
+    {
+      const { app, items, frame, reported } = await open();
+      const shown = await items.count();
+      await app.locator("html").evaluate(html => (html.style.fontSize = "125%"));
+      await expect.poll(() => items.count()).toBeLessThan(shown);
+      await expect.poll(async () => (await frame()).height).toBeLessThanOrEqual(CAP);
+      await expect.poll(reported).toBeLessThanOrEqual(CAP);
+      expect(await frame()).toMatchObject({ overflow: "visible", scrolls: false });
+      await app.getByRole("button", { name: /^還有 \d+\+ 筆/ }).waitFor();
+    }
+    // a row action opened in the conversation asks for full screen from the same tap, and opens whether or not it is granted
+    for (const answer of ["fullscreen", "inline"]) {
+      const { page, app } = await open();
+      await page.evaluate(answer => (window as any).host.modeAnswers.push(answer), answer);
+      await app.getByRole("button", { name: "Review: r1" }).tap();
+      await app.getByRole("button", { name: "執行", exact: true }).waitFor();
+      expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen"]);
+      if (answer === "inline") {
+        await app.getByRole("status").filter({ hasText: "主機維持目前的顯示方式。" }).waitFor();
+        expect(await app.locator("html").evaluate(html => getComputedStyle(html).overflowY)).toBe("auto");
+      } else await app.getByRole("button", { name: "返回對話" }).waitFor();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 60_000);
+
+it("serves the model view-only app tools: read the View, load its next page through the View's own read, show a row", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await serveApp(page);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
     await page.evaluate(async () => {
-      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r0", item: "FromResult" }] }, _meta: { "net.aotter.mantle/tool": "queue" } });
+      const { bridge } = (window as any).host;
+      await bridge.sendToolInput({ arguments: { limit: 1 } });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByText("Laptops").waitFor();
+    // the host's side of the official protocol: `tools/list` and `tools/call` to the view
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    const listed = await page.evaluate(() => (window as any).host.bridge.listTools({}));
+    expect(listed.tools.map((tool: { name: string }) => tool.name)).toEqual(["view_state", "view_more", "view_focus"]);
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    expect(text(await tool("view_state"))).toEqual({
+      tool: "pending",
+      input: { limit: 1 },
+      rows: 1,
+      more: true,
+      ids: ["r1"],
+    });
+    expect(text(await tool("view_more"))).toEqual({
+      tool: "pending",
+      input: { limit: 1 },
+      rows: 2,
+      more: false,
+      ids: ["r1", "r2"],
+    });
+    await app.getByText("Desks").waitFor();
+    // the model can act on these: normal answers saying what was not done, not errors a host may blank
+    expect(await tool("view_more")).toEqual({
+      content: [{ type: "text", text: "The View has no more rows; nothing was loaded." }],
+    });
+    expect(await tool("view_focus", { id: "r2" })).toEqual({ content: [{ type: "text", text: "Showing row r2." }] });
+    const desks = app.locator('[data-slot="app-rows"] > li').nth(1);
+    await expect.poll(() => desks.getAttribute("aria-current")).toBe("true");
+    expect(await desks.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe("none");
+    expect(await app.locator('[aria-current="true"]').count()).toBe(1);
+    expect(await tool("view_focus", { id: "r9" })).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("No row shown has this id") }],
+    });
+    // the only server call is Load more's own read of the View; the model's tools reach no row action
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "pending", arguments: { limit: 1, cursor: "c2" } }),
+    ]);
+    // a row action open: the rows are not on screen, so the tools have nothing to read
+    await app.getByRole("button", { name: "Review: r1" }).click();
+    expect(await tool("view_state")).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }],
+    });
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("loads a page once when view_more calls, or a view_more and the Load more button, start before the App re-renders", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const shown = () => app.locator('[data-slot="app-rows"] > li').count();
+    const first = async () => {
+      await page.evaluate(async () => {
+        const { bridge } = (window as any).host;
+        await bridge.sendToolInput({ arguments: { limit: 1 } });
+        await bridge.sendToolResult({
+          content: [],
+          structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }], nextCursor: "c2" },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+      });
+      await expect.poll(shown).toBe(1);
+      await app.getByRole("button", { name: "載入更多" }).waitFor();
+    };
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    await first();
+    // a model's parallel tool calls: one loads the page, the other is told a load is under way
+    const both: { isError?: boolean; content: { text: string }[] }[] = await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      const view_more = () => bridge.callTool({ name: "view_more", arguments: {} });
+      return Promise.all([view_more(), view_more()]);
+    });
+    expect(both.map(result => result.isError)).toEqual([undefined, undefined]);
+    const loaded = both.filter(result => result.content[0]!.text.startsWith("{"));
+    expect(loaded.map(text)).toEqual([
+      { tool: "pending", input: { limit: 1 }, rows: 2, more: false, ids: ["r1", "r2"] },
+    ]);
+    expect(both.filter(result => !loaded.includes(result)).map(result => result.content[0]!.text)).toEqual([
+      "The App is loading more rows already; call view_state once they are shown.",
+    ]);
+    await app.getByText("Desks").waitFor();
+    expect(await shown()).toBe(2);
+    expect(
+      text(await page.evaluate(() => (window as any).host.bridge.callTool({ name: "view_state", arguments: {} }))),
+    ).toMatchObject({ rows: 2, ids: ["r1", "r2"] });
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "pending", arguments: { limit: 1, cursor: "c2" } }),
+    ]);
+
+    // the person presses Load more in the same task that delivers a view_more, before React re-renders
+    await first();
+    const frame = page.frames().find(frame => frame !== page.mainFrame())!;
+    await frame.evaluate(() => {
+      const press = async (event: MessageEvent) => {
+        if (event.data?.params?.name !== "view_more") return;
+        window.removeEventListener("message", press);
+        // microtasks only: the App has started the view_more's load, React has not rendered it yet
+        for (let tick = 0; tick < 50; tick++) await null;
+        [...document.querySelectorAll("button")].find(button => button.textContent === "載入更多")!.click();
+      };
+      window.addEventListener("message", press);
+    });
+    const raced = await page.evaluate(() => (window as any).host.bridge.callTool({ name: "view_more", arguments: {} }));
+    expect(raced.isError).toBeUndefined();
+    await app.getByText("Desks").waitFor();
+    expect(await shown()).toBe(2);
+    expect(await page.evaluate(() => (window as any).host.calls)).toHaveLength(2);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("loads a further page after the second, retries a page that failed, and ends the list at a repeated cursor", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const shown = () => app.locator('[data-slot="app-rows"] > li').count();
+    const loadMore = app.getByRole("button", { name: "載入更多" });
+    // a new first page, with the host's answers for page c2 (and c3) queued: a further cursor, a failure, the same cursor
+    const first = async (answers: Record<string, unknown[]>) => {
+      await page.evaluate(async answers => {
+        const { bridge, pages } = (window as any).host;
+        const result = (id: string, item: string, nextCursor?: string) => ({
+          content: [],
+          structuredContent: { rows: [{ id, version: 1, item }], ...(nextCursor ? { nextCursor } : {}) },
+          _meta: { "net.aotter.mantle/tool": "pending" },
+        });
+        for (const [cursor, list] of Object.entries(answers))
+          pages[cursor] = (list as [string, string, string?][]).map(answer =>
+            answer[0] === "fail" ? new Error("Unavailable") : result(...answer),
+          );
+        await bridge.sendToolInput({ arguments: { limit: 1 } });
+        await bridge.sendToolResult(result("r1", "Laptops", "c2"));
+      }, answers);
+      await expect.poll(shown).toBe(1);
+      await loadMore.waitFor();
+    };
+    const tool = (name: string) =>
+      page.evaluate(async name => (window as any).host.bridge.callTool({ name, arguments: {} }), name);
+    const text = (result: { content: { text: string }[] }) => JSON.parse(result.content[0]!.text);
+    const calls = async () =>
+      (await page.evaluate(() => (window as any).host.calls)).map((call: any) => call.arguments.cursor);
+
+    // the host answers page c2 with a further cursor: a second view_more loads page c3 normally
+    await first({ c2: [["r2", "Desks", "c3"]], c3: [["r3", "Chairs"]] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: true, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 3, more: false, ids: ["r1", "r2", "r3"] });
+    await app.getByText("Chairs").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    // and so does a second Load more press
+    await first({ c2: [["r2", "Desks", "c3"]], c3: [["r3", "Chairs"]] });
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    await loadMore.click();
+    await app.getByText("Chairs").waitFor();
+    expect(await shown()).toBe(3);
+    expect(await loadMore.count()).toBe(0);
+    expect(await calls()).toEqual(["c2", "c3", "c2", "c3"]);
+
+    // page c2 fails first: view_more says so, and asking again loads it
+    await first({
+      c2: [
+        ["fail", ""],
+        ["r2", "Desks"],
+      ],
+    });
+    expect(await tool("view_more")).toMatchObject({ isError: true, content: [{ text: "Could not load more rows." }] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: false, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    // and so does pressing Load more again after the notice
+    await first({
+      c2: [
+        ["fail", ""],
+        ["r2", "Desks"],
+      ],
+    });
+    await loadMore.click();
+    await app.getByText("無法載入更多結果。").waitFor();
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    expect(await app.getByText("無法載入更多結果。").count()).toBe(0);
+    expect(await calls()).toHaveLength(8);
+
+    // the host answers page c2 with c2 again: the list ends there instead of loading that page forever
+    await first({ c2: [["r2", "Desks", "c2"]] });
+    await loadMore.click();
+    await app.getByText("Desks").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    expect(text(await tool("view_state"))).toMatchObject({ rows: 2, more: false });
+    expect(await tool("view_more")).toEqual({
+      content: [{ type: "text", text: "The View has no more rows; nothing was loaded." }],
+    });
+    await first({ c2: [["r2", "Desks", "c2"]] });
+    expect(text(await tool("view_more"))).toMatchObject({ rows: 2, more: false, ids: ["r1", "r2"] });
+    await app.getByText("Desks").waitFor();
+    expect(await loadMore.count()).toBe(0);
+    expect(await calls()).toHaveLength(10);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("names a View's number id as text in view_state and shows that row for view_focus", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      const { bridge } = (window as any).host;
+      await bridge.sendToolInput({ arguments: {} });
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: {
+          rows: [
+            { id: 2025, item: "Laptops" },
+            { id: 2026, item: "Desks" },
+          ],
+        },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.getByText("Desks").waitFor();
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({ rows: 2, ids: ["2025", "2026"] });
+    expect(await tool("view_focus", { id: "2026" })).toEqual({
+      content: [{ type: "text", text: "Showing row 2026." }],
+    });
+    await expect
+      .poll(() => app.locator('[data-slot="app-rows"] > li').nth(1).getAttribute("aria-current"))
+      .toBe("true");
+    expect(await app.locator('[aria-current="true"]').count()).toBe(1);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
+
+it("renders an application's pages[].mcp page for its View's tool, not the rows, and its data comes through the host's tools", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r0", item: "FromResult" }] },
+        _meta: { "net.aotter.mantle/tool": "queue" },
+      });
     });
     await app.getByRole("heading", { name: "queue-page" }).waitFor();
     // `useView` called the View's tool through the host; the browser-only hook read `unavailable`; the rows of the result are not shown beside the page
@@ -151,102 +847,298 @@ it("renders an application's pages[].mcp page for its View's tool, not the rows,
     expect(await app.locator("h1").allTextContents()).toEqual(["待辦"]);
     expect(await app.getByText("工作待辦").count()).toBe(1);
     expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(1);
-    expect(await app.getByRole("heading", { name: "queue-page" }).locator("..").evaluate(node => getComputedStyle(node).backgroundColor)).toBe("rgb(192, 255, 238)");
+    expect(
+      await app
+        .getByRole("heading", { name: "queue-page" })
+        .locator("..")
+        .evaluate(node => getComputedStyle(node).backgroundColor),
+    ).toBe("rgb(192, 255, 238)");
+    // a host that reports a wider container than the frame it renders (#1931): the frame's own width wins
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ containerDimensions: { width: 760 } }));
+    await expect.poll(() => app.locator("html").evaluate(node => node.style.width)).toBe("min(760px, 100%)");
     for (const width of [340, 700]) {
-      await page.locator("iframe").evaluate((node, width) => { (node as HTMLIFrameElement).width = String(width); }, width);
+      await page.locator("iframe").evaluate((node, width) => {
+        (node as HTMLIFrameElement).width = String(width);
+      }, width);
       await expect.poll(() => app.locator("body").evaluate(() => window.innerWidth)).toBe(width);
       const geometry = await app.locator('[data-slot="app-page"]').evaluate(node => {
-        const heading = node.querySelector("h1")!, header = heading.parentElement!.parentElement!;
+        const heading = node.querySelector("h1")!,
+          header = heading.parentElement!.parentElement!;
         const body = node.querySelector("h2")!.parentElement!;
-        const inset = (element: Element) => { const box = element.getBoundingClientRect(); return { left: box.left, right: window.innerWidth - box.right }; };
-        return { header: inset(header), body: inset(body), headingLeft: heading.getBoundingClientRect().left, overflow: document.documentElement.scrollWidth > window.innerWidth };
+        const inset = (element: Element) => {
+          const box = element.getBoundingClientRect();
+          return { left: box.left, right: window.innerWidth - box.right };
+        };
+        return {
+          header: inset(header),
+          body: inset(body),
+          headingLeft: heading.getBoundingClientRect().left,
+          overflow: document.documentElement.scrollWidth > window.innerWidth,
+        };
       });
-      expect(geometry).toEqual({ header: { left: 16, right: 16 }, body: { left: 16, right: 16 }, headingLeft: 16, overflow: false });
+      expect(geometry).toEqual({
+        header: { left: 16, right: 16 },
+        body: { left: 16, right: 16 },
+        headingLeft: 16,
+        overflow: false,
+      });
     }
-    await app.getByRole("link", { name: "Queue help" }).click();
+    const help = app.getByRole("link", { name: "Queue help" });
+    expect(await help.getAttribute("href")).toBeNull();
+    await help.press("Enter");
     await expect.poll(() => page.evaluate(() => (window as any).host.links)).toEqual(["https://example.test/help"]);
-    const state = await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }));
+    const state = await page.evaluate(() => ({
+      calls: (window as any).host.calls,
+      errors: (window as any).host.errors,
+    }));
     expect(state.errors).toEqual([]);
     expect(state.calls).toMatchObject([{ name: "queue", arguments: {} }]);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
     await page.waitForFunction(() => (window as any).host?.ready);
     await page.evaluate(async () => {
-      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [] }, _meta: { "net.aotter.mantle/tool": "queue" } });
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [] },
+        _meta: { "net.aotter.mantle/tool": "queue" },
+      });
     });
     await app.getByText("Help unavailable").waitFor();
     expect(await app.locator("h1").allTextContents()).toEqual(["待辦"]);
     expect(await app.getByRole("link", { name: "Queue help" }).count()).toBe(0);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}, 45_000);
 
-  } finally { await browser.close(); await server.close(); }
+it("lists a page's own app tool while the page is shown, calls it to change the page, and drops it for a View", async () => {
+  const server = await hostServer();
+  await server.listen();
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
+  try {
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
+    await serveApp(page);
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html`);
+    await page.waitForFunction(() => (window as any).host?.ready);
+    const app = page.frameLocator("iframe");
+    const names = () =>
+      page.evaluate(async () =>
+        ((await (window as any).host.bridge.listTools({})).tools as { name: string }[]).map(tool => tool.name),
+      );
+    const tool = (name: string, args = {}) =>
+      page.evaluate(async ([name, args]) => (window as any).host.bridge.callTool({ name, arguments: args }), [
+        name,
+        args,
+      ] as const);
+    const changes = () => page.evaluate(() => (window as any).host.toolListChanges.length);
+    expect(await names()).toEqual(["view_state", "view_more", "view_focus"]);
+    // the page's `useView` read answers two rows
+    await page.evaluate(async () => {
+      const { bridge, pages } = (window as any).host;
+      pages["undefined"] = [
+        {
+          content: [],
+          structuredContent: {
+            rows: [
+              { id: "r1", item: "Laptops" },
+              { id: "r2", item: "Desks" },
+            ],
+          },
+        },
+      ];
+      await bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [] },
+        _meta: { "net.aotter.mantle/tool": "queue" },
+      });
+    });
+    await app.getByText("page:Desks").waitFor();
+    // registered by the page's effect and by a component it renders (whose effect runs first), once each (React's
+    // development double effect included), and announced once; the component's re-registration as rows arrive sends nothing
+    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus", "queue_count", "queue_only"]);
+    await expect.poll(changes).toBe(1);
+    expect(await tool("queue_count")).toEqual({ content: [{ type: "text", text: "2 shown." }] });
+    const listed = await page.evaluate(async () => (await (window as any).host.bridge.listTools({})).tools[4]);
+    expect(listed).toEqual({
+      name: "queue_only",
+      title: "Show one item",
+      description: "Shows only the queue item with this name on the open Queue page.",
+      inputSchema: {
+        type: "object",
+        properties: { item: { type: "string", minLength: 1 } },
+        required: ["item"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+    });
+    // the host's `tools/call` runs the page's handler, which changes what the page shows
+    expect(await tool("queue_only", { item: "Desks" })).toEqual({
+      content: [{ type: "text", text: "Showing Desks." }],
+    });
+    await app.getByText("only:Desks").waitFor();
+    expect(await app.getByText("page:Laptops").count()).toBe(0);
+    // the component's tool reads what the page shows now, and the list did not change
+    expect(await tool("queue_count")).toEqual({ content: [{ type: "text", text: "1 shown." }] });
+    expect(await changes()).toBe(1);
+    // the handler checks its arguments; its throw is an error result
+    expect(await tool("queue_only", {})).toEqual({ content: [{ type: "text", text: "Name an item." }], isError: true });
+    // the built-in tools stay listed and answer, as a normal result, that no View's rows are shown
+    expect(await tool("view_state")).toEqual({
+      content: [{ type: "text", text: expect.stringContaining("shows no View's rows now") }],
+    });
+    // a View's result replaces the page: its tools are gone and the host is told once
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops" }] },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
+    });
+    await app.locator("mark").getByText("Laptops").waitFor();
+    await expect.poll(names).toEqual(["view_state", "view_more", "view_focus"]);
+    await expect.poll(changes).toBe(2);
+    expect(await tool("queue_only", { item: "Desks" })).toEqual({
+      content: [{ type: "text", text: "Unknown tool: queue_only" }],
+      isError: true,
+    });
+    expect(await tool("queue_count")).toMatchObject({ isError: true });
+    expect(JSON.parse((await tool("view_state")).content[0].text)).toMatchObject({ tool: "pending", ids: ["r1"] });
+    // the page's tool reached no server tool: the only calls are its `useView` read
+    expect(await page.evaluate(() => (window as any).host.calls)).toEqual([
+      expect.objectContaining({ name: "queue", arguments: {} }),
+    ]);
+    expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
 it("follows the system colour scheme when the host sends no theme, and an explicit host theme wins", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await page.emulateMedia({ colorScheme: "dark" });
     await serveApp(page);
-    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?no-theme`);
+    // nor style variables: the text is the tokens' own, light on a dark conversation and dark on a light one, over no
+    // background of the App's own
+    await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?no-theme&no-styles`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
-    const look = () => app.locator("html").evaluate(node => ({ dark: node.classList.contains("dark"), primary: getComputedStyle(node).getPropertyValue("--primary").trim() }));
-    await expect.poll(look).toEqual({ dark: true, primary: "#c8d2dc" });
+    const look = () =>
+      app.locator("html").evaluate(node => ({
+        dark: node.classList.contains("dark"),
+        primary: getComputedStyle(node).getPropertyValue("--primary").trim(),
+        text: getComputedStyle(document.body).color,
+        scheme: getComputedStyle(node).colorScheme,
+        background: getComputedStyle(document.body).backgroundColor,
+      }));
+    const dark = { dark: true, primary: "#c8d2dc", text: "rgb(245, 245, 245)", scheme: "dark" },
+      light = { dark: false, primary: "#0a141e", text: "rgb(23, 32, 51)", scheme: "light" };
+    await expect.poll(look).toEqual({ ...dark, background: "rgba(0, 0, 0, 0)" });
     await page.emulateMedia({ colorScheme: "light" });
-    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
+    await expect.poll(look).toEqual({ ...light, background: "rgba(0, 0, 0, 0)" });
     // a theme from the host wins over the system's
     await page.emulateMedia({ colorScheme: "dark" });
     await expect.poll(look).toMatchObject({ dark: true });
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ theme: "light" }));
-    await expect.poll(look).toEqual({ dark: false, primary: "#0a141e" });
-    await page.emulateMedia({ colorScheme: "light" }); await page.emulateMedia({ colorScheme: "dark" });
+    await expect.poll(look).toMatchObject(light);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.emulateMedia({ colorScheme: "dark" });
     expect((await look()).dark).toBe(false);
-  } finally { await browser.close(); await server.close(); }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
 it("is read-only in a host without server tools: rows and plain links, no action and no tool call", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await serveApp(page);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?read-only`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const app = page.frameLocator("iframe");
     await page.evaluate(async () => {
-      await (window as any).host.bridge.sendToolResult({ content: [], structuredContent: { rows: [{ id: "r1", version: 3, item: "Laptops", link: "https://example.com/r1" }], nextCursor: "c2" }, _meta: { "net.aotter.mantle/tool": "pending" } });
+      await (window as any).host.bridge.sendToolResult({
+        content: [],
+        structuredContent: {
+          rows: [{ id: "r1", version: 3, item: "Laptops", link: "https://example.com/r1" }],
+          nextCursor: "c2",
+        },
+        _meta: { "net.aotter.mantle/tool": "pending" },
+      });
     });
     await app.getByText("Laptops").waitFor();
     expect(await app.getByRole("button", { name: "Review: r1" }).count()).toBe(0);
     expect(await app.getByRole("button", { name: "載入更多" }).count()).toBe(0);
     expect(await app.getByRole("link").count()).toBe(0);
-    expect(await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors }))).toEqual({ calls: [], errors: [] });
-  } finally { await browser.close(); await server.close(); }
+    expect(
+      await page.evaluate(() => ({ calls: (window as any).host.calls, errors: (window as any).host.errors })),
+    ).toEqual({ calls: [], errors: [] });
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
 it("delivers official result notifications with optional undefined metadata and rejects unsafe consumed output", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?probe`);
     await page.waitForFunction(() => (window as any).host?.ready);
     const frame = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
     for (const field of ["meta", "annotation"]) {
       await page.evaluate(async field => {
-        const value = { content: [{ type: "text", text: '{"rows":[]}', ...(field === "annotation" ? { annotations: undefined } : {}) }], structuredContent: { rows: [] }, ...(field === "meta" ? { _meta: undefined } : {}) };
+        const value = {
+          content: [
+            { type: "text", text: '{"rows":[]}', ...(field === "annotation" ? { annotations: undefined } : {}) },
+          ],
+          structuredContent: { rows: [] },
+          ...(field === "meta" ? { _meta: undefined } : {}),
+        };
         const { bridge } = (window as any).host;
         bridge.oncalltool = async () => value;
         await bridge.sendToolResult(value);
       }, field);
-      await expect.poll(() => frame.evaluate(() => (window as any).probe.results.length)).toBe(field === "meta" ? 1 : 2);
-      expect(await frame.evaluate(async () => (await (window as any).probe.call("optional_result", {})).structuredContent)).toEqual({ rows: [] });
+      await expect
+        .poll(() => frame.evaluate(() => (window as any).probe.results.length))
+        .toBe(field === "meta" ? 1 : 2);
+      expect(
+        await frame.evaluate(async () => (await (window as any).probe.call("optional_result", {})).structuredContent),
+      ).toEqual({ rows: [] });
     }
     await page.evaluate(async () => {
-      const cyclic: Record<string, unknown> = {}; cyclic.self = cyclic;
+      const cyclic: Record<string, unknown> = {};
+      cyclic.self = cyclic;
       const values = [
         { content: [], structuredContent: cyclic },
         { content: [], structuredContent: JSON.parse('{"rows":[{"__proto__":{"unsafe":true}}]}') },
@@ -256,20 +1148,62 @@ it("delivers official result notifications with optional undefined metadata and 
       for (const value of values) await bridge.sendToolResult(value);
       bridge.oncalltool = async () => values[1];
     });
-    expect(await frame.evaluate(async () => {
-      try { await (window as any).probe.call("unsafe_result", {}); return "accepted"; } catch (error) { return (error as Error).message; }
-    })).toBe("Invalid tool result");
-    expect(await frame.evaluate(() => ({ count: (window as any).probe.results.length, polluted: ({} as any).unsafe }))).toEqual({ count: 2, polluted: undefined });
+    expect(
+      await frame.evaluate(async () => {
+        try {
+          await (window as any).probe.call("unsafe_result", {});
+          return "accepted";
+        } catch (error) {
+          return (error as Error).message;
+        }
+      }),
+    ).toBe("Invalid tool result");
+    expect(
+      await frame.evaluate(() => ({ count: (window as any).probe.results.length, polluted: ({} as any).unsafe })),
+    ).toEqual({ count: 2, polluted: undefined });
+    // SEP-2106: a 2026-07-28 result carries any JSON value as structuredContent. The App takes one a host sends it; its
+    // own server call is checked by the official bridge (ext-apps 2.0.4), which still reads tools/call results as 2025-era
+    // objects and refuses it before the App sees it.
+    const values = [["a", "b"], "text", 3, false, null];
+    const calls: unknown[] = [];
+    for (const value of values) {
+      await page.evaluate(async value => {
+        const result = { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value };
+        const { bridge } = (window as any).host;
+        bridge.oncalltool = async () => result;
+        await bridge.sendToolResult(result);
+      }, value);
+      calls.push(
+        await frame.evaluate(() =>
+          (window as any).probe.call("json_result", {}).then(
+            () => "accepted",
+            (error: Error) => error.message.split(":")[0],
+          ),
+        ),
+      );
+    }
+    await expect
+      .poll(() => frame.evaluate(() => (window as any).probe.results.slice(2).map((r: any) => r.structuredContent)))
+      .toEqual(values);
+    expect(calls).toEqual(values.map(() => "Invalid result for tools/call"));
     expect(await page.evaluate(() => (window as any).host.errors)).toEqual([]);
-  } finally { await browser.close(); await server.close(); }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);
 
 it("pins the parent and origin after official initialization; reverse calls are refused and aborts stay uncertain", async () => {
   const server = await hostServer();
   await server.listen();
-  const browser = await chromium.launch({ channel: "chrome", executablePath: process.env.MANTLE_TEST_CHROMIUM, headless: true });
+  const browser = await chromium.launch({
+    channel: "chrome",
+    executablePath: process.env.MANTLE_TEST_CHROMIUM,
+    headless: true,
+  });
   try {
-    const page = await browser.newPage(); page.setDefaultTimeout(10_000);
+    const page = await browser.newPage();
+    page.setDefaultTimeout(10_000);
     await page.addInitScript(() => {
       const original = window.setTimeout;
       Object.assign(window, { hostRequestTimers: 0 });
@@ -281,11 +1215,21 @@ it("pins the parent and origin after official initialization; reverse calls are 
     await page.addInitScript(() => {
       // Early unrelated parent traffic must not establish the MCP connection's origin.
       // This runs just before the official initialize response reaches the App.
-      window.addEventListener("message", function beforeHandshake(event) {
-        if (event.source !== window.parent) return;
-        window.removeEventListener("message", beforeHandshake, true);
-        window.dispatchEvent(new MessageEvent("message", { source: window.parent, origin: "https://unrelated.invalid", data: { unrelated: true } }));
-      }, true);
+      window.addEventListener(
+        "message",
+        function beforeHandshake(event) {
+          if (event.source !== window.parent) return;
+          window.removeEventListener("message", beforeHandshake, true);
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              source: window.parent,
+              origin: "https://unrelated.invalid",
+              data: { unrelated: true },
+            }),
+          );
+        },
+        true,
+      );
     });
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?probe`);
     await page.waitForFunction(() => (window as any).host?.ready);
@@ -294,18 +1238,28 @@ it("pins the parent and origin after official initialization; reverse calls are 
       // Keep the sender's realm: a parent-realm wrapper would change event.source.
       const send = window.parent.postMessage.bind(window.parent);
       (window as any).appTargetOrigins = [];
-      window.parent.postMessage = ((message: unknown, origin: string) => { (window as any).appTargetOrigins.push(origin); send(message, origin); }) as typeof window.postMessage;
+      window.parent.postMessage = ((message: unknown, origin: string) => {
+        (window as any).appTargetOrigins.push(origin);
+        send(message, origin);
+      }) as typeof window.postMessage;
     });
     const counts = await frame.evaluate(async () => {
       const notify = { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { unsafe: true } } };
-      const inject = (data: unknown, source: Window = window.parent, origin = location.origin) => window.dispatchEvent(new MessageEvent("message", { data, source, origin }));
-      inject(notify, window); inject(notify, window.parent, "https://attacker.invalid");
+      const inject = (data: unknown, source: Window = window.parent, origin = location.origin) =>
+        window.dispatchEvent(new MessageEvent("message", { data, source, origin }));
+      inject(notify, window);
+      inject(notify, window.parent, "https://attacker.invalid");
       inject({ ...notify, jsonrpc: "1.0" });
       inject({ ...notify, params: { arguments: [] } });
       inject({ ...notify, params: JSON.parse('{"arguments":{"__proto__":{"polluted":true}}}') });
-      const cyclic: Record<string, unknown> = {}; cyclic["self"] = cyclic;
+      const cyclic: Record<string, unknown> = {};
+      cyclic["self"] = cyclic;
       inject({ ...notify, params: { arguments: cyclic } });
-      inject({ jsonrpc: "2.0", method: "ui/notifications/tool-result", params: { content: [{ type: "text", text: 1 }] } });
+      inject({
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-result",
+        params: { content: [{ type: "text", text: 1 }] },
+      });
       inject({ jsonrpc: "2.0", method: "ui/notifications/host-context-changed", params: { locale: 1 } });
       inject({ ...notify, id: "reverse", method: "tools/call" });
       inject({ jsonrpc: "2.0", id: "unknown", result: { content: [] } });
@@ -316,42 +1270,87 @@ it("pins the parent and origin after official initialization; reverse calls are 
     // The official schema strips unsafe prototype keys; no controller sees them.
     expect(counts).toEqual({ inputs: [{}], results: [], contexts: 1, polluted: undefined });
     expect(await page.evaluate(() => (window as any).host.calls)).toEqual([]);
-    expect(await frame.evaluate(async () => {
-      const deep: Record<string, unknown> = {}, shared = { constructor: "ordinary data", prototype: "ordinary data" };
-      let node = deep;
-      for (let i = 0; i < 100; i++) { const next = {}; node["next"] = next; node = next; }
-      window.dispatchEvent(new MessageEvent("message", { source: window.parent, origin: location.origin,
-        data: { jsonrpc: "2.0", method: "ui/notifications/tool-input", params: { arguments: { deep, one: shared, two: shared } } } }));
-      // The official Protocol delivers validated notifications asynchronously.
-      await new Promise(resolve => setTimeout(resolve, 0));
-      const input = (window as any).probe.inputs.at(-1);
-      return { accepted: (window as any).probe.inputs.length, shared: input.one === input.two, constructor: input.one.constructor };
-    })).toEqual({ accepted: 2, shared: true, constructor: "ordinary data" });
+    expect(
+      await frame.evaluate(async () => {
+        const deep: Record<string, unknown> = {},
+          shared = { constructor: "ordinary data", prototype: "ordinary data" };
+        let node = deep;
+        for (let i = 0; i < 100; i++) {
+          const next = {};
+          node["next"] = next;
+          node = next;
+        }
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: window.parent,
+            origin: location.origin,
+            data: {
+              jsonrpc: "2.0",
+              method: "ui/notifications/tool-input",
+              params: { arguments: { deep, one: shared, two: shared } },
+            },
+          }),
+        );
+        // The official Protocol delivers validated notifications asynchronously.
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const input = (window as any).probe.inputs.at(-1);
+        return {
+          accepted: (window as any).probe.inputs.length,
+          shared: input.one === input.two,
+          constructor: input.one.constructor,
+        };
+      }),
+    ).toEqual({ accepted: 2, shared: true, constructor: "ordinary data" });
     await frame.evaluate(() => {
-      const signal = new AbortController(), probe = (window as any).probe;
-      probe.pending = probe.call("wait", {}, signal.signal).then(() => "resolved", (error: Error) => error.message);
+      const signal = new AbortController(),
+        probe = (window as any).probe;
+      probe.pending = probe.call("wait", {}, signal.signal).then(
+        () => "resolved",
+        (error: Error) => error.message,
+      );
       probe.abort = () => signal.abort(new Error("user cancelled"));
     });
     // Wait for actual host progress to reset the official request timeout before
     // cancelling; a fixed delay races the host when Chrome is under build load.
     await frame.waitForFunction(() => (window as any).hostRequestTimers >= 3);
-    const cancellation = await frame.evaluate(async () => { (window as any).probe.abort(); return (window as any).probe.pending; });
+    const cancellation = await frame.evaluate(async () => {
+      (window as any).probe.abort();
+      return (window as any).probe.pending;
+    });
     expect(cancellation).toContain("user cancelled");
-    expect(await frame.evaluate(() => (window as any).appTargetOrigins)).toEqual(expect.arrayContaining([new URL(server.resolvedUrls!.local[0]!).origin]));
+    expect(await frame.evaluate(() => (window as any).appTargetOrigins)).toEqual(
+      expect.arrayContaining([new URL(server.resolvedUrls!.local[0]!).origin]),
+    );
     expect(await frame.evaluate(() => (window as any).appTargetOrigins)).not.toContain("*");
     // Initialize + tool request + an actual official-host progress reset.
     expect(await frame.evaluate(() => (window as any).hostRequestTimers)).toBeGreaterThanOrEqual(3);
     await page.waitForFunction(() => (window as any).host.aborts.length === 1);
-    await page.evaluate(async () => { await (window as any).host.bridge.sendToolCancelled({ reason: "host cancelled" }); });
+    await page.evaluate(async () => {
+      await (window as any).host.bridge.sendToolCancelled({ reason: "host cancelled" });
+    });
     await expect.poll(() => frame.evaluate(() => (window as any).probe.cancelled)).toBe(1);
     expect(await page.evaluate(() => (window as any).host.bridge.teardownResource({}))).toEqual({});
     await expect.poll(() => frame.evaluate(() => (window as any).probe.cancelled)).toBe(2);
     await frame.evaluate(() => (window as any).probe.close());
-    expect(await frame.evaluate(async () => { try { await (window as any).probe.call("wait", {}); return "resolved"; } catch (error) { return (error as Error).message; } })).toBe("Invalid tool call");
+    expect(
+      await frame.evaluate(async () => {
+        try {
+          await (window as any).probe.call("wait", {});
+          return "resolved";
+        } catch (error) {
+          return (error as Error).message;
+        }
+      }),
+    ).toBe("Invalid tool call");
     await page.goto(`${server.resolvedUrls!.local[0]}test/mcp-app-host.html?bad-handshake`);
     const invalid = page.frames().find(frame => frame.url().includes("mcp-app-probe.html"))!;
-    await expect.poll(() => invalid.evaluate(() => (window as any).probe?.errors)).toEqual([expect.stringMatching(/invalid|expected/i)]);
+    await expect
+      .poll(() => invalid.evaluate(() => (window as any).probe?.errors))
+      .toEqual([expect.stringMatching(/invalid|expected/i)]);
     expect(await page.evaluate(() => (window as any).host.ready)).toBe(false);
     expect(await invalid.evaluate(() => (window as any).probe.call)).toBeUndefined();
-  } finally { await browser.close(); await server.close(); }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
 }, 45_000);

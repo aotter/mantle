@@ -15,19 +15,22 @@ import type { Collection, EntryEditorPayload, AdminOperation, AdminOperationInte
 import { Button } from "@aotter/mantle-ui/kit";
 import { Skeleton } from "@aotter/mantle-ui/kit";
 import { ErrorBox, redirectToSignIn } from "../../ui/page";
-import { toast } from "sonner";
+import { isIdField } from "../../ui/id-value";
 import { Dialog, DialogContent, DialogTitle } from "@aotter/mantle-ui/kit";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@aotter/mantle-ui/kit";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@aotter/mantle-ui/kit";
 import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
-import { idempotencyFields, parentRefScopes, parentScopeInteraction, type ParentScope } from "../ops/interaction-schema";
+import {
+  idempotencyFields,
+  operationInitialInput,
+  parentRefScopes,
+  parentScopeInteraction,
+  type ParentScope,
+} from "../ops/interaction-schema";
 
-const InteractionDialog = React.lazy(() => import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })));
+const InteractionDialog = React.lazy(() =>
+  import("../ops/interaction-dialog").then(module => ({ default: module.InteractionDialog })),
+);
 
 export { operationFormSchema } from "../ops/interaction-schema";
 
@@ -49,7 +52,7 @@ export function boundOperationsFor(
   operations: readonly AdminOperation[] | undefined,
   collectionName: string,
 ): AdminOperation[] {
-  return (operations ?? []).filter((op) => (op.interactions ?? []).some((item) => item.collection === collectionName));
+  return (operations ?? []).filter(op => (op.interactions ?? []).some(item => item.collection === collectionName));
 }
 
 /** Operations explicitly exposed from a collection header. */
@@ -57,7 +60,7 @@ export function collectionOperationsFor(
   operations: readonly AdminOperation[] | undefined,
   collectionName: string,
 ): AdminOperation[] {
-  return (operations ?? []).filter((op) => op.uiSchema?.["collectionAction"] === collectionName);
+  return (operations ?? []).filter(op => op.uiSchema?.["collectionAction"] === collectionName);
 }
 
 /** The values a row feeds the controller: its id, version and fields. */
@@ -73,8 +76,10 @@ export function rowValues(row: OperableRow): Record<string, unknown> {
 /** Missing preview fields cannot establish a mismatch; the server still checks every write. */
 export function operationMatchesRow(operation: AdminOperation, row: OperableRow): boolean {
   const values = rowValues(row);
-  return (operation.preconditions ?? []).every(({ field, values: allowed }) =>
-    !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]));
+  return (operation.preconditions ?? []).every(
+    ({ field, values: allowed }) =>
+      !Object.prototype.hasOwnProperty.call(values, field) || allowed.some(value => value === values[field]),
+  );
 }
 
 const emptyValue = (value: unknown): boolean =>
@@ -91,12 +96,22 @@ export function isEmptyOperationOutput(output: unknown): boolean {
 }
 
 /** An operation's returned output, folded under Details; a Procedure that returned nothing shows only the success line. */
-export function OperationResult({ output, language }: { output: unknown; language: AdminLanguage }): React.ReactElement | null {
+export function OperationResult({
+  output,
+  language,
+}: {
+  output: unknown;
+  language: AdminLanguage;
+}): React.ReactElement | null {
   if (isEmptyOperationOutput(output)) return null;
-  return <details className="mt-2 min-w-0">
-    <summary className="cursor-pointer text-sm">{t(language, "ops.details")}</summary>
-    <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>{JSON.stringify(output ?? null, null, 2)}</pre>
-  </details>;
+  return (
+    <details className="mt-2 min-w-0">
+      <summary className="cursor-pointer text-sm">{t(language, "ops.details")}</summary>
+      <pre className="mt-2 max-h-72 overflow-auto rounded-md border bg-muted/40 p-3 text-xs" tabIndex={0}>
+        {JSON.stringify(output ?? null, null, 2)}
+      </pre>
+    </details>
+  );
 }
 
 /** A record page shows this many operations as buttons before the rest move to a menu. */
@@ -107,7 +122,10 @@ export const INLINE_RECORD_OPERATIONS = 3;
  * labeled buttons; past the limit the first ones stay and the rest share a
  * "More actions" menu, so the menu never holds a single item.
  */
-export function splitRecordOperations<T>(available: readonly T[], limit = INLINE_RECORD_OPERATIONS): { inline: T[]; overflow: T[] } {
+export function splitRecordOperations<T>(
+  available: readonly T[],
+  limit = INLINE_RECORD_OPERATIONS,
+): { inline: T[]; overflow: T[] } {
   if (available.length <= limit) return { inline: [...available], overflow: [] };
   const visible = Math.max(0, limit - 1);
   return { inline: available.slice(0, visible), overflow: available.slice(visible) };
@@ -138,24 +156,42 @@ export function RowOperationsMenu({
   onSuccess: () => void;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const menuTrigger = React.useRef<HTMLButtonElement>(null);
   const available = operations.filter(op => operationMatchesRow(op, row));
   if (!available.length) return null;
-  const label = itemName ? t(language, "rowActions.menuLabelFor", { name: itemName }) : t(language, "rowActions.menuLabel");
+  const label = itemName
+    ? t(language, "rowActions.menuLabelFor", { name: itemName })
+    : t(language, "rowActions.menuLabel");
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
+          <Button ref={menuTrigger} type="button" variant="ghost" size="icon-sm" title={label} aria-label={label}>
             <MoreHorizontal className="size-3.5" aria-hidden />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {available.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
+          {available.map(op => (
+            <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}>
+              <Workflow aria-hidden />
+              {operationTitle(op, language, canonical)}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
       {activeOperation ? (
-        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
+        <RowOperationDialog
+          key={activeOperation.name}
+          operation={activeOperation}
+          row={row}
+          returnFocus={menuTrigger}
+          collection={collection}
+          language={language}
+          canonical={canonical}
+          onClose={() => setActiveOperation(null)}
+          onSuccess={onSuccess}
+        />
       ) : null}
     </>
   );
@@ -186,6 +222,7 @@ export function RecordOperations({
   onSuccess: () => void;
 }): React.ReactElement | null {
   const [activeOperation, setActiveOperation] = React.useState<AdminOperation | null>(null);
+  const menuTrigger = React.useRef<HTMLButtonElement>(null);
   const available = operations.filter(op => operationMatchesRow(op, row));
   if (!available.length && !entryLink) return null;
   const { inline, overflow } = splitRecordOperations(available);
@@ -209,26 +246,46 @@ export function RecordOperations({
       {overflow.length ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="secondary">
+            <Button ref={menuTrigger} type="button" variant="secondary">
               <MoreHorizontal className="size-4" aria-hidden />
               {t(language, "rowActions.more")}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {overflow.map(op => <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}><Workflow aria-hidden />{operationTitle(op, language, canonical)}</DropdownMenuItem>)}
+            {overflow.map(op => (
+              <DropdownMenuItem key={op.name} onSelect={() => setActiveOperation(op)}>
+                <Workflow aria-hidden />
+                {operationTitle(op, language, canonical)}
+              </DropdownMenuItem>
+            ))}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
       {activeOperation ? (
-        <RowOperationDialog key={activeOperation.name} operation={activeOperation} row={row} collection={collection} language={language} canonical={canonical} onClose={() => setActiveOperation(null)} onSuccess={onSuccess} />
+        <RowOperationDialog
+          key={activeOperation.name}
+          operation={activeOperation}
+          row={row}
+          returnFocus={overflow.includes(activeOperation) ? menuTrigger : undefined}
+          collection={collection}
+          language={language}
+          canonical={canonical}
+          onClose={() => setActiveOperation(null)}
+          onSuccess={onSuccess}
+        />
       ) : null}
     </>
   );
 }
 
-function RowOperationDialog({ operation, row, ...rest }: {
+function RowOperationDialog({
+  operation,
+  row,
+  ...rest
+}: {
   operation: AdminOperation;
   row: OperableRow;
+  returnFocus?: React.RefObject<HTMLButtonElement | null>;
   collection?: Collection;
   language: AdminLanguage;
   canonical: string | null;
@@ -238,7 +295,7 @@ function RowOperationDialog({ operation, row, ...rest }: {
   return (
     <OperationDialog
       operation={operation}
-      interaction={(operation.interactions ?? []).find((item) => item.collection === row.collection)}
+      interaction={(operation.interactions ?? []).find(item => item.collection === row.collection)}
       row={row}
       {...rest}
     />
@@ -265,7 +322,7 @@ export function CollectionOperations({
 
   return (
     <>
-      {operations.map((operation) => (
+      {operations.map(operation => (
         <Button key={operation.name} type="button" onClick={() => setActiveOperation(operation)}>
           <Plus className="size-4" aria-hidden />
           {resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name)}
@@ -305,9 +362,11 @@ export function OperationDialog({
   canonical,
   onClose,
   onSuccess,
+  returnFocus,
 }: {
   operation: AdminOperation;
   interaction?: AdminOperationInteraction;
+  returnFocus?: React.RefObject<HTMLButtonElement | null>;
   row?: OperableRow;
   scope?: ParentScope;
   collection?: Collection;
@@ -316,7 +375,20 @@ export function OperationDialog({
   onClose: () => void;
   onSuccess: () => void;
 }): React.ReactElement {
-  const title = resolveLocalizedText(operation.title, language, canonical) ?? fieldLabel(operation.name);
+  const [trigger] = React.useState(() => returnFocus?.current ?? document.activeElement);
+  const mounted = React.useRef(true);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    // Loading and ready content share one launcher; replacing content is not closing the operation.
+    if (!mounted.current && trigger instanceof HTMLElement && trigger.isConnected)
+      trigger.focus({ preventScroll: true });
+  };
   const parent = row ? undefined : parentScopeInteraction(operation.input, scope);
   const binding = row && interaction ? interaction : parent?.interaction;
   const listed = row ? rowValues(row) : undefined;
@@ -344,27 +416,60 @@ export function OperationDialog({
 
   if (missing && !entry.data) {
     return (
-      <InteractionLoading language={language} onClose={onClose}>
+      <InteractionLoading language={language} onClose={onClose} onCloseAutoFocus={restoreFocus}>
         {entry.isError ? <ErrorBox error={entry.error} /> : <Skeleton className="h-24 w-full" />}
       </InteractionLoading>
     );
   }
-  const reviewed = entry.data ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version } : listed ?? parent?.row;
+  const reviewed = entry.data
+    ? { ...listed, ...entry.data.entry.data, id: entry.data.entry.id, version: entry.data.entry.version }
+    : (listed ?? parent?.row);
+  const sourceSchema = collection?.schema ?? entry.data?.collection.schema;
+  const boundIdInputs = binding?.bind
+    .filter(
+      ({ input, field }) =>
+        (parent && scope?.parentField === "id") ||
+        isIdField(field, sourceSchema?.properties?.[field]) ||
+        isIdField(input, operation.input.properties?.[input]),
+    )
+    .map(({ input }) => input);
   return (
-    <React.Suspense fallback={<InteractionLoading language={language} onClose={onClose}><Skeleton className="h-40 w-full" /></InteractionLoading>}>
+    <React.Suspense
+      fallback={
+        <InteractionLoading language={language} onClose={onClose} onCloseAutoFocus={restoreFocus}>
+          <Skeleton className="h-40 w-full" />
+        </InteractionLoading>
+      }
+    >
       <InteractionDialog
+        onCloseAutoFocus={restoreFocus}
         create={() => createOperationController(operation, binding, row?.collection, reviewed)}
         operation={operation}
+        boundIdInputs={boundIdInputs}
         hidden={hidden}
         automatic={automatic}
         refScopes={parentRefScopes(operation.input, row ? binding : undefined, reviewed, collections.data)}
         language={language}
         canonical={canonical}
-        sourceSchema={collection?.schema ?? entry.data?.collection.schema}
-        previewFields={row ? [...new Set([collection?.list?.primaryField, ...(collection?.list?.columns ?? []), ...(collection?.list ? [] : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {}))])].filter((field): field is string => !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed) : undefined}
+        sourceSchema={sourceSchema}
+        previewFields={
+          row
+            ? [
+                ...new Set([
+                  collection?.list?.primaryField,
+                  ...(collection?.list?.columns ?? []),
+                  ...(collection?.list
+                    ? []
+                    : Object.keys(collection?.schema?.properties ?? entry.data?.collection.schema.properties ?? {})),
+                ]),
+              ].filter(
+                (field): field is string =>
+                  !!field && field !== "id" && field !== "version" && !!reviewed && field in reviewed,
+              )
+            : undefined
+        }
         onClose={onClose}
         onDone={onSuccess}
-        onSucceeded={() => toast.success(t(language, "ops.success", { name: title }))}
         renderResult={output => <OperationResult output={output} language={language} />}
       />
     </React.Suspense>
@@ -391,7 +496,11 @@ export function createOperationController(
       : {}),
     invoke: (values, signal) => invokeOperation(operation.name, values, signal),
     // Minted once per dialog, so a retry after an uncertain write reuses it.
-    initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
+    initialInput: operationInitialInput(
+      operation.input,
+      automatic,
+      !!(interaction?.bind.length || interaction?.version),
+    ),
     automatic,
   });
 }
@@ -399,7 +508,8 @@ export function createOperationController(
 async function readEntry(collection: string, id: string, signal: AbortSignal): Promise<EntrySnapshot> {
   try {
     const { entry } = await api.get<EntryEditorPayload>(entryApiPath(collection, id), { signal });
-    if (typeof entry.version !== "number" || !Number.isSafeInteger(entry.version)) throw new Error("This native entry version is outside the supported interaction range; it is read-only.");
+    if (typeof entry.version !== "number" || !Number.isSafeInteger(entry.version))
+      throw new Error("This native entry version is outside the supported interaction range; it is read-only.");
     return { id: entry.id, version: entry.version, data: entry.data };
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirectToSignIn();
@@ -409,32 +519,59 @@ async function readEntry(collection: string, id: string, signal: AbortSignal): P
 
 /** A refusal carries the runtime diagnostic; anything else is thrown so the
  *  controller treats the write as uncertain and never retries it. */
-async function invokeOperation(name: string, values: Record<string, unknown>, signal: AbortSignal): Promise<InvokeOutcome> {
+async function invokeOperation(
+  name: string,
+  values: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<InvokeOutcome> {
   try {
-    const { output } = await api.post<{ ok: true; output: unknown }>(`/operations/${encodeURIComponent(name)}`, values, { signal });
+    const { output } = await api.post<{ ok: true; output: unknown }>(
+      `/operations/${encodeURIComponent(name)}`,
+      values,
+      { signal },
+    );
     return { ok: true, data: output };
   } catch (error) {
     // An expired session was never let in, so nothing ran: sign in again.
     if (error instanceof ApiError && error.status === 401) redirectToSignIn();
-    const diagnostic = error instanceof ApiError
-      ? refusalOf(error.body)
-      : undefined;
+    const diagnostic = error instanceof ApiError ? refusalOf(error.body) : undefined;
     if (!diagnostic || typeof diagnostic.code !== "string") throw error;
     return {
       ok: false,
-      diagnostics: [{ ...diagnostic, code: diagnostic.code, message: typeof diagnostic.message === "string" ? diagnostic.message : diagnostic.code }],
+      diagnostics: [
+        {
+          ...diagnostic,
+          code: diagnostic.code,
+          message: typeof diagnostic.message === "string" ? diagnostic.message : diagnostic.code,
+        },
+      ],
     };
   }
 }
 
-function InteractionLoading({ language, onClose, children }: {
+function InteractionLoading({
+  language,
+  onClose,
+  children,
+  onCloseAutoFocus,
+}: {
   language: AdminLanguage;
   onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent closeLabel={t(language, "interaction.close")} aria-describedby={undefined}>
+    <Dialog
+      open
+      onOpenChange={next => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent
+        closeLabel={t(language, "interaction.close")}
+        aria-describedby={undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogTitle className="sr-only">{t(language, "interaction.loading")}</DialogTitle>
         {children}
       </DialogContent>

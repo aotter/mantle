@@ -198,3 +198,73 @@ it("refuses unknown explicit upload purposes before preparing an image or sendin
     expect(fetch).not.toHaveBeenCalled();
   } finally { vi.unstubAllGlobals(); }
 });
+
+it("an image purpose takes any image to re-encode; any other purpose takes its own types, or any file", async () => {
+  const { acceptFor } = await import("../src/features/media/media-upload");
+  expect(acceptFor(undefined)).toBe("");
+  expect(acceptFor({ name: "cover", required: ["jpg,png", "webp"], maxBytes: {} })).toBe("image/*");
+  expect(acceptFor({ name: "notes", required: ["*/*"], maxBytes: {} })).toBe("");
+  expect(acceptFor({ name: "clips", required: ["video/*,application/pdf"], maxBytes: {} })).toBe(
+    "video/*,application/pdf",
+  );
+});
+
+it("a purpose that takes any type uploads the file as it is, without alt text, and refuses what it does not take", async () => {
+  const bodies: unknown[] = [];
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.startsWith("/admin/api/")) bodies.push(JSON.parse(String(init?.body)));
+    if (url === "/admin/api/media/uploads")
+      return new Response(
+        JSON.stringify({
+          uploadGroupId: "upload-1",
+          capabilities: [{ mimeType: "application/pdf", role: "primary", method: "PUT", uploadUrl: "https://upload.invalid/1" }],
+        }),
+      );
+    if (url === "https://upload.invalid/1") {
+      expect(init?.body).toBeInstanceOf(File);
+      return new Response(null, { status: 200 });
+    }
+    return new Response(JSON.stringify({ id: "upload-1", variants: [] }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  try {
+    const { uploadMediaAsset } = await import("../src/features/media/media-upload");
+    const purposes: MediaPurposePolicy[] = [
+      { name: "notes", required: ["*/*"], maxBytes: { "*/*": 100 } },
+      { name: "clips", required: ["video/*"], maxBytes: { "video/*": 100 } },
+    ];
+    const file = new File(["%PDF-1.7"], "report.pdf", { type: "application/pdf" });
+    await uploadMediaAsset({ file, purposes, preferredPurpose: "notes", language: "en" });
+    expect(bodies).toEqual([
+      {
+        filename: "report.pdf",
+        purpose: "notes",
+        variants: [{ mimeType: "application/pdf", byteSize: file.size, role: "primary" }],
+      },
+      {},
+    ]);
+    await expect(uploadMediaAsset({ file, purposes, preferredPurpose: "clips", language: "en" })).rejects.toThrow(
+      "report.pdf: 'clips' takes video/*, not application/pdf.",
+    );
+    await expect(
+      uploadMediaAsset({
+        file: new File([new Uint8Array(101)], "big.bin"),
+        purposes,
+        preferredPurpose: "notes",
+        language: "en",
+      }),
+    ).rejects.toThrow("larger than the 100 bytes 'notes' takes");
+    // a PDF on an image purpose is refused by name before anything is sent
+    await expect(
+      uploadMediaAsset({
+        file,
+        purposes: [{ name: "cover", required: ["image/png"], maxBytes: { "image/png": 100 } }],
+        language: "en",
+      }),
+    ).rejects.toThrow("report.pdf is application/pdf, but 'cover' takes images");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

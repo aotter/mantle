@@ -46,11 +46,11 @@ The PostgreSQL audit on the procurement fixture (S, M and L tiers, Bun and Worke
 ### Who actually needs D1/PostgreSQL parity
 
 No caller needs one manifest to switch engines without changes:
-- **Cloud tenants** are moving to PostgreSQL.
+- **Hosted tenants** may run on PostgreSQL.
 - **On-premises single-organization deployments** run PostgreSQL on Bun.
 - **D1 services** stay on D1.
 
-What callers do need is that one PostgreSQL plan behaves the same on Bun and on Workers. The same app runs in Cloud and on-premises, and handler code and output schemas see the values directly.
+What callers do need is that one PostgreSQL plan behaves the same on Bun and on Workers. The same app runs on a managed host and on-premises, and handler code and output schemas see the values directly.
 
 ## Decision
 
@@ -93,7 +93,7 @@ What callers do need is that one PostgreSQL plan behaves the same on Bun and on 
 - **D1 → PostgreSQL is a migration, not a switch:**
   - Export, rewrite the manifest's SQL, import.
   - aotter/mantle#1298 (portable dump) is re-scoped to data only.
-  - aotter/mantle-home#251 (tenant upgrade from D1) becomes an explicit migration.
+  - A hosted tenant's upgrade from D1 becomes an explicit migration.
 - **Bun gives up Bun.SQL's native client.** The audit measured no gain from it where Mantle's wrapper was absent: the session check ran 390 rps on Bun.SQL and 388 rps on node-postgres. If Bun later exposes column metadata and a measured gain appears, a Bun.SQL driver can return as a second implementation of the same contract.
 
 ## Alternatives

@@ -39,10 +39,7 @@ export function FormActionBar({
 }): React.ReactElement {
   const host = React.useContext(FormActionBarHostContext);
   const bar = (
-    <div
-      data-slot="form-action-bar"
-      className="flex w-full flex-wrap items-center justify-between gap-3"
-    >
+    <div data-slot="form-action-bar" className="flex w-full flex-wrap items-center justify-between gap-3">
       <div className="min-h-5 min-w-0 text-sm text-muted-foreground" aria-live="polite">
         {status}
       </div>
@@ -70,11 +67,7 @@ export function EmptyState({
         <Icon className="size-5" aria-hidden />
       </div>
       <h2 className="text-lg">{title}</h2>
-      {description ? (
-        <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-          {description}
-        </p>
-      ) : null}
+      {description ? <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">{description}</p> : null}
       {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );
@@ -105,15 +98,38 @@ interface PagedList {
  * The "Load more" control of a paged list (`pagedQueryOptions`), `count` rows loaded so far. A failed page keeps the rows already
  * loaded; see `useLoadMore` for the announcement and focus.
  */
-export function LoadMore({ query, count, language }: { query: PagedList; count: number; language: AdminLanguage }): React.ReactElement {
-  const { box, status, start } = useLoadMore({ count, hasMore: query.hasNextPage, loading: query.isFetching, message: (added) => t(language, "common.rowsLoaded", { count: String(added) }) });
+export function LoadMore({
+  query,
+  count,
+  language,
+}: {
+  query: PagedList;
+  count: number;
+  language: AdminLanguage;
+}): React.ReactElement {
+  const { box, status, start } = useLoadMore({
+    count,
+    hasMore: query.hasNextPage,
+    loading: query.isFetching,
+    message: added => t(language, "common.rowsLoaded", { count: String(added) }),
+  });
   return (
     <div ref={box} tabIndex={-1} aria-busy={query.isFetching} className="outline-none">
       {query.isError && count > 0 ? <ErrorBox error={query.error} /> : null}
-      <span role="status" className="sr-only">{status}</span>
+      <span role="status" className="sr-only">
+        {status}
+      </span>
       {query.hasNextPage ? (
         <div className="mt-4">
-          <Button type="button" variant="secondary" disabled={query.isFetching} onClick={() => { start(); void query.fetchNextPage({ cancelRefetch: false }); }}>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={query.isFetching}
+            onClick={() => {
+              start();
+              void query.fetchNextPage({ cancelRefetch: false });
+            }}
+          >
             {t(language, "common.loadMore")}
           </Button>
         </div>
@@ -132,9 +148,13 @@ export function OperationErrorBox({ error }: { error: unknown }): React.ReactEle
   // the error's, not the body's: request() adds the current version and what to do to a write conflict.
   const refusal = error instanceof ApiError && error.status < 500 ? refusalOf(error.body) : undefined;
   if (refusal?.message) {
-    const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1], message = (error as ApiError).message;
+    const field = /\/input\/([^/]+)$/.exec(refusal.path ?? "")?.[1],
+      message = (error as ApiError).message;
     return (
-      <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+      <div
+        role="alert"
+        className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+      >
         {refusal.code === "CONFLICT" && refusal.kind === "lock"
           ? t(language, "ops.lockConflict", { message })
           : t(language, "ops.error.refused", { message: field ? `${field}: ${message}` : message })}
@@ -189,12 +209,17 @@ export function CollapsibleDescription({
 
   return (
     <div className="space-y-2">
-      <p data-slot="page-description" className="text-muted-foreground dark:text-foreground">{collapsedIntro}</p>
+      <p data-slot="page-description" className="text-muted-foreground dark:text-foreground">
+        {collapsedIntro}
+      </p>
       <details className="group">
         <summary className="inline-flex cursor-pointer list-none items-center rounded-md border border-border bg-card/70 px-2.5 py-1 text-xs font-semibold text-foreground/70 transition hover:bg-accent hover:text-accent-foreground">
           {summaryLabel}
         </summary>
-        <p data-slot="page-description" className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground dark:text-foreground">
+        <p
+          data-slot="page-description"
+          className="mt-2 max-w-3xl rounded-md border border-border bg-card/55 p-3 text-xs leading-relaxed text-muted-foreground dark:text-foreground"
+        >
           {description}
         </p>
       </details>
@@ -206,15 +231,7 @@ function looksLikeSchemaNotes(description: string): boolean {
   return description.length > 180 || description.includes("`");
 }
 
-export function CopyField({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: string;
-  href?: string;
-}): React.ReactElement {
+export function CopyField({ label, value, href }: { label: string; value: string; href?: string }): React.ReactElement {
   const { language } = usePreferences();
   const [copied, setCopied] = React.useState(false);
 
@@ -235,12 +252,7 @@ export function CopyField({
         <div className="flex items-center gap-1">
           {href ? (
             <Button asChild variant="ghost" size="icon" className="size-7">
-              <a
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`${t(language, "common.open")} ${label}`}
-              >
+              <a href={href} target="_blank" rel="noreferrer" aria-label={`${t(language, "common.open")} ${label}`}>
                 <ExternalLink className="size-3.5" aria-hidden />
               </a>
             </Button>

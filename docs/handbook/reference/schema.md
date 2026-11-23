@@ -48,7 +48,7 @@ Generated types constrain Store fields and writes; Store does not interpret a JS
 
 Schemas default to operational. Publishing opts into draft/published/archived and generated admin/system transitions. Store cannot assign system columns or scope; generated policy fills them. `publishing: { liveEdits: true }` (only with `lifecycle: publishing`) lets Admin's generic patch edit a published entry in place; without it, generic patches edit drafts only, an implicit lock named `publishing` that never binds the transitions. No update clears a field `publish` requires from a published row (`INPUT_VALIDATION_FAILED`): a Store update that sets one to null is refused, while Admin's live edit validates the whole merged entry as `publish` does. See [lifecycle and locales](../concepts/lifecycle-and-locales.md).
 
-Owner and field columns prefix every unique index in that order. User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
+Owner and field columns prefix every unique index in that order ([a value unique across all owners](#a-value-unique-across-all-owners)). User reads/writes see their own rows; anonymous reads see none. System callers bypass scope. TTL uses `{ field, expireAfterSeconds }` over a date-time field; expired rows become invisible but remain stored until a system sweep. TTL is not allowed on translations.
 
 ### Locks
 
@@ -111,6 +111,8 @@ Only equality fixes an index prefix: `col = input.x`, `col = 'literal'` and an `
 - A View input bound with equality, `WHERE region = input.region ORDER BY orderNo`: the input fixes the prefix, and the scope still applies. Every set-bound column before the ordered ones needs its own equality.
 - For `{ all: true }` callers, an index on the equality-fixed columns, then the ordered columns, then `id`: `[orderNo, id]` here, `[tier, orderNo, id]` with `WHERE tier = input.tier`. It is not bounded for scoped callers, who scan the index and filter, and it does not help a View with any `restrict`, which [`{ all: true }` never lifts](view.md#restrict).
 
+A restrict OR-clause (`author_id = auth.uid() OR orgId IN auth.user('ownerOrgIds')`) fixes no prefix either, not even its `= auth.uid()` term: neither engine reads such an OR in index order (SQLite scans and sorts; PostgreSQL ORs two bitmap index scans and sorts every match), even when each column has its own index. With `indexes: [[orgId, title, id]]` and `ORDER BY title, id` generation refuses the View and names the ways: an equality input on the leading column (`WHERE orgId = input.org`), after which the clause filters a bounded range, or an index on the ordered columns, `[title, id]`, which every caller reads in order and filters. When a user-field scope also binds a column before the ordered ones to a set (`[region, orgId, title, id]` under `scope: "region IN auth.user('region')"`), the refusal names it too: the equality way needs an input on each of them. An OR written in the View's own SQL (`WHERE orgId = input.org OR …`) fixes no prefix either and gets the same guidance.
+
 Declaring both indexes does not make one View bounded for every caller. System (trusted) reads drop scope terms, so a scope-first index such as `[owner, at]` is not a proved range scan for them.
 
 `uniqueIndexes` accept declared fields only, never native entry columns such as `authorId`. For per-member uniqueness, declare a required string `member` field, write `member: caller.subject` in a handler, and use `uniqueIndexes: [[member, orderNumber]]`; do not take `member` from client input.
@@ -119,7 +121,122 @@ Publishing fields may be NULL in drafts even when required, so they cannot be Vi
 
 `checks` are restricted SQL expressions over the table's columns, emitted in initial DDL. Native databases enforce them; bare database errors are not automatically mapped to input-validation failures. `searchableFields` defaults to none: Store and Admin list search then match the exact id only, and Admin's search box says so. Name the fields people search by, such as the list `primaryField` or a `title`; with Admin selected, `mantle generate` warns when a Schema has no `searchableFields` but has such a field that could be one (a plain string, not a date, date-time or reference). Searchable fields must be plain string fields. SQLite/D1 emit FTS5 trigram tables and maintenance triggers; PostgreSQL uses ILIKE. Short SQLite terms use LIKE. Store search additionally matches exact id and combines with row policy.
 
-The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), including explicit data migration for destructive/type changes. Mantle drops nothing.
+The runtime never creates, alters or checks tables. Initial DDL is for an empty database. Changed fields, checks, indexes and search DDL require [agent-owned native migrations](../concepts/runtime-and-adapters.md#schema-installation-and-migrations), written from the diff of `schema.sql` ([schema migrations](../guides/migrations.md)), including explicit data migration for destructive/type changes. Mantle drops nothing.
+
+### A value unique across all owners
+
+A scoped Schema's unique indexes start with its scope columns, so uniqueness is per owner or partition
+(ADR-0046); there is no global flag. A value
+that must be unique across all owners, such as a custom hostname or a public handle, gets an unscoped registry Schema
+whose unique index is the global namespace. Only the Procedures that write the scoped row write the registry, in the
+same program, so both commit or neither does; on D1 the program is one batch.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: domains }
+spec:
+  title: Domains
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, hostname]]
+  indexes: [[owner, hostname, id]]
+  schema:
+    type: object
+    required: [owner, hostname]
+    properties:
+      owner: { type: string }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: hostnames }
+spec:
+  title: Hostname registry
+  lifecycle: operational
+  uniqueIndexes: [[hostname], [domainId]]
+  schema:
+    type: object
+    required: [hostname, domainId]
+    properties:
+      hostname: { type: string, maxLength: 253 }
+      domainId: { type: string }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: claim-hostname }
+spec:
+  description: Add a hostname. Refused (409) when anyone already holds it.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [hostname]
+    properties:
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      INSERT INTO domains (hostname) VALUES (input.hostname) RETURNING id;
+      INSERT INTO hostnames (hostname, domainId) SELECT d.hostname, d.id FROM domains d WHERE d.hostname = input.hostname
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: rename-hostname }
+spec:
+  description: Change a domain's hostname at the version you read. Refused (409) when anyone holds the new one.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id, expectedVersion, hostname]
+    properties:
+      id: { type: string }
+      expectedVersion: { type: integer }
+      hostname: { type: string, minLength: 1, maxLength: 253 }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE hostnames SET hostname = input.hostname
+        WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id AND d.version = input.expectedVersion);
+      UPDATE domains SET hostname = input.hostname WHERE id = input.id AND version = input.expectedVersion
+        RETURNING id, version
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: release-hostname }
+spec:
+  description: Remove a domain and free its hostname for anyone.
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string }
+  output: { type: object }
+  handler:
+    sql: |
+      DELETE FROM hostnames WHERE domainId IN (SELECT d.id FROM domains d WHERE d.id = input.id);
+      DELETE FROM domains WHERE id = input.id RETURNING id
+```
+
+- **Claim.** The first statement inserts the caller's row. The second copies hostname and id into the registry from
+  the scoped row the caller can read, never from input. A hostname another owner holds fails the registry's unique
+  index: `CONFLICT` (409) with `kind: "unique"` and the message `A unique constraint of the Schema was violated.`, and
+  the scoped insert rolls back. The refusal names no owner or row.
+- **Rename.** The registry row follows its domain by `domainId`. A held name is the same `CONFLICT`; a stale
+  `expectedVersion` changes neither row and is `CONFLICT` `kind: "row"`.
+- **Release.** The registry row goes first, selected through the domain the caller can read, then the domain. An id
+  the caller cannot see is `CONFLICT` and deletes nothing.
+
+With a field scope (`orgId IN auth.user('orgIds')`) the claim takes `orgId` as input
+([field scope](#field-scope)) and the registry statements stay the same. What stays disclosed is existence: anyone who
+may claim learns that a value is taken, not by whom. Bound claim attempts per caller if that matters
+([quotas](../guides/sql-patterns.md#per-caller-quotas-a-handler-answers-429)). The registry holds only while every
+write of `domains.hostname` goes through these Procedures: a Store write, Admin's generic create or patch, or another
+Procedure that sets `hostname` bypasses it. Name `hostnames` in no other Procedure or View: it is unscoped, so a
+Procedure that wrote it directly could change another owner's entry.
 
 ## Admin uiSchema
 
@@ -133,7 +250,7 @@ See [Admin](../guides/admin-ui.md) and [diagnostics](diagnostics.md).
 
 ### Field scope
 
-`scope` is one predicate of terms joined by `AND`: at most one `<column> = auth.uid()` and any number of `<column> IN auth.user('<field>')`, for example `scope: "tenant = auth.uid() AND region IN auth.user('region')"`. Scoped columns are required, non-null, and lead an index. The scope protects every SQL relation, Store, REST/MCP and native Admin access.
+`scope` is one predicate of terms joined by `AND` only (OR is refused: insert auto-fill, never-SET scoped columns and partitioned uniqueness need every term on every row; a View or Procedure [`restrict`](view.md#restrict) accepts OR): at most one `<column> = auth.uid()` and any number of `<column> IN auth.user('<field>')`, for example `scope: "tenant = auth.uid() AND region IN auth.user('region')"`. Scoped columns are required, non-null, and lead an index. The scope protects every SQL relation, Store, REST/MCP and native Admin access.
 
 A caller whose value for a field is `{ all: true }` drops that field's term only; the other terms still apply. Generated SQL holds one statement per target and selects the form for each caller at run time; values are always bound parameters. Neither roles nor the admin layer widen a field scope or a translation parent's visibility. A Schema whose `x-mantle-ref` points to a field-scoped Schema must carry the same scope terms.
 
@@ -167,6 +284,25 @@ their existing values.
 | `status` (publishing) | `'draft'`, `'published'` or `'archived'` | the same | `'draft'` |
 | `published_at` (publishing) | integer microseconds when `status` is `'published'`, otherwise `NULL` | `timestamptz` or `NULL` | `NULL` |
 | scope column (owner or field scope) | the field the `scope` names (`owner` in `owner = auth.uid()`), text, not null | the same | the insert fails |
+
+### Seed in bulk
+
+For a performance pass, seed the local database the dev server uses (`wrangler dev` on D1, your own PostgreSQL), not
+the one a test harness starts and discards. Generate the rows in the database instead of sending each one: local D1
+refuses a statement larger than about 100 KB (`SQLITE_TOOBIG`), so a long `INSERT … VALUES` list fails where one
+generating statement does not. On SQLite and D1, a recursive CTE counts the rows:
+
+```sql
+-- seed.sql: 100,000 events, one hour apart (date-time fields are integer microseconds on SQLite and D1)
+INSERT INTO events (id, version, created_at, updated_at, title, startsAt, capacity, seats_taken, closed)
+WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100000)
+SELECT 'seed-' || i, 1, 1767225600000000 + i, 1767225600000000 + i, 'Event ' || i,
+  (1767225600 + i * 3600) * 1000000, 50, 0, 0 FROM n;
+```
+
+Apply it with `wrangler d1 execute DB --local --file seed.sql` (`DB` is the binding in `wrangler.jsonc`). On
+PostgreSQL write `FROM generate_series(1, 100000) AS i` instead of the CTE, use `now() + i * interval '1 hour'` for the timestamps, and run
+it with `psql -f seed.sql`. Seed related tables the same way, choosing parent ids by `i` (`'seed-' || (i % 5000 + 1)`).
 
 Units differ by table: entry timestamps (`created_at`, `updated_at`, `published_at` and declared `date-time` fields)
 are microseconds on SQLite and D1, while the optional media library's `media_assets.created_at` is epoch

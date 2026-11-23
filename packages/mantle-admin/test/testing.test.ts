@@ -8,116 +8,239 @@ import { afterAll, describe, expect, it } from "vitest";
 const pkg = resolve(import.meta.dirname, "..");
 const temp = mkdtempSync(join(tmpdir(), "mantle-compat-"));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
-const { buildAdmin } = await import(resolve(pkg, "dist/build/index.js")) as typeof import("../src/build/index.js");
-const { checkMcpApp } = await import(resolve(pkg, "dist/testing/index.js")) as typeof import("../src/testing/index.js");
+const { buildAdmin } = (await import(resolve(pkg, "dist/build/index.js"))) as typeof import("../src/build/index.js");
+const { checkMcpApp } = (await import(
+  resolve(pkg, "dist/testing/index.js")
+)) as typeof import("../src/testing/index.js");
 
 const catalogue = {
   views: {
-    pending: { columns: { item: { type: ["string", "null"] }, amount: { type: "integer" }, link: { type: "string", format: "uri" }, when: { type: "string", format: "date-time" } }, list: { columns: ["item", "amount", "link", "when"] }, actions: [] },
+    pending: {
+      columns: {
+        item: { type: ["string", "null"] },
+        amount: { type: "integer" },
+        link: { type: "string", format: "uri" },
+        when: { type: "string", format: "date-time" },
+      },
+      list: { columns: ["item", "amount", "link", "when"] },
+      actions: [],
+    },
     queue: { columns: {}, list: { columns: [] }, actions: [] },
   },
   actions: {},
 };
 
 /** An application whose `cell:view:pending.item` override is the body of `Cell`, beside a page for the `queue` View; returns the built file. */
-async function build(name: string, cell: string, options = "", queue = 'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }', pageOptions = ""): Promise<string> {
+async function build(
+  name: string,
+  cell: string,
+  options = "",
+  queue = 'function Queue() { const { rows } = useView("queue", {}); return <ul>{rows.map(row => <li key={String(row["id"])}>{String(row["id"])}</li>)}</ul>; }',
+  pageOptions = "",
+): Promise<string> {
   const src = join(temp, name, "src");
   mkdirSync(src, { recursive: true });
-  writeFileSync(join(src, "admin.tsx"), [
-    `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
-    `import { useView } from ${JSON.stringify(resolve(pkg, "dist/admin-app/hooks.js"))};`,
-    'import { useEffect } from "react";',
-    `function Cell({ value }: { value: unknown }) { ${cell} return <b>{String(value)}</b>; }`,
-    queue,
-    'export default defineAdmin({}, { components: { "cell:view:pending.item": Cell }, pages: [{ path: "queue", title: "Queue", element: <Queue />, mcp: { renders: "queue" }' + pageOptions + ' }]' + options + ' });',
-  ].join("\n"));
+  writeFileSync(
+    join(src, "admin.tsx"),
+    [
+      `import { defineAdmin } from ${JSON.stringify(resolve(pkg, "dist/admin-app/index.js"))};`,
+      `import { useView } from ${JSON.stringify(resolve(pkg, "dist/admin-app/hooks.js"))};`,
+      'import { useEffect } from "react";',
+      `function Cell({ value }: { value: unknown }) { ${cell} return <b>{String(value)}</b>; }`,
+      queue,
+      'export default defineAdmin({}, { components: { "cell:view:pending.item": Cell }, pages: [{ path: "queue", title: "Queue", element: <Queue />, mcp: { renders: "queue" }' +
+        pageOptions +
+        " }]" +
+        options +
+        " });",
+    ].join("\n"),
+  );
   const out = join(temp, name, "dist/client/admin");
   await buildAdmin({ entry: join(src, "admin.tsx"), outDir: out });
   return join(out, "mcp-app.html");
 }
-const attempt = (html: string) => checkMcpApp({ catalogue, html }).then(() => undefined, (error: Error) => error.message);
+// One build of the compatible App, shared by the tests that only need some App.
+let compatibleApp: Promise<string> | undefined;
+const compatible = () => (compatibleApp ??= build("compatible", ""));
+// A test that expects a failure need not wait out the published waits (10 s to render, 5 s to settle, 10 s for
+// `inspect`) for each failing scenario: the messages are the same, only the wait is shorter.
+const fast = { renderMs: 2_500, settleMs: 1_000, inspectMs: 2_000 };
+const attempt = (html: string, waits?: typeof fast) =>
+  checkMcpApp({ catalogue, html, ...(waits && { waits }) }).then(
+    () => undefined,
+    (error: Error) => error.message,
+  );
+const failure = (html: string) => attempt(html, fast);
 
 describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
   it("passes an App whose override and page are compatible, in a light and a dark host", async () => {
-    expect(await attempt(await build("ok", ""))).toBeUndefined();
+    expect(await attempt(await compatible())).toBeUndefined();
+  }, 180_000);
+
+  it("calls inspect with each scenario's open App after the built-in checks, and reports what it throws, logs or leaves unsettled", async () => {
+    const html = await compatible();
+    const seen: string[] = [];
+    // only inspect's wait is shortened: every scenario here renders, and the test asserts which ones report a problem
+    const message = await checkMcpApp({
+      catalogue,
+      html,
+      waits: { inspectMs: fast.inspectMs },
+      inspect: async ({ tool, theme, frame }) => {
+        seen.push(`${tool} ${theme} ${await frame.locator('[data-slot="app-page"], [data-slot="app-rows"]').count()}`);
+        if (tool === "queue" && theme === "dark") throw new Error("inspect-failure");
+        if (tool === "pending" && theme === "light") await frame.evaluate(() => console.error("inspect-console"));
+        if (tool === "pending" && theme === "dark") await new Promise(() => undefined);
+      },
+    }).then(
+      () => undefined,
+      (error: Error) => error.message,
+    );
+    expect(seen.sort()).toEqual(["pending dark 1", "pending light 1", "queue dark 1", "queue light 1"]);
+    expect(message).toContain("page for queue, dark host: inspect-failure");
+    expect(message).toContain("cell:view:pending.item, light host: console error: inspect-console");
+    expect(message).toContain(`cell:view:pending.item, dark host: inspect did not settle within ${fast.inspectMs} ms`);
+    expect(message).not.toContain("page for queue, light host");
+    // the seam's consumer module, against the same App
+    const { check } = await import("./seams/mcp-app-inspect.js");
+    await expect(check(html)).resolves.toBeUndefined();
   }, 180_000);
 
   it("fails an override that makes a network request at render, which the build cannot see, naming the URL", async () => {
     // the origin is put together at run time
-    const html = await build("network", 'useEffect(() => { const host = ["example", "org"].join("."); void fetch("https://" + host + "/runtime.json").catch(() => undefined); new Image().src = "https://" + host + "/runtime.png"; }, []);');
-    const message = await attempt(html);
+    const html = await build(
+      "network",
+      'useEffect(() => { const host = ["example", "org"].join("."); void fetch("https://" + host + "/runtime.json").catch(() => undefined); new Image().src = "https://" + host + "/runtime.png"; }, []);',
+    );
+    const message = await failure(html);
     // the default CSP refuses it (a console error naming the URL) before it can leave
     expect(message).toContain("https://example.org/runtime");
     expect(message).toContain("cell:view:pending.item");
   }, 180_000);
 
   it("fails an override that logs a console error", async () => {
-    expect(await attempt(await build("console", 'useEffect(() => { console.error("cell-console-failure"); }, []);'))).toContain("console error: cell-console-failure");
+    expect(
+      await failure(await build("console", 'useEffect(() => { console.error("cell-console-failure"); }, []);')),
+    ).toContain("console error: cell-console-failure");
   }, 180_000);
 
   it("fails an override that throws", async () => {
-    expect(await attempt(await build("throws", 'useEffect(() => { throw new Error("cell-throw-failure"); }, []);'))).toContain("cell-throw-failure");
+    expect(
+      await failure(await build("throws", 'useEffect(() => { throw new Error("cell-throw-failure"); }, []);')),
+    ).toContain("cell-throw-failure");
   }, 180_000);
 
   it("gives a nullable column a null row", async () => {
-    expect(await attempt(await build("null-row", 'useEffect(() => { if (value === null) console.error("cell-saw-null"); }, [value]);'))).toContain("console error: cell-saw-null");
+    expect(
+      await failure(
+        await build("null-row", 'useEffect(() => { if (value === null) console.error("cell-saw-null"); }, [value]);'),
+      ),
+    ).toContain("console error: cell-saw-null");
   }, 180_000);
 
   it("serves the App from another origin than the host page: it cannot reach its parent", async () => {
-    expect(await attempt(await build("origin", 'useEffect(() => { try { void window.parent.document.title; console.error("parent-reachable"); } catch { /* a cross-origin frame */ } }, []);'))).toBeUndefined();
+    expect(
+      await attempt(
+        await build(
+          "origin",
+          'useEffect(() => { try { void window.parent.document.title; console.error("parent-reachable"); } catch { /* a cross-origin frame */ } }, []);',
+        ),
+      ),
+    ).toBeUndefined();
   }, 180_000);
 
   it("answers a wildcard origin the App declared for what it loads, and refuses the others", async () => {
     // the hosts are built at runtime (Math.random is never folded), so the build's static scan cannot see them
-    const cell = 'useEffect(() => { const dot = Math.random() < 2 ? "." : ""; const i = new Image(); i.src = "https://" + ["a", "cdn", "example", "test"].join(dot) + "/x.png"; const j = new Image(); j.src = "https://" + ["other", "example", "test"].join(dot) + "/y.png"; }, []);';
-    const message = await attempt(await build("wildcard", cell, ', mcp: { csp: { resourceDomains: ["https://*.cdn.example.test"] } }'));
+    const cell =
+      'useEffect(() => { const dot = Math.random() < 2 ? "." : ""; const i = new Image(); i.src = "https://" + ["a", "cdn", "example", "test"].join(dot) + "/x.png"; const j = new Image(); j.src = "https://" + ["other", "example", "test"].join(dot) + "/y.png"; }, []);';
+    const message = await failure(
+      await build("wildcard", cell, ', mcp: { csp: { resourceDomains: ["https://*.cdn.example.test"] } }'),
+    );
     expect(message).toContain("https://other.example.test/y.png");
     expect(message).not.toContain("a.cdn.example.test/x.png");
   }, 180_000);
 
   it("fails a page that suspends forever, and one that renders nothing: the full-screen toggle is not content", async () => {
-    const never = await attempt(await build("suspends", "", "", 'import { use } from "react"; const forever = new Promise<never>(() => undefined); function Queue() { use(forever); return <p>never</p>; }'));
+    const never = await failure(
+      await build(
+        "suspends",
+        "",
+        "",
+        'import { use } from "react"; const forever = new Promise<never>(() => undefined); function Queue() { use(forever); return <p>never</p>; }',
+      ),
+    );
     expect(never).toContain("the App did not render the page");
-    const nothing = await attempt(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
+    const nothing = await failure(await build("nothing", "", "", "function Queue() { void useView; return null; }"));
     expect(nothing).toContain("the App did not render the page (the page is empty or missing)");
   }, 180_000);
 
   it("fails empty layout wrappers and whitespace with an element-owned heading", async () => {
-    const message = await attempt(await build("empty-wrappers", "", "", 'function Queue() { return <section><div>{"   "}</div></section>; }', ", header: false"));
+    const message = await failure(
+      await build(
+        "empty-wrappers",
+        "",
+        "",
+        'function Queue() { return <section><div>{"   "}</div></section>; }',
+        ", header: false",
+      ),
+    );
     expect(message).toContain("the App did not render the page (the page is empty or missing)");
   }, 180_000);
 
   it("accepts visible non-text page content and an explicitly composed native heading", async () => {
-    expect(await attempt(await build("canvas-page", "", "", 'function Queue() { return <canvas width={200} height={40} aria-label="Chart" />; }'))).toBeUndefined();
+    expect(
+      await attempt(
+        await build(
+          "canvas-page",
+          "",
+          "",
+          'function Queue() { return <canvas width={200} height={40} aria-label="Chart" />; }',
+        ),
+      ),
+    ).toBeUndefined();
     // A requested title/description is legitimate page content, not the outer fullscreen toggle.
-    expect(await attempt(await build("header-page", "", "", 'function Queue() { return null; }', ', header: { description: "About this queue" }'))).toBeUndefined();
+    expect(
+      await attempt(
+        await build(
+          "header-page",
+          "",
+          "",
+          "function Queue() { return null; }",
+          ', header: { description: "About this queue" }',
+        ),
+      ),
+    ).toBeUndefined();
   }, 180_000);
 
   it("fails an App that never renders the View, saying so", async () => {
     const blank = join(temp, "blank.html");
     writeFileSync(blank, "<!doctype html><html><head></head><body><div id=root></div></body></html>");
-    expect(await attempt(blank)).toContain("the App did not render the View");
+    expect(await failure(blank)).toContain("the App did not render the View");
   }, 180_000);
 
   it("runs every View of the catalogue when the file records no manifest", async () => {
     const plain = join(temp, "plain.html");
     // an App that renders but whose file has no manifest: the catalogue's two Views are each run
-    const html = readFileSync(await build("manifest", 'useEffect(() => { console.error("cell-ran"); }, []);'), "utf8").replace(/<meta name="mantle-mcp-app"[^>]*>/, "");
+    const html = readFileSync(
+      await build("manifest", 'useEffect(() => { console.error("cell-ran"); }, []);'),
+      "utf8",
+    ).replace(/<meta name="mantle-mcp-app"[^>]*>/, "");
     writeFileSync(plain, html);
-    const message = await attempt(plain);
+    const message = await failure(plain);
     expect(message).toContain("View pending");
   }, 180_000);
 
   it("finds the host script from a path with a space in it", async () => {
     const copy = join(temp, "with space", "dist");
     mkdirSync(copy, { recursive: true });
-    for (const dir of ["testing", "build", "app"]) cpSync(resolve(pkg, "dist", dir), join(copy, dir), { recursive: true });
-    const { checkMcpApp: spaced } = await import(pathToFileURL(join(copy, "testing/index.js")).href) as typeof import("../src/testing/index.js");
-    await expect(spaced({ catalogue, html: await build("space", "") })).resolves.toBeUndefined();
+    cpSync(resolve(pkg, "dist"), copy, { recursive: true });
+    const { checkMcpApp: spaced } = (await import(
+      pathToFileURL(join(copy, "testing/index.js")).href
+    )) as typeof import("../src/testing/index.js");
+    await expect(spaced({ catalogue, html: await compatible() })).resolves.toBeUndefined();
   }, 180_000);
 
   it("fails, not skips, when no browser is found, and says how to get one", async () => {
-    const html = await build("nobrowser", "");
+    const html = await compatible();
     const before = process.env["MANTLE_TEST_CHROMIUM"];
     process.env["MANTLE_TEST_CHROMIUM"] = join(temp, "no-such-chrome");
     try {
@@ -125,6 +248,9 @@ describe("@aotter/mantle-admin/testing: checkMcpApp", () => {
       expect(message).toContain("found no browser");
       expect(message).toContain("npx playwright-core install chromium");
       expect(message).toContain("MANTLE_TEST_CHROMIUM");
-    } finally { if (before === undefined) delete process.env["MANTLE_TEST_CHROMIUM"]; else process.env["MANTLE_TEST_CHROMIUM"] = before; }
+    } finally {
+      if (before === undefined) delete process.env["MANTLE_TEST_CHROMIUM"];
+      else process.env["MANTLE_TEST_CHROMIUM"] = before;
+    }
   }, 180_000);
 });

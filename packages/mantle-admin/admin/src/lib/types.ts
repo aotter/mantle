@@ -3,10 +3,7 @@ export type LocalizedText = string | Readonly<Record<string, string>>;
 
 export type Lifecycle = "publishing" | "operational";
 
-export type ContentStatus =
-  | "draft"
-  | "published"
-  | "archived";
+export type ContentStatus = "draft" | "published" | "archived";
 
 export type SidebarStatus = ContentStatus;
 
@@ -150,7 +147,9 @@ export interface CollectionsMetadata {
 }
 
 /** Titles of referenced records the caller may read, by referencing field then by the stored value; anything unresolved is absent. */
-export type RefTitles = Readonly<Record<string, Readonly<Record<string, { collection: string; id: string; title: string }>>>>;
+export type RefTitles = Readonly<
+  Record<string, Readonly<Record<string, { collection: string; id: string; title: string }>>>
+>;
 
 export interface EntryEditorPayload {
   collection: EntryEditorCollection;
@@ -170,13 +169,6 @@ export interface AdminUser {
   admin: boolean;
   userId?: string;
 }
-
-/** Public sign-in capabilities returned by `GET /api/auth/methods`. */
-export type AuthMethodInfo =
-  | { kind: "email-otp" }
-  | { kind: "magic-link" }
-  | { kind: "social"; provider: string }
-  | { kind: "oauth"; providerId: string; displayName?: string };
 
 /** Row from `GET /admin/api/admin` (admin-only). `createdAt` arrives
  *  as an ISO string over the wire. `emailVerified: false` with no
@@ -227,7 +219,11 @@ export interface ListEntriesResult {
 }
 
 /** `uiSchema.nav` placement in Admin's sidebar (presentation only). */
-export interface NavPlacement { group?: string; order?: number; hidden?: boolean }
+export interface NavPlacement {
+  group?: string;
+  order?: number;
+  hidden?: boolean;
+}
 export interface SiteInfo {
   title: string;
   description: string;
@@ -242,7 +238,13 @@ export interface SiteInfo {
   /** Deprecated admin endpoint alias. */
   mcpUrl: string | null;
   /** What the deployment turned on; absent from an older server, which means all of it. */
-  capabilities?: { siteSettings: boolean; media: boolean; invitationEmail: boolean; statistics: boolean };
+  capabilities?: {
+    siteSettings: boolean;
+    media: boolean;
+    invitationEmail: boolean;
+    statistics: boolean;
+    identity?: boolean;
+  };
   media?: {
     purposes?: MediaPurposePolicy[];
   };
@@ -259,11 +261,13 @@ export interface MediaPurposePolicy {
   name: string;
   required: string[];
   maxBytes: Record<string, number>;
+  visibility?: "public" | "private";
 }
 
 export interface MediaAssetVariant {
   mimeType: string;
-  publicUrl: string;
+  /** Absent on a private asset. */
+  publicUrl?: string;
   storageKey?: string;
   byteSize?: number;
   role: "primary" | "alternate" | "fallback";
@@ -282,6 +286,8 @@ export interface MediaLibraryItem {
   variants: MediaAssetVariant[];
   primaryUrl: string | null;
   mime: string | null;
+  /** The uploaded file's name, when the storage kept it. */
+  filename?: string | null;
   byteSize: number | null;
   alt: string | null;
   caption: string | null;
@@ -370,10 +376,32 @@ export type DeveloperAudience = "public" | "members" | "admin" | "system" | "api
 export type DeveloperTransport = "http" | "mcp" | "lifecycle" | "schedule";
 
 /** An inline program's SQL as authored, or a registered code handler. */
-export interface SqlLogicNode { kind: string; label: string; children: SqlLogicNode[]; column?: { name: string; relation?: string }; relation?: { name: string; alias?: string } }
+export interface SqlLogicNode {
+  kind: string;
+  label: string;
+  children: SqlLogicNode[];
+  column?: { name: string; relation?: string };
+  relation?: { name: string; alias?: string };
+}
 
 export type DeveloperProcedureHandler =
-  | { kind: "sql"; statement: string; flow?: Array<{ logic?: SqlLogicNode; index: number; operation: string; table: string | null; mode: "read" | "row" | "set"; reads: string[]; writes: string[]; returns: string[]; filter: string | null; cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }> }>; hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }> }
+  | {
+      kind: "sql";
+      statement: string;
+      flow?: Array<{
+        logic?: SqlLogicNode;
+        index: number;
+        operation: string;
+        table: string | null;
+        mode: "read" | "row" | "set";
+        reads: string[];
+        writes: string[];
+        returns: string[];
+        filter: string | null;
+        cases: Array<{ field: string; branches: Array<{ condition: string; value: string }>; otherwise: string }>;
+      }>;
+      hooks?: Array<{ trigger: string; procedure: string; schema: string; on: string[] }>;
+    }
   | { kind: "ref"; ref: string };
 
 export interface DeveloperProcedureModel {
@@ -419,6 +447,7 @@ export interface DeveloperAtom {
   title: LocalizedText | null;
   description?: LocalizedText | null;
   audience?: DeveloperAudience;
+  storeOnly?: true;
   transport?: DeveloperTransport;
   input?: JsonSchema;
   handler?: DeveloperProcedureHandler;
@@ -434,9 +463,15 @@ export interface DeveloperAtomRelation {
 }
 
 export interface DeveloperRunObservation {
-  scheduleId: string; runId: string; attempt: number; scheduledAt: number; startedAt: number;
-  finishedAt: number | null; status: "started" | "succeeded" | "failed";
-  durationMs: number | null; errorSummary: string | null;
+  scheduleId: string;
+  runId: string;
+  attempt: number;
+  scheduledAt: number;
+  startedAt: number;
+  finishedAt: number | null;
+  status: "started" | "succeeded" | "failed";
+  durationMs: number | null;
+  errorSummary: string | null;
   counts: { scanned?: number; removed?: number } | null;
 }
 

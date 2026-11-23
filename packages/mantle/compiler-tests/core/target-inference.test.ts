@@ -3,7 +3,11 @@ import { classify, compilePlan, compileSql, type SqlNode } from "../compiler.js"
 
 const SCHEMAS = { notes: { scope: "owner", fields: { title: "text", n: "integer", at: "timestamptz" } } };
 const classOf = async (sql: string): Promise<string> => {
-  const r = await compileSql(sql, { schemas: SCHEMAS, inputs: { id: "text", v: "integer", t: "text" }, kind: "procedure" });
+  const r = await compileSql(sql, {
+    schemas: SCHEMAS,
+    inputs: { id: "text", v: "integer", t: "text" },
+    kind: "procedure",
+  });
   if (!r.ok) throw new Error(r.diagnostic.message);
   return classify(r.plan.stmts[0] as SqlNode);
 };
@@ -46,44 +50,72 @@ const plan = async (text: string) => {
 
 describe("compilePlan infers a target", () => {
   it("from exactly one row op that pins id to an input, with the version when it is locked", async () => {
-    const p = await plan(procedure("locked", "UPDATE notes SET title = input.t WHERE id = input.id AND version = input.v") + procedure("plain", "DELETE FROM notes WHERE id = input.id"));
+    const p = await plan(
+      procedure("locked", "UPDATE notes SET title = input.t WHERE id = input.id AND version = input.v") +
+        procedure("plain", "DELETE FROM notes WHERE id = input.id"),
+    );
     expect(p.procedures["locked"]!.target).toEqual({ schema: "notes", id: "id", version: "v" });
     expect(p.procedures["plain"]!.target).toEqual({ schema: "notes", id: "id" });
   });
 
   it("not when the id is a literal, not pinned, or there is more than one row op; an explicit target wins", async () => {
     const p = await plan(
-      procedure("literal", "UPDATE notes SET title = input.t WHERE id = 'a'")
-      + procedure("bulk", "UPDATE notes SET title = input.t WHERE title = input.t")
-      + procedure("two", "UPDATE notes SET title = input.t WHERE id = input.id; DELETE FROM notes WHERE id = input.id")
-      + procedure("explicit", "UPDATE notes SET title = input.t WHERE id = input.id", "target: { schema: notes, id: id }"),
+      procedure("literal", "UPDATE notes SET title = input.t WHERE id = 'a'") +
+        procedure("bulk", "UPDATE notes SET title = input.t WHERE title = input.t") +
+        procedure(
+          "two",
+          "UPDATE notes SET title = input.t WHERE id = input.id; DELETE FROM notes WHERE id = input.id",
+        ) +
+        procedure(
+          "explicit",
+          "UPDATE notes SET title = input.t WHERE id = input.id",
+          "target: { schema: notes, id: id }",
+        ),
     );
-    expect(["literal", "bulk", "two"].map((n) => p.procedures[n]!.target)).toEqual([undefined, undefined, undefined]);
+    expect(["literal", "bulk", "two"].map(n => p.procedures[n]!.target)).toEqual([undefined, undefined, undefined]);
     expect(p.procedures["explicit"]!.target).toEqual({ schema: "notes", id: "id" });
   });
 });
 
 describe("a text literal in a typed column", () => {
   it("is refused at compile time, not left to fail as a 500 on a STRICT table", async () => {
-    for (const sql of ["INSERT INTO notes (at) VALUES ('tomorrow')", "UPDATE notes SET at = '2026-01-01' WHERE id = input.id"]) {
+    for (const sql of [
+      "INSERT INTO notes (at) VALUES ('tomorrow')",
+      "UPDATE notes SET at = '2026-01-01' WHERE id = input.id",
+    ]) {
       const r = await compilePlan({ sources: [{ sourceId: "memory:t", text: MANIFEST + procedure("bad", sql) }] });
       if (r.ok) throw new Error("accepted");
       expect(r.diagnostics[0]).toMatchObject({ code: "SQL_TYPE" });
     }
-    expect((await plan(procedure("ok", "INSERT INTO notes (at, title) VALUES (CAST('2026-01-01T00:00:00Z' AS timestamptz), 'x')"))).procedures["ok"]).toBeDefined();
+    expect(
+      (
+        await plan(
+          procedure("ok", "INSERT INTO notes (at, title) VALUES (CAST('2026-01-01T00:00:00Z' AS timestamptz), 'x')"),
+        )
+      ).procedures["ok"],
+    ).toBeDefined();
   });
 });
 
 describe("stricter than it looked (Opus audit)", () => {
   it("a target is inferred only in the shapes an explicit one allows, and a numeric-looking text literal is not refused", async () => {
     const p = await plan(
-      procedure("string-version", "UPDATE notes SET title = input.t WHERE id = input.id AND version = input.t")
-      + procedure("numeric-text", "UPDATE notes SET title = input.t WHERE id = input.id")
-      + procedure("plain-int", "INSERT INTO notes (title) VALUES ('5')"),
+      procedure("string-version", "UPDATE notes SET title = input.t WHERE id = input.id AND version = input.t") +
+        procedure("numeric-text", "UPDATE notes SET title = input.t WHERE id = input.id") +
+        procedure("plain-int", "INSERT INTO notes (title) VALUES ('5')"),
     );
     expect(p.procedures["string-version"]!.target).toBeUndefined();
     expect(p.procedures["numeric-text"]!.target).toEqual({ schema: "notes", id: "id" });
-    const ok = await compilePlan({ sources: [{ sourceId: "memory:t", text: MANIFEST.replace("title: { type: string }", "title: { type: string }, n: { type: integer }") + procedure("five", "UPDATE notes SET n = '5' WHERE id = input.id") }] });
+    const ok = await compilePlan({
+      sources: [
+        {
+          sourceId: "memory:t",
+          text:
+            MANIFEST.replace("title: { type: string }", "title: { type: string }, n: { type: integer }") +
+            procedure("five", "UPDATE notes SET n = '5' WHERE id = input.id"),
+        },
+      ],
+    });
     expect(ok.ok).toBe(true);
   });
 });

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const check = process.argv.includes("--check");
-const read = (path) => JSON.parse(readFileSync(join(repoRoot, path), "utf8"));
+const read = path => JSON.parse(readFileSync(join(repoRoot, path), "utf8"));
 
 const pkg = read("packages/mantle/package.json");
 const presentation = read(".codex-plugin/plugin.json");
@@ -53,12 +53,14 @@ const manifests = {
   ".agents/plugins/marketplace.json": {
     name: shared.name,
     interface: { displayName: presentation.interface.displayName },
-    plugins: [{
-      name: shared.name,
-      source: { source: "local", path: "./" },
-      policy,
-      category: presentation.interface.category,
-    }],
+    plugins: [
+      {
+        name: shared.name,
+        source: { source: "local", path: "./" },
+        policy,
+        category: presentation.interface.category,
+      },
+    ],
   },
 };
 
@@ -82,8 +84,8 @@ for (const [path, value] of Object.entries(manifests)) {
 
 if (check && stale.length > 0) {
   console.error(
-    `sync-plugin-manifests: ${stale.length} stale manifest(s)\n${stale.map((path) => `  ${path}`).join("\n")}\n`
-      + "Run `node scripts/sync-plugin-manifests.mjs`.",
+    `sync-plugin-manifests: ${stale.length} stale manifest(s)\n${stale.map(path => `  ${path}`).join("\n")}\n` +
+      "Run `node scripts/sync-plugin-manifests.mjs`.",
   );
   process.exit(1);
 }

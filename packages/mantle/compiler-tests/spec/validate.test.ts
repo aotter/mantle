@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
-import { jsonSchemaToZod } from "../../src/build/spec/domain/service/JsonSchemaToZod.js";
 import type {
   Manifest,
   ProcedureManifest,
@@ -21,10 +20,7 @@ import type {
 
 const apiVersion = "cms.mantle.aotter.net/v2" as const;
 
-function schema(
-  name: string,
-  overrides: Partial<SchemaManifest["spec"]> = {},
-): SchemaManifest {
+function schema(name: string, overrides: Partial<SchemaManifest["spec"]> = {}): SchemaManifest {
   return {
     apiVersion,
     kind: "Schema",
@@ -40,11 +36,7 @@ function schema(
   };
 }
 
-function view(
-  name: string,
-  table: string,
-  overrides: Partial<ViewManifest["spec"]> = {},
-): ViewManifest {
+function view(name: string, table: string, overrides: Partial<ViewManifest["spec"]> = {}): ViewManifest {
   return {
     apiVersion,
     kind: "View",
@@ -53,10 +45,7 @@ function view(
   };
 }
 
-function procedure(
-  name: string,
-  overrides: Partial<ProcedureManifest["spec"]> = {},
-): ProcedureManifest {
+function procedure(name: string, overrides: Partial<ProcedureManifest["spec"]> = {}): ProcedureManifest {
   return {
     apiVersion,
     kind: "Procedure",
@@ -84,21 +73,29 @@ function trigger(name: string, procedureName: string): TriggerManifest {
 
 describe("validateManifests()", () => {
   it("refuses a Trigger targeting an undeclared Procedure", () => {
-    expect(validateManifests({ manifests: [trigger("missing", "missing")] }).diagnostics)
-      .toContainEqual(expect.objectContaining({ code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN" }));
+    expect(validateManifests({ manifests: [trigger("missing", "missing")] }).diagnostics).toContainEqual(
+      expect.objectContaining({ code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN" }),
+    );
   });
-
 
   it("requires scope to bind one required, indexed string field to auth.uid()", () => {
     const scoped = schema("sessions", {
-      schema: { type: "object", properties: { ownerId: { type: "string" }, slug: { type: "string" } }, required: ["ownerId"] },
-      indexes: [["ownerId"]], scope: "ownerId = auth.uid()",
+      schema: {
+        type: "object",
+        properties: { ownerId: { type: "string" }, slug: { type: "string" } },
+        required: ["ownerId"],
+      },
+      indexes: [["ownerId"]],
+      scope: "ownerId = auth.uid()",
     });
     expect(validateManifests({ manifests: [scoped] }).errorCount).toBe(0);
     for (const spec of [
       { ...scoped.spec, indexes: [] },
       { ...scoped.spec, scope: { ownerId: "$ctx.user.id" } as never }, // the 0.1.x spelling
-      { ...scoped.spec, schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.admin" } } } },
+      {
+        ...scoped.spec,
+        schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.admin" } } },
+      },
       { ...scoped.spec, uniqueIndexes: [["slug"]] },
     ]) {
       expect(validateManifests({ manifests: [{ ...scoped, spec } as SchemaManifest] }).errorCount).toBeGreaterThan(0);
@@ -106,16 +103,27 @@ describe("validateManifests()", () => {
   });
 
   it("accepts top-level date-time TTL; SQL cache eligibility is checked by compilePlan", () => {
-    const expiring = schema("events", { schema: { type: "object", properties: {
-      expiresAt: { type: "string", format: "date-time", nullable: true },
-    } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } });
+    const expiring = schema("events", {
+      schema: {
+        type: "object",
+        properties: {
+          expiresAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      ttl: { field: "expiresAt", expireAfterSeconds: 0 },
+    });
     const cache = { cache: { sharedMaxAge: 60 } };
-    const codes = (...manifests: Manifest[]) => validateManifests({ manifests }).diagnostics.map((d) => d.code);
+    const codes = (...manifests: Manifest[]) => validateManifests({ manifests }).diagnostics.map(d => d.code);
     expect(validateManifests({ manifests: [expiring, view("current", "events")] }).errorCount).toBe(0);
     expect(codes(schema("posts"), view("cachedPosts", "posts", cache))).not.toContain("VIEW_CACHE_INVALID");
     expect(codes(expiring, view("cachedEvents", "events", cache))).not.toContain("VIEW_CACHE_INVALID");
-    expect(codes(schema("sessions", { lifecycle: "operational" }), view("cachedSessions", "sessions", cache))).not.toContain("VIEW_CACHE_INVALID");
-    for (const ttl of [{ field: "missing", expireAfterSeconds: 0 }, { field: "expiresAt", expireAfterSeconds: -1 }]) {
+    expect(
+      codes(schema("sessions", { lifecycle: "operational" }), view("cachedSessions", "sessions", cache)),
+    ).not.toContain("VIEW_CACHE_INVALID");
+    for (const ttl of [
+      { field: "missing", expireAfterSeconds: 0 },
+      { field: "expiresAt", expireAfterSeconds: -1 },
+    ]) {
       expect(codes({ ...expiring, spec: { ...expiring.spec, ttl } })).toContain("SCHEMA_TTL_INVALID");
     }
   });
@@ -139,53 +147,67 @@ describe("validateManifests()", () => {
         target: { procedure: "restockProduct" },
       },
     };
-    const manifests: Manifest[] = [
-      schema("posts"),
-      procedure("restockProduct"),
-      tA,
-      tB,
-    ];
+    const manifests: Manifest[] = [schema("posts"), procedure("restockProduct"), tA, tB];
     const result = validateManifests({ manifests });
-    const codes = result.diagnostics.map((d) => d.code);
+    const codes = result.diagnostics.map(d => d.code);
     // Both triggers should report TRIGGER_PATH_INVALID — collision is
     // secondary to the bad prefix and would misdescribe the root cause.
-    expect(codes.filter((c) => c === "TRIGGER_PATH_INVALID")).toHaveLength(2);
+    expect(codes.filter(c => c === "TRIGGER_PATH_INVALID")).toHaveLength(2);
     expect(codes).not.toContain("TRIGGER_PATH_COLLISION");
   });
 
   it("rejects TTL on either side of a translation join", () => {
     const parent: SchemaManifest = {
-      apiVersion, kind: "Schema", metadata: { name: "stories" },
-      spec: { title: "Stories", schema: { type: "object", properties: {
-        slug: { type: "string" }, expiresAt: { type: "string", format: "date-time" },
-      } }, ttl: { field: "expiresAt", expireAfterSeconds: 0 } },
-    };
-    const child: SchemaManifest = {
-      apiVersion, kind: "Schema", metadata: { name: "story-translations" },
-      spec: { title: "Translations", localized: true, translates: { parent: "stories", on: "slug" },
-        schema: { type: "object", properties: {
-          slug: { type: "string" }, locale: { type: "string" }, title: { type: "string" },
-          expiresAt: { type: "string", format: "date-time" },
-        } },
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "stories" },
+      spec: {
+        title: "Stories",
+        schema: {
+          type: "object",
+          properties: {
+            slug: { type: "string" },
+            expiresAt: { type: "string", format: "date-time" },
+          },
+        },
+        ttl: { field: "expiresAt", expireAfterSeconds: 0 },
       },
     };
-    expect(validateManifests({ manifests: [parent, child] }).diagnostics.map((d) => d.code))
-      .toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
-    const childWithTtl: SchemaManifest = { ...child, spec: { ...child.spec,
-      ttl: { field: "expiresAt", expireAfterSeconds: 0 },
-    } };
+    const child: SchemaManifest = {
+      apiVersion,
+      kind: "Schema",
+      metadata: { name: "story-translations" },
+      spec: {
+        title: "Translations",
+        localized: true,
+        translates: { parent: "stories", on: "slug" },
+        schema: {
+          type: "object",
+          properties: {
+            slug: { type: "string" },
+            locale: { type: "string" },
+            title: { type: "string" },
+            expiresAt: { type: "string", format: "date-time" },
+          },
+        },
+      },
+    };
+    expect(validateManifests({ manifests: [parent, child] }).diagnostics.map(d => d.code)).toContain(
+      "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
+    );
+    const childWithTtl: SchemaManifest = {
+      ...child,
+      spec: { ...child.spec, ttl: { field: "expiresAt", expireAfterSeconds: 0 } },
+    };
     const parentWithoutTtl: SchemaManifest = { ...parent, spec: { ...parent.spec, ttl: undefined } };
-    expect(validateManifests({ manifests: [parentWithoutTtl, childWithTtl] }).diagnostics.map((d) => d.code))
-      .toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
+    expect(validateManifests({ manifests: [parentWithoutTtl, childWithTtl] }).diagnostics.map(d => d.code)).toContain(
+      "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
+    );
   });
 });
 
 describe("parseManifests() — Schema indexes", () => {
-  const parseSchema = (
-    indexYaml: string,
-    properties = "slug: { type: string }",
-    name = "posts",
-  ) =>
+  const parseSchema = (indexYaml: string, properties = "slug: { type: string }", name = "posts") =>
     parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: { name: ${name} }
@@ -236,10 +258,7 @@ ${indexYaml}
   });
 
   it("accepts a dot as part of an exact top-level field name", () => {
-    const result = parseSchema(
-      "  indexes: [['profile.slug']]",
-      "'profile.slug': { type: string }",
-    );
+    const result = parseSchema("  indexes: [['profile.slug']]", "'profile.slug': { type: string }");
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -261,14 +280,17 @@ ${indexYaml}
     ["unsafe identifier", "  indexes: [['_slug']]"],
   ])("rejects semantic error: %s", (_label, declaration) => {
     const extra = declaration.includes("_slug")
-        ? "slug: { type: string }, _slug: { type: string }"
-        : "slug: { type: string }";
+      ? "slug: { type: string }, _slug: { type: string }"
+      : "slug: { type: string }";
     const result = parseSchema(declaration, extra);
     expect(result.diagnostics[0]?.code).toBe("SCHEMA_INDEX_INVALID");
   });
 
   it("indexes may lead with native entry columns; data properties may not reuse their names (#1008)", () => {
-    const accepted = parseSchema("  indexes: [[status, publishedAt], [createdAt], [authorId, updatedAt, id]]", "slug: { type: string }, publishedAt: { type: number }");
+    const accepted = parseSchema(
+      "  indexes: [[status, publishedAt], [createdAt], [authorId, updatedAt, id]]",
+      "slug: { type: string }, publishedAt: { type: number }",
+    );
     expect(accepted.diagnostics).toEqual([]);
     for (const reserved of ["id", "status", "version", "createdAt", "updatedAt", "authorId"]) {
       const shadowed = parseSchema("", `slug: { type: string }, ${reserved}: { type: string }`);
@@ -280,7 +302,8 @@ ${indexYaml}
   });
 
   it("accepts native entry columns as list columns but not as the primaryField (#1008 follow-up)", () => {
-    const ui = (list: string) => parseSchema(`  lifecycle: operational\n  uiSchema:\n    list:\n${list}`, "slug: { type: string }");
+    const ui = (list: string) =>
+      parseSchema(`  lifecycle: operational\n  uiSchema:\n    list:\n${list}`, "slug: { type: string }");
     expect(ui("      primaryField: slug\n      columns: [createdAt, updatedAt, status]").diagnostics).toEqual([]);
     expect(ui("      primaryField: createdAt\n      columns: [slug]").diagnostics[0]).toMatchObject({
       code: "SCHEMA_UI_INVALID",
@@ -295,18 +318,13 @@ ${indexYaml}
   });
 
   it("rejects an unsafe name only when the Schema declares indexes", () => {
-    const checked = parseSchema(
-      "  indexes: [[slug]]",
-      "slug: { type: string }",
-      "account/members",
-    );
+    const checked = parseSchema("  indexes: [[slug]]", "slug: { type: string }", "account/members");
 
     expect(checked.diagnostics[0]).toMatchObject({
       code: "SCHEMA_INDEX_INVALID",
       path: expect.stringContaining("/metadata/name"),
     });
-    expect(parseSchema("", "slug: { type: string }", "account/members").diagnostics)
-      .toEqual([]);
+    expect(parseSchema("", "slug: { type: string }", "account/members").diagnostics).toEqual([]);
   });
 });
 
@@ -327,8 +345,7 @@ spec:
 `);
 
     expect(result.diagnostics).toEqual([]);
-    expect((result.manifests[0] as SchemaManifest).spec.searchableFields)
-      .toEqual(["orderNumber", "customer"]);
+    expect((result.manifests[0] as SchemaManifest).spec.searchableFields).toEqual(["orderNumber", "customer"]);
   });
 
   it.each([
@@ -354,7 +371,6 @@ spec:
 
     expect(result.diagnostics[0]?.code).toBe(code);
   });
-
 });
 
 describe("Schema uiSchema list filter", () => {
@@ -383,7 +399,10 @@ spec:
 
   it("accepts an array property as a list column", () => {
     const source = yaml("orderState")
-      .replace("placedAt: { type: integer }", "placedAt: { type: integer }\n      interests: { type: array, items: { type: string } }")
+      .replace(
+        "placedAt: { type: integer }",
+        "placedAt: { type: integer }\n      interests: { type: array, items: { type: string } }",
+      )
       .replace("columns: [placedAt]", "columns: [placedAt, interests]");
     expect(parseManifests(source).diagnostics).toEqual([]);
   });
@@ -397,8 +416,10 @@ spec:
   });
 
   it("rejects list filters on publishing collections", () => {
-    expect(parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing"))
-      .diagnostics[0]?.code).toBe("SCHEMA_UI_INVALID");
+    expect(
+      parseManifests(yaml("orderState").replace("lifecycle: operational", "lifecycle: publishing")).diagnostics[0]
+        ?.code,
+    ).toBe("SCHEMA_UI_INVALID");
   });
 
   it.each([
@@ -406,10 +427,7 @@ spec:
     ["duplicate field", "primaryField: orderState\n      columns: [orderState]"],
     ["non-scalar primary field", "primaryField: details\n      columns: [placedAt]"],
   ])("rejects %s in list presentation", (label, listFields) => {
-    let source = yaml("orderState").replace(
-      "primaryField: orderState\n      columns: [placedAt]",
-      listFields,
-    );
+    let source = yaml("orderState").replace("primaryField: orderState\n      columns: [placedAt]", listFields);
     if (label === "non-scalar primary field") {
       source = source.replace(
         "placedAt: { type: integer }",
@@ -468,14 +486,18 @@ spec:
     properties: { ${properties} }
 `;
 
-    expect(parseManifests(source("localized: false", "slug: { type: string }, title: { type: string }"))
-      .diagnostics[0]?.code).toBe("TRANSLATES_REQUIRES_LOCALIZED");
-    expect(parseManifests(source("localized: true", "title: { type: string }"))
-      .diagnostics[0]?.code).toBe("TRANSLATES_FIELD_NOT_IN_CHILD");
+    expect(
+      parseManifests(source("localized: false", "slug: { type: string }, title: { type: string }")).diagnostics[0]
+        ?.code,
+    ).toBe("TRANSLATES_REQUIRES_LOCALIZED");
+    expect(parseManifests(source("localized: true", "title: { type: string }")).diagnostics[0]?.code).toBe(
+      "TRANSLATES_FIELD_NOT_IN_CHILD",
+    );
   });
 
   it("accepts handler { ref } or { sql } and nothing else", () => {
-    const parse = (handler: string) => parseManifests(`apiVersion: cms.mantle.aotter.net/v2
+    const parse = (handler: string) =>
+      parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: createPost }
 spec:
@@ -486,22 +508,30 @@ spec:
     for (const handler of ["{ ref: createPost }", '{ sql: "INSERT INTO posts (slug) VALUES (input.slug)" }']) {
       expect(parse(handler).diagnostics, handler).toEqual([]);
     }
-    for (const handler of ["{ kind: ref, ref: createPost }", "{ kind: builtin, op: create, schema: posts }", "{ ref: a, sql: b }", '{ sql: "" }']) {
-      expect(parse(handler).diagnostics.map((d) => d.code), handler).toContain("INVALID_MANIFEST_ENVELOPE");
+    for (const handler of [
+      "{ kind: ref, ref: createPost }",
+      "{ kind: builtin, op: create, schema: posts }",
+      "{ ref: a, sql: b }",
+      '{ sql: "" }',
+    ]) {
+      expect(
+        parse(handler).diagnostics.map(d => d.code),
+        handler,
+      ).toContain("INVALID_MANIFEST_ENVELOPE");
     }
   });
 
   // ponytail: one table for the mcp source shape
   it("accepts an mcp source on admin or public, and refuses a missing or unknown surface and foreign keys", () => {
     for (const [surface, extra, refusal] of [
-    ["surface: admin", "", undefined],
-    ["surface: public", "", undefined],
-    ["", "", /surface must be one of/],
-    ["surface: unknown", "", /surface must be one of/],
-    ["surface: admin", "schema: posts\n    on: [before_create]", "/spec/source/schema"],
-    ["surface: admin", "method: POST\n    path: /api/foo", "/spec/source/method"],
-  ] as const) {
-    const yaml = `apiVersion: cms.mantle.aotter.net/v2
+      ["surface: admin", "", undefined],
+      ["surface: public", "", undefined],
+      ["", "", /surface must be one of/],
+      ["surface: unknown", "", /surface must be one of/],
+      ["surface: admin", "schema: posts\n    on: [before_create]", "/spec/source/schema"],
+      ["surface: admin", "method: POST\n    path: /api/foo", "/spec/source/method"],
+    ] as const) {
+      const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: mcpTool }
 spec:
@@ -511,17 +541,19 @@ spec:
     ${extra}
   target: { procedure: bar }
 `;
-    const { diagnostics } = parseManifests(yaml);
-    if (refusal === undefined) expect(diagnostics).toEqual([]);
-    else if (typeof refusal === "string") expect(diagnostics[0]).toMatchObject({ code: "INVALID_MANIFEST_ENVELOPE", path: expect.stringContaining(refusal) });
-    else expect(diagnostics.map((d) => d.message).join("\n")).toMatch(refusal);
+      const { diagnostics } = parseManifests(yaml);
+      if (refusal === undefined) expect(diagnostics).toEqual([]);
+      else if (typeof refusal === "string")
+        expect(diagnostics[0]).toMatchObject({
+          code: "INVALID_MANIFEST_ENVELOPE",
+          path: expect.stringContaining(refusal),
+        });
+      else expect(diagnostics.map(d => d.message).join("\n")).toMatch(refusal);
     }
   });
-
 });
 
 describe("parseManifests() — View.requires.auth", () => {
-
   it("accepts ctx.auth and scalar ctx.auth.scope predicates", () => {
     const yaml = `apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -538,10 +570,7 @@ spec:
     const result = parseManifests(yaml);
     expect(result.diagnostics).toEqual([]);
     const parsed = result.manifests[0] as ViewManifest;
-    expect(parsed.spec.requires?.auth?.all).toEqual([
-      "ctx.auth",
-      { "ctx.auth.scope": "posts:read" },
-    ]);
+    expect(parsed.spec.requires?.auth?.all).toEqual(["ctx.auth", { "ctx.auth.scope": "posts:read" }]);
   });
 
   it("rejects an empty ctx.auth.scope", () => {
@@ -571,7 +600,7 @@ spec:
       any: [ctx.user]
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
+    expect(result.diagnostics.map(d => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
   });
 
   it("rejects extra keys beside a valid auth predicate", () => {
@@ -636,7 +665,7 @@ spec:
 
   it.each(["null", "[]", "{ sharedMaxAge: 0 }", "{ sharedMaxAge: 1.5 }"])(
     "rejects invalid shared cache value %s",
-    (cache) => {
+    cache => {
       const result = parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: cachedPosts }
@@ -670,11 +699,12 @@ spec:
   surface: internal
 `;
     expect(parseManifests(yaml).diagnostics).toEqual([]);
-    expect(parseManifests(`${yaml}  cache: { sharedMaxAge: 60 }\n`).diagnostics)
-      .toEqual([expect.objectContaining({
+    expect(parseManifests(`${yaml}  cache: { sharedMaxAge: 60 }\n`).diagnostics).toEqual([
+      expect.objectContaining({
         code: "VIEW_CACHE_INVALID",
         source: expect.objectContaining({ path: "/spec/cache" }),
-      })]);
+      }),
+    ]);
   });
 
   it("rejects View Admin uiSchema on the public surface", () => {
@@ -709,7 +739,7 @@ spec:
   surface: unknown
 `;
     const result = parseManifests(yaml);
-    expect(result.diagnostics.map((d) => d.message)).toContainEqual(
+    expect(result.diagnostics.map(d => d.message)).toContainEqual(
       expect.stringMatching(/View\.spec\.surface.*must be one of/),
     );
   });
@@ -748,13 +778,14 @@ spec:
 `;
     const result = parseManifests(yaml);
     expect(result.manifests).toHaveLength(0);
-    expect(result.diagnostics.map((d) => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
+    expect(result.diagnostics.map(d => d.code)).toContain("INVALID_MANIFEST_ENVELOPE");
     expect(result.diagnostics[0]?.message).toMatch(/alias/i);
   });
 });
 
 describe("parseManifests() — View.input", () => {
-  const parseView = (spec: string) => parseManifests(`apiVersion: cms.mantle.aotter.net/v2
+  const parseView = (spec: string) =>
+    parseManifests(`apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: { name: v }
 spec:
@@ -790,7 +821,7 @@ spec:
     properties: { title: { type: string } }
     required: [title, slug]
 `);
-    const diag = result.diagnostics.find((d) => d.code === "REQUIRED_FIELD_UNKNOWN");
+    const diag = result.diagnostics.find(d => d.code === "REQUIRED_FIELD_UNKNOWN");
     expect(diag).toBeDefined();
     expect(diag?.value).toBe("slug");
   });
@@ -808,7 +839,7 @@ spec:
     properties:
       slug: { type: string, pattern: "(unterminated" }
 `);
-    const diag = result.diagnostics.find((d) => d.code === "INVALID_PATTERN");
+    const diag = result.diagnostics.find(d => d.code === "INVALID_PATTERN");
     expect(diag).toBeDefined();
   });
 });
@@ -824,7 +855,8 @@ spec:
 `;
 
   it("accepts recursive local refs, oneOf, const, and schema-valued additionalProperties", () => {
-    const result = parseManifests(procedure(`
+    const result = parseManifests(
+      procedure(`
     type: object
     $defs:
       node:
@@ -838,7 +870,8 @@ spec:
     properties:
       root: { $ref: '#/$defs/node' }
       counts: { type: object, additionalProperties: { type: integer } }
-  `));
+  `),
+    );
     expect(result.diagnostics).toEqual([]);
   });
 
@@ -847,20 +880,68 @@ spec:
     ["unresolved refs", `{ $ref: '#/$defs/missing' }`, "JSON_SCHEMA_REF_INVALID"],
     ["unsupported composition", `{ allOf: [{ type: string }, { type: number }] }`, "JSON_SCHEMA_UNSUPPORTED"],
     // a $ref that reaches itself without reading a level of the value: every validation would overflow the stack
-    ["a $ref to itself", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
-    ["a $ref cycle through oneOf", `{ type: object, $defs: { a: { oneOf: [{ $ref: '#/$defs/b' }, { type: string }] }, b: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
+    [
+      "a $ref to itself",
+      `{ type: object, $defs: { a: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`,
+      "JSON_SCHEMA_REF_INVALID",
+    ],
+    [
+      "a $ref cycle through oneOf",
+      `{ type: object, $defs: { a: { oneOf: [{ $ref: '#/$defs/b' }, { type: string }] }, b: { $ref: '#/$defs/a' } }, properties: { x: { $ref: '#/$defs/a' } } }`,
+      "JSON_SCHEMA_REF_INVALID",
+    ],
     ["a $ref cycle nothing reads", `{ type: object, $defs: { a: { $ref: '#/$defs/a' } } }`, "JSON_SCHEMA_REF_INVALID"],
-    ["a pattern with nested quantifiers", `{ type: object, properties: { s: { type: string, pattern: '^(a+)+$' } } }`, "INVALID_PATTERN"],
-    ["a pattern repeating an alternation", `{ type: object, properties: { s: { type: string, pattern: '^(a|aa)*$' } } }`, "INVALID_PATTERN"],
-    ["a pattern with a backreference", `{ type: object, properties: { s: { type: string, pattern: '^(a)\\1$' } } }`, "INVALID_PATTERN"],
+    [
+      "a pattern with nested quantifiers",
+      `{ type: object, properties: { s: { type: string, pattern: '^(a+)+$' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "a pattern repeating an alternation",
+      `{ type: object, properties: { s: { type: string, pattern: '^(a|aa)*$' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "a pattern with a backreference",
+      `{ type: object, properties: { s: { type: string, pattern: '^(a)\\1$' } } }`,
+      "INVALID_PATTERN",
+    ],
     // adjacent variable quantifiers backtrack polynomially: maxLength^k past the work bound, or no maxLength at all
-    ["twelve adjacent a*", `{ type: object, properties: { s: { type: string, maxLength: 31, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' } } }`, "INVALID_PATTERN"],
-    ["eight adjacent \\w*", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '\\w*\\w*\\w*\\w*\\w*\\w*\\w*\\w*$' } } }`, "INVALID_PATTERN"],
-    ["four quantified groups in a row", `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '(a*)(a*)(a*)(a*)' } } }`, "INVALID_PATTERN"],
-    ["a variable pattern without maxLength", `{ type: object, properties: { s: { type: string, pattern: '^[a-z0-9-]+$' } } }`, "INVALID_PATTERN"],
-    ["a variable pattern in items without maxLength", `{ type: object, properties: { s: { type: array, items: { type: string, pattern: '^[^@]+@[^@]+$' } } } }`, "INVALID_PATTERN"],
-    ["a variable pattern in $defs past the bound", `{ type: object, $defs: { e: { type: string, maxLength: 3163, pattern: '^[^@]+@[^@]+$' } }, properties: { s: { $ref: '#/$defs/e' } } }`, "INVALID_PATTERN"],
-    ["an enum of more than 1000 values", `{ type: object, properties: { s: { enum: [${Array.from({ length: 1001 }, (_, i) => i).join(", ")}] } } }`, "JSON_SCHEMA_LIMIT_EXCEEDED"],
+    [
+      "twelve adjacent a*",
+      `{ type: object, properties: { s: { type: string, maxLength: 31, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "eight adjacent \\w*",
+      `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '\\w*\\w*\\w*\\w*\\w*\\w*\\w*\\w*$' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "four quantified groups in a row",
+      `{ type: object, properties: { s: { type: string, maxLength: 100, pattern: '(a*)(a*)(a*)(a*)' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "a variable pattern without maxLength",
+      `{ type: object, properties: { s: { type: string, pattern: '^[a-z0-9-]+$' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "a variable pattern in items without maxLength",
+      `{ type: object, properties: { s: { type: array, items: { type: string, pattern: '^[^@]+@[^@]+$' } } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "a variable pattern in $defs past the bound",
+      `{ type: object, $defs: { e: { type: string, maxLength: 3163, pattern: '^[^@]+@[^@]+$' } }, properties: { s: { $ref: '#/$defs/e' } } }`,
+      "INVALID_PATTERN",
+    ],
+    [
+      "an enum of more than 1000 values",
+      `{ type: object, properties: { s: { enum: [${Array.from({ length: 1001 }, (_, i) => i).join(", ")}] } } }`,
+      "JSON_SCHEMA_LIMIT_EXCEEDED",
+    ],
   ])("rejects %s with a stable diagnostic", (_label, input, code) => {
     const result = parseManifests(procedure(input));
     expect(result.diagnostics[0]?.code).toBe(code);
@@ -868,8 +949,14 @@ spec:
 });
 
 describe("input rules (dependentRequired, anyOf, if/then/else)", () => {
-  const rule = { dependentRequired: "{ a: [b] }", anyOf: "[{ required: [a] }]", if: "{ properties: { a: { const: x } }, required: [a] }", then: "{ required: [b] }" };
-  const object = (rules: string) => `{ type: object, properties: { a: { type: string }, b: { type: string } }, ${rules} }`;
+  const rule = {
+    dependentRequired: "{ a: [b] }",
+    anyOf: "[{ required: [a] }]",
+    if: "{ properties: { a: { const: x } }, required: [a] }",
+    then: "{ required: [b] }",
+  };
+  const object = (rules: string) =>
+    `{ type: object, properties: { a: { type: string }, b: { type: string } }, ${rules} }`;
   const procedure = (input: string, output = "{ type: object }") => `apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: { name: rules }
@@ -879,7 +966,17 @@ spec:
   handler: { ref: rules }
 `;
   it("parse in Procedure input; generation checks their shapes", () => {
-    expect(parseManifests(procedure(object(Object.entries(rule).map(([k, v]) => `${k}: ${v}`).join(", ")))).diagnostics).toEqual([]);
+    expect(
+      parseManifests(
+        procedure(
+          object(
+            Object.entries(rule)
+              .map(([k, v]) => `${k}: ${v}`)
+              .join(", "),
+          ),
+        ),
+      ).diagnostics,
+    ).toEqual([]);
   });
   it.each(Object.entries(rule))("refuses %s in a Procedure output and a Schema", (keyword, value) => {
     const schema = `apiVersion: cms.mantle.aotter.net/v2
@@ -890,7 +987,10 @@ spec:
   schema: ${object(`${keyword}: ${value}`)}
 `;
     for (const text of [procedure("{ type: object }", object(`${keyword}: ${value}`)), schema]) {
-      expect(parseManifests(text).diagnostics[0]).toMatchObject({ code: "JSON_SCHEMA_UNSUPPORTED", message: expect.stringContaining(`'${keyword}', which is supported only in View and Procedure input`) });
+      expect(parseManifests(text).diagnostics[0]).toMatchObject({
+        code: "JSON_SCHEMA_UNSUPPORTED",
+        message: expect.stringContaining(`'${keyword}', which is supported only in View and Procedure input`),
+      });
     }
   });
 });
@@ -913,32 +1013,56 @@ spec:
   });
   it("names the bound and the fix", () => {
     const [missing] = input(`{ type: string, pattern: '^[^@]+@[^@]+$' }`);
-    expect([missing?.code, missing?.path]).toEqual(["INVALID_PATTERN", "manifest:doc/0#/spec/input/properties/s/pattern"]);
+    expect([missing?.code, missing?.path]).toEqual([
+      "INVALID_PATTERN",
+      "manifest:doc/0#/spec/input/properties/s/pattern",
+    ]);
     expect(missing?.message).toMatch(/maxLength of at most 3162/);
     const [over] = input(`{ type: string, maxLength: 4, pattern: '^a*a*a*a*a*a*a*a*a*a*a*a*$' }`);
     expect(over?.message).toMatch(/maxLength\^12.*maxLength of at most 3\b.*fewer variable quantifiers/s);
     const [paths] = input(`{ type: string, pattern: '^${"(a|b)".repeat(24)}$' }`);
     expect(paths?.message).toMatch(/16777216 alternative paths.*fewer alternatives/s);
     // an unanchored pattern is retried at every offset: one more factor of maxLength
-    expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 215\b/);
-    expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(/maxLength of at most 3162\b/);
+    expect(input(`{ type: string, maxLength: 3162, pattern: '[a-z]*[a-z]*!' }`)[0]?.message).toMatch(
+      /maxLength of at most 215\b/,
+    );
+    expect(input(`{ type: string, maxLength: 100000, pattern: '[a-z]*!' }`)[0]?.message).toMatch(
+      /maxLength of at most 3162\b/,
+    );
   });
-  it("the worst accepted shape at its maxLength validates in well under 100 ms", () => {
-    for (const [pattern, maxLength] of [["^a*a*a*a*a*a*a*a*a*a*a*a*$", 3], ["^.*.*.*.*.*.*.*$", 10], ["^[^@]+@[^@]+$", 3162], ["^[a-z0-9-]+$", 100_000], ["[a-z]*[a-z]*!", 215], ["[a-z]*!", 3162], ["^[^]a*a*]?$", 215], [`^${"(a|a)".repeat(23)}a*$`, 1]] as const) {
-      expect(input(`{ type: string, maxLength: ${maxLength}, pattern: '${pattern}' }`)).toEqual([]);
-      const zs = jsonSchemaToZod({ type: "string", maxLength, pattern });
-      const worst = "a".repeat(maxLength - 1) + "!";
-      const started = performance.now();
-      zs.safeParse(worst);
-      zs.safeParse("a".repeat(maxLength + 1) + "!");
-      expect(performance.now() - started).toBeLessThan(100);
-    }
+  it("takes x-mantle-maxBytes as the bound when it is the smaller one", () => {
+    expect(input(`{ type: string, x-mantle-maxBytes: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, maxLength: 9999, x-mantle-maxBytes: 3162, pattern: '^[^@]+@[^@]+$' }`)).toEqual([]);
+    expect(input(`{ type: string, x-mantle-maxBytes: 3163, pattern: '^[^@]+@[^@]+$' }`)[0]?.code).toBe(
+      "INVALID_PATTERN",
+    );
   });
-  it("a string past maxLength is refused before its pattern runs", () => {
-    const zs = jsonSchemaToZod({ type: "object", properties: { s: { type: "string", maxLength: 3, pattern: "^a*a*a*a*a*a*a*a*a*a*a*a*$" } } });
-    const started = performance.now();
-    const result = zs.safeParse({ s: "a".repeat(30) + "b" });
-    expect(performance.now() - started).toBeLessThan(100);
-    expect(result.error?.issues.map((i) => i.code)).toEqual(["too_big"]);
+});
+
+describe("x-mantle-maxBytes", () => {
+  const input = (s: string) =>
+    parseManifests(`apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: bounded }
+spec:
+  input: { type: object, properties: { s: ${s} } }
+  output: { type: object }
+  handler: { ref: bounded }
+`).diagnostics;
+  it("is a positive integer on a string schema", () => {
+    expect(input(`{ type: string, x-mantle-maxBytes: 1 }`)).toEqual([]);
+    expect(input(`{ type: [string, "null"], x-mantle-maxBytes: 256 }`)).toEqual([]);
+    for (const s of [
+      `{ type: string, x-mantle-maxBytes: 0 }`,
+      `{ type: string, x-mantle-maxBytes: 1.5 }`,
+      `{ type: string, x-mantle-maxBytes: "8" }`,
+      `{ type: integer, x-mantle-maxBytes: 8 }`,
+      `{ x-mantle-maxBytes: 8 }`,
+    ])
+      expect(input(s)[0], s).toMatchObject({
+        code: "JSON_SCHEMA_UNSUPPORTED",
+        path: "manifest:doc/0#/spec/input/properties/s/x-mantle-maxBytes",
+        message: expect.stringContaining("x-mantle-maxBytes at /spec/input/properties/s must be a positive integer"),
+      });
   });
 });

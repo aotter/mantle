@@ -1,4 +1,4 @@
-# Recipes. The parent row is the default locale (zh-TW); recipe_translations holds each other locale (en, ...).
+# Recipes. The parent row is the default locale (en); recipe_translations holds the French (fr) text.
 # Both use the publishing lifecycle: Admin creates drafts, publish makes them visible to visitors.
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -13,7 +13,10 @@ spec:
     required: [slug, title, summary, ingredients, steps, total_minutes, servings]
     properties:
       slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
-      title: {type: string}
+      title:
+        type: string
+        title: Title (English)
+        description: "Default-language content. Publish this recipe in Shared fields before publishing its French translation."
       summary: {type: string, description: "One or two sentences; used as the meta description."}
       ingredients: {type: string, description: "One ingredient per line."}
       steps: {type: string, description: "One step per line."}
@@ -37,13 +40,18 @@ spec:
   # A translation publishes only while its parent is published.
   translates: {parent: recipes, on: slug}
   uniqueIndexes: [[slug, locale]]
+  # A locale's list page (published_translations) reads its rows in id order.
+  indexes: [[locale, id]]
   schema:
     type: object
     required: [slug, locale, title, summary, ingredients, steps]
     properties:
       slug: {type: string, maxLength: 80}
-      locale: {type: string, description: "BCP 47 tag, e.g. en"}
-      title: {type: string}
+      locale: {type: string, enum: [fr], description: "BCP 47 tag. AGENT: the locales of src/site-config.ts other than the default; a locale outside it has no page."}
+      title:
+        type: string
+        title: Title (French)
+        description: "Translate the recipe here. Publish its English parent in Shared fields first."
       summary: {type: string}
       ingredients: {type: string}
       steps: {type: string}
@@ -53,15 +61,71 @@ spec:
       ingredients: {widget: textarea}
       steps: {widget: textarea}
 ---
-# Visitor list for the default locale. Public Views return published rows only.
+# Page Views read one row by its key and return everything the page and its `.md` alternate need. Public Views return
+# published rows only. `markdown` is the whole recipe: text composed with `||` from text fields stays typed text on
+# every target (a number or a function call would not, so it has no cooking time).
+# The default locale's recipe page; `slug` is the unique index on `recipes`.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: recipe}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}}
+  sql: |
+    SELECT slug, title, summary AS description, ingredients, steps, total_minutes, servings, cover_url, published_at, updated_at,
+      '# ' || title || E'\n\n' || summary || E'\n\n## Ingredients\n\n' || ingredients || E'\n\n## Steps\n\n' || steps || E'\n' AS markdown
+    FROM recipes WHERE slug = input.slug ORDER BY id
+---
+# A translated recipe page, with the parent's total_minutes, servings and cover_url; `(slug, locale)` is the unique
+# index on `recipe_translations`. A translation is hidden while its parent is unpublished (Core adds that to every read).
+# AGENT: use the translation language's Markdown headings here; pick by locale if you support several.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: recipe_translation}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [locale, slug]
+    additionalProperties: false
+    properties:
+      locale: {type: string, minLength: 2, maxLength: 35}
+      slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}
+  sql: |
+    SELECT t.locale, t.slug, t.title, t.summary AS description, t.ingredients, t.steps, r.total_minutes, r.servings,
+      r.cover_url, t.published_at, t.updated_at,
+      '# ' || t.title || E'\n\n' || t.summary || E'\n\n## Ingrédients\n\n' || t.ingredients || E'\n\n## Étapes\n\n' || t.steps || E'\n' AS markdown
+    FROM recipe_translations t JOIN recipes r ON r.slug = t.slug
+    WHERE t.slug = input.slug AND t.locale = input.locale ORDER BY t.id
+---
+# The locales a recipe is translated into, for hreflang: `slug` is the first column of the unique index (slug, locale).
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: recipe_locales}
+spec:
+  surface: public
+  input:
+    type: object
+    required: [slug]
+    additionalProperties: false
+    properties: {slug: {type: string, pattern: "^[a-z0-9-]+$", maxLength: 80}}
+  sql: SELECT locale FROM recipe_translations WHERE slug = input.slug ORDER BY id
+---
+# List Views return only what a list item, the sitemap and llms.txt need: never the body. web() still links each
+# row's `.md` because the page declares `markdown`.
+# The default locale's list page, and its rows in sitemap.xml and llms.txt.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: published_recipes}
 spec:
   surface: public
-  sql: SELECT id, slug, title, summary FROM recipes ORDER BY id
+  sql: SELECT slug, title, summary AS description, updated_at FROM recipes ORDER BY id
 ---
-# Visitor list for one translated locale; a translation is hidden while its parent is unpublished.
+# One translated locale's list page; reads the (locale, id) index.
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: published_translations}
@@ -72,4 +136,12 @@ spec:
     required: [locale]
     additionalProperties: false
     properties: {locale: {type: string, minLength: 2, maxLength: 35}}
-  sql: SELECT id, slug, title, summary FROM recipe_translations WHERE locale = input.locale ORDER BY id
+  sql: SELECT slug, title, summary AS description FROM recipe_translations WHERE locale = input.locale ORDER BY id
+---
+# Every translation in every locale, for sitemap.xml and llms.txt (a web() list takes no input).
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: translation_index}
+spec:
+  surface: public
+  sql: SELECT locale, slug, title, summary AS description, updated_at FROM recipe_translations ORDER BY id

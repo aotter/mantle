@@ -22,7 +22,7 @@ Core (SDK producer)
   -> published npm contract
 mantle-starters (external consumer and bundle producer)
   -> immutable provision bundle
-mantle-landing (provisioner)   Core CLI (`mantle create`)
+landing site (provisioner)     Core CLI (`mantle create`)
 ```
 
 > **Amended 2026-08-19 (#699).** The chain above is no longer linear. Core's

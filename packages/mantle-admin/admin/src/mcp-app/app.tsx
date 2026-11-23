@@ -1,9 +1,26 @@
-import { createContext, useContext, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createInteractionController, type InteractionController } from "@aotter/mantle-ui/controller";
 import { OperationPanel } from "@aotter/mantle-ui";
-import { SchemaFields, applyFieldEdits } from "@aotter/mantle-ui/kit";
+import { Button, SchemaFields, Skeleton, applyFieldEdits } from "@aotter/mantle-ui/kit";
 import { useInteraction } from "@aotter/mantle-ui";
-import { nativeTimestamp, propertyLabel, renderDataValue, resolveLocalizedText, timestampHint, withNativeSchema, type FieldSchema } from "@aotter/mantle-ui";
+import {
+  nativeTimestamp,
+  propertyLabel,
+  renderDataValue,
+  resolveLocalizedText,
+  timestampHint,
+  withNativeSchema,
+  type FieldSchema,
+} from "@aotter/mantle-ui";
 import {
   actionsFor,
   diagnosticsOf,
@@ -21,41 +38,70 @@ import {
   type ToolResult,
 } from "../../../src/app/bridge";
 import { web, type HostApi } from "./postmessage";
+import { cursorAfter, rowId, type ShownView } from "./app-tools";
 import { useLoadMore } from "../lib/use-load-more";
-import { Slot, useViewCellNames } from "../app/slots";
+import { HostLink, Slot, useViewCellNames } from "../app/slots";
 import type { CellProps } from "../app/slot-props";
+import type { HostRequestOutcome } from "../app/hooks";
 import { appLabels, type AppLabels } from "./locale";
+import { csvText } from "../../../src/csv";
+import { operationForm, operationInitialInput } from "../features/ops/interaction-schema";
 
 type Row = Readonly<Record<string, unknown>>;
 
 /** A View column's label: its field's title in the host's language, the entry's own timestamps in the App's, else the name humanized, as Admin. */
 function columnLabel(name: string, schema: FieldSchema | undefined, language: string, labels: AppLabels): string {
   const native = nativeTimestamp(name);
-  return resolveLocalizedText(schema?.title, language) == null && native ? labels[native] : propertyLabel(name, schema, language);
+  return resolveLocalizedText(schema?.title, language) == null && native
+    ? labels[native]
+    : propertyLabel(name, schema, language);
 }
 
 /**
  * A value as the App shows it: a date-time in the host's language and time zone, an http(s) link opened through the host
  * (`ui/open-link`, as the sandbox blocks navigation), anything else as Admin shows it.
  */
-export function appValue(schema: FieldSchema | undefined, value: unknown, language: string, timeZone?: string, openLink?: HostApi["openLink"]): ReactNode {
-  const time = timestampHint(schema) && typeof value === "number" ? value : schema?.format === "date-time" && typeof value === "string" ? Date.parse(value) : NaN;
+export function appValue(
+  schema: FieldSchema | undefined,
+  value: unknown,
+  language: string,
+  timeZone?: string,
+  openLink?: HostApi["openLink"],
+): ReactNode {
+  const time =
+    timestampHint(schema) && typeof value === "number"
+      ? value
+      : schema?.format === "date-time" && typeof value === "string"
+        ? Date.parse(value)
+        : NaN;
   if (Number.isFinite(time)) {
     try {
-      const text = new Intl.DateTimeFormat(language, { dateStyle: "short", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(time);
+      const text = new Intl.DateTimeFormat(language, {
+        dateStyle: "short",
+        timeStyle: "short",
+        ...(timeZone ? { timeZone } : {}),
+      }).format(time);
       return typeof value === "string" ? <time dateTime={value}>{text}</time> : text;
     } catch {
       // an unknown language tag: Admin's own formatting
     }
   }
   if (openLink && schema?.format === "uri" && typeof value === "string" && web(value)) {
-    return <a href={value} className="underline" onClick={(event) => { event.preventDefault(); void openLink(value); }}>{value}</a>;
+    return (
+      <HostLink href={value} className="underline" openLink={openLink}>
+        {value}
+      </HostLink>
+    );
   }
   return renderDataValue(schema, value, language);
 }
 
 /** What a cell needs of the App around it, so the `cell:view:` slots' props stay the public ones. */
-const CellEnv = createContext<{ readonly language: string; readonly timeZone: string | undefined; readonly openLink: HostApi["openLink"] | undefined }>({ language: "en", timeZone: undefined, openLink: undefined });
+const CellEnv = createContext<{
+  readonly language: string;
+  readonly timeZone: string | undefined;
+  readonly openLink: HostApi["openLink"] | undefined;
+}>({ language: "en", timeZone: undefined, openLink: undefined });
 
 /** The built-in cell: the value as the App shows it. */
 function AppCell({ value, property }: CellProps): ReactNode {
@@ -64,7 +110,17 @@ function AppCell({ value, property }: CellProps): ReactNode {
 }
 
 /** One column's value, through the application's `cell:view:` components for the View. */
-function ViewCell({ tool, column, row, property }: { tool: string | null; column: string; row: Row; property: FieldSchema | undefined }): ReactNode {
+function ViewCell({
+  tool,
+  column,
+  row,
+  property,
+}: {
+  tool: string | null;
+  column: string;
+  row: Row;
+  property: FieldSchema | undefined;
+}): ReactNode {
   const names = useViewCellNames(tool ?? "", column);
   return <Slot name={names} Default={AppCell} props={{ value: row[column], row, property }} />;
 }
@@ -91,8 +147,22 @@ export function MantleApp(props: {
   readonly locale?: string;
   /** The host's IANA time zone, for date-times. */
   readonly timeZone?: string;
-  /** The application's pages declared for a View (`pages[].mcp`), by that View's tool: shown instead of the rows when the host's tool is theirs. */
+  /**
+   * The application's pages declared for a tool (`pages[].mcp`), by tool name: shown instead of a View's rows, or for a
+   * Procedure's result, when the host's tool is theirs.
+   */
   readonly pages?: Readonly<Record<string, ReactNode>>;
+  /**
+   * Asks the host for full screen, inside the click that calls it; absent unless the App is in the conversation and the
+   * host may grant it. A row action calls it as it opens.
+   */
+  readonly expand?: () => void;
+  /**
+   * The conversation's height cap, with `expand`: the rows shown are as many as fit under it (at least one), and one
+   * button under them opens the rest in full screen. The App never scrolls inside the conversation (Claude's design
+   * guidelines: no nested scrolling, and a touch screen pans the conversation).
+   */
+  readonly maxHeight?: number;
 }): ReactNode {
   const { call, capabilities } = props.host;
   const openLink = capabilities.openLinks ? props.host.openLink : undefined;
@@ -100,15 +170,75 @@ export function MantleApp(props: {
   const language = props.locale ?? "en";
   const tool = props.result ? toolOf(props.result, props.hostTool) : null;
   // a View the catalog does not describe still shows its rows, with nothing to open
-  const view = tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
-  const [pages, dispatch] = useReducer(pagesReducer, undefined, () => pagesReducer(NO_PAGES, { type: "reset", result: props.result }));
+  const view =
+    tool && Object.prototype.hasOwnProperty.call(props.catalog.views, tool) ? props.catalog.views[tool]! : BARE_VIEW;
+  const [pages, dispatch] = useReducer(pagesReducer, undefined, () =>
+    pagesReducer(NO_PAGES, { type: "reset", result: props.result }),
+  );
   const { rows, cursor, more } = pages;
   const [stale, setStale] = useState(false);
   const [open, setOpen] = useState<{ row: Row; action: AppRowAction } | null>(null);
+  // the row the model asked to see (`view_focus`); a new object each time, so asking again scrolls again
+  const [focused, setFocused] = useState<{ id: string } | null>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+  // How many rows fit under the cap, measured for these rows, this cap and this width; null shows every row. A new
+  // measurement renders every row first, before the browser paints.
+  const [fit, setFit] = useState<{ rows: unknown; cap: unknown; width: number; limit: number | null } | null>(null);
+  const [width, setWidth] = useState(() =>
+    typeof document === "undefined" ? 0 : document.documentElement.clientWidth,
+  );
+  // The document's size changes with no render of its own too (a host font that arrives late, an image in a cell): each
+  // change renders again, so a new width measures again and content grown past the cap shows one row fewer.
+  const [, resized] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const observer = new ResizeObserver(() => {
+      setWidth(root.clientWidth);
+      resized();
+    });
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, []);
+  const cap = props.expand ? props.maxHeight : undefined;
+  const measured = fit !== null && fit.rows === rows && fit.cap === cap && fit.width === width;
+  const limit = measured ? fit.limit : null;
+  // the page Load more asked for last, as "generation:cursor"
+  const asked = useRef<string | null>(null);
   useEffect(() => {
     dispatch({ type: "reset", result: props.result });
     setStale(false);
+    setFocused(null);
   }, [props.result]);
+  // a row past the cap is scrolled to once it shows, in full screen
+  useEffect(() => {
+    const index = focused && rows ? rows.findIndex(row => rowId(row) === focused.id) : -1;
+    list.current?.children[index]?.scrollIntoView({ block: "nearest" });
+  }, [focused, limit]);
+  useLayoutEffect(() => {
+    const items = list.current?.children,
+      last = end.current;
+    if (cap === undefined || !items?.length || !last) return;
+    const root = document.documentElement,
+      top = root.getBoundingClientRect().top,
+      padding = parseFloat(getComputedStyle(root).paddingBottom) || 0;
+    // the document's height if it ended at this element's bottom: the root's own height may still be full screen's
+    const bottom = (element: Element) => element.getBoundingClientRect().bottom - top + padding;
+    const height = bottom(last);
+    if (!measured) {
+      let count = items.length;
+      if (height > cap) {
+        const below = height - bottom(items[items.length - 1]!);
+        count = 1;
+        while (count < items.length && bottom(items[count]!) + below <= cap) count++;
+      }
+      setFit({ rows, cap, width, limit: count < items.length ? count : null });
+    } else if (limit !== null && limit > 1 && height > cap) {
+      // the button under the rows is taller than what the measurement counted below them
+      setFit({ rows, cap, width, limit: limit - 1 });
+    }
+  });
 
   const refresh = async () => {
     if (!tool || !call) return;
@@ -122,19 +252,68 @@ export function MantleApp(props: {
     }
   };
 
-  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay
-  const loadMore = async () => {
-    if (!tool || !call || !cursor) return;
+  // the same View tool and input through the host, at the cursor of the page shown last; the rows already shown stay.
+  // Only the button's start() announces the rows added: rows view_more loads were asked for by the model, not the person.
+  // The page is marked as asked for before the call: a second ask in the same task (parallel view_more calls, the button)
+  // still sees the last render's state, so it is refused here. A failed or cancelled read can be asked for again.
+  const nextPage = `${pages.generation}:${cursor}`;
+  const loadMore = async (signal?: AbortSignal) => {
+    if (!tool || !call || !cursor || asked.current === nextPage) return null;
+    asked.current = nextPage;
     const { generation } = pages;
     dispatch({ type: "loading" });
-    try {
-      dispatch({ type: "loaded", generation, result: await call(tool, { ...props.input, cursor }) });
-    } catch {
-      dispatch({ type: "failed", generation });
-    }
+    const result = await call(tool, { ...props.input, cursor }, signal).catch(() => null);
+    dispatch(result ? { type: "loaded", generation, result } : { type: "failed", generation });
+    if ((!result || !rowsOf(result)) && asked.current === nextPage) asked.current = null;
+    return result;
   };
 
-  if (!props.result) return <p className="text-muted-foreground p-4 text-sm">{props.cancelled ? labels.viewCancelled : labels.waiting}</p>;
+  const page =
+    tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool) ? props.pages[tool] : undefined;
+  // what the App's own tools read: the rows while they are on screen, not under a page or a row action
+  const shown = useRef<ShownView | null>(null);
+  useEffect(() => {
+    shown.current =
+      rows && page === undefined && !(open && tool && call)
+        ? {
+            tool,
+            input: props.input ?? {},
+            rows,
+            cursor,
+            get loading() {
+              return asked.current === nextPage;
+            },
+            generation: pages.generation,
+            ...(call ? { loadMore } : {}),
+            focus: id => {
+              if (!rows.some(row => rowId(row) === id)) return false;
+              setFocused({ id });
+              return true;
+            },
+            ...(limit !== null ? { inline: limit } : {}),
+          }
+        : null;
+  });
+  useEffect(() => {
+    props.host.serveTools(() => shown.current);
+    return () => props.host.serveTools(undefined);
+  }, [props.host]);
+
+  if (!props.result)
+    return (
+      <div role="status" className="grid gap-2 p-4 text-sm text-muted-foreground">
+        {props.cancelled ? (
+          labels.viewCancelled
+        ) : (
+          <>
+            <span className="sr-only">{labels.waiting}</span>
+            <Skeleton aria-hidden className="h-8 w-full" />
+          </>
+        )}
+      </div>
+    );
+  // a Procedure's result has no rows: its page is shown for any result that is not a failure
+  if (!rows && page !== undefined && !props.result.isError) return <div data-slot="app-page">{page}</div>;
   if (!rows) {
     const failure = diagnosticsOf(props.result)[0]?.message;
     return (
@@ -154,52 +333,93 @@ export function MantleApp(props: {
         labels={labels}
         locale={props.locale}
         onClose={() => setOpen(null)}
-        onDone={() => { void refresh(); }}
+        onDone={() => {
+          void refresh();
+        }}
         // the model reads the change at its next turn; the App never speaks for the user (`ui/message`)
-        onSucceeded={() => { void props.host.updateModelContext({
-          content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}.` }],
-          structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
-        }); }}
+        onSucceeded={() => {
+          void props.host.updateModelContext({
+            content: [{ type: "text", text: `${open.action.capability} succeeded on row ${String(open.row["id"])}.` }],
+            structuredContent: { tool: open.action.capability, id: String(open.row["id"]), outcome: "succeeded" },
+          });
+        }}
       />
     );
   }
   // the page reads its own data through the hooks, so a View's rows are not shown beside it
-  if (tool && props.pages && Object.prototype.hasOwnProperty.call(props.pages, tool)) return <div data-slot="app-page">{props.pages[tool]}</div>;
-  const notice = stale ? <p role="status" className="text-destructive px-3 pt-3 text-sm">{labels.refreshFailed}</p> : null;
-  if (rows.length === 0) return <>{notice}<p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p></>;
+  if (page !== undefined) return <div data-slot="app-page">{page}</div>;
+  const notice = stale ? (
+    <p role="status" className="text-destructive px-3 pt-3 text-sm">
+      {labels.refreshFailed}
+    </p>
+  ) : null;
+  if (rows.length === 0)
+    return (
+      <>
+        {notice}
+        <p className="text-muted-foreground p-4 text-sm">{labels.nothing}</p>
+      </>
+    );
   const columns = columnsOf(view, rows);
   return (
     <CellEnv.Provider value={{ language, timeZone: props.timeZone, openLink }}>
       {notice}
-      <ul data-slot="app-rows" className="grid gap-2 p-3">
-        {rows.map((row, index) => {
+      {tool ? (
+        <ExportRows
+          labels={labels}
+          csv={() => csvText(columns, rows)}
+          onExport={
+            capabilities.downloadFile ? text => props.host.downloadFile(`${tool}.csv`, text, "text/csv") : undefined
+          }
+        />
+      ) : null}
+      <ul ref={list} data-slot="app-rows" className="grid gap-2 p-3">
+        {(limit === null ? rows : rows.slice(0, limit)).map((row, index) => {
           const id = typeof row["id"] === "string" ? row["id"] : undefined;
           const actions = call ? actionsFor(props.catalog, view, row) : [];
           return (
-            <li key={id ?? index} className="grid gap-2 rounded-md border p-3 text-sm">
-              <dl className="grid grid-cols-[minmax(5rem,auto)_1fr] gap-x-3 gap-y-1">
-                {columns.map((field) => (
+            <li
+              key={id ?? index}
+              aria-current={focused && rowId(row) === focused.id ? "true" : undefined}
+              className="aria-[current=true]:ring-ring grid min-w-0 gap-3 rounded-lg border bg-card p-3 text-sm text-card-foreground aria-[current=true]:ring-2"
+            >
+              <dl className="grid grid-cols-[minmax(5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                {columns.map(field => (
                   <div key={field} className="contents">
-                    <dt className="text-muted-foreground">{columnLabel(field, view.columns[field], language, labels)}</dt>
-                    <dd className="break-words"><ViewCell tool={tool} column={field} row={row} property={withNativeSchema(field, view.columns[field])} /></dd>
+                    <dt className="text-muted-foreground">
+                      {columnLabel(field, view.columns[field], language, labels)}
+                    </dt>
+                    <dd className="min-w-0 break-words">
+                      <ViewCell
+                        tool={tool}
+                        column={field}
+                        row={row}
+                        property={withNativeSchema(field, view.columns[field])}
+                      />
+                    </dd>
                   </div>
                 ))}
               </dl>
               {actions.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {actions.map((action) => {
+                <div className="flex flex-wrap justify-end gap-2 border-t pt-2">
+                  {actions.map(action => {
                     const title = resolveLocalizedText(action.title, language) ?? action.capability;
                     return (
-                      <button
+                      <Button
                         key={action.capability}
                         type="button"
                         // Every row repeats the same buttons; name the row too.
                         aria-label={id ? `${title}: ${id}` : undefined}
-                        className="rounded-md border px-3 py-1 font-medium"
-                        onClick={() => setOpen({ row: { ...row }, action })}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // a form is no inline content: full screen, asked within this click; it opens either way
+                          props.expand?.();
+                          setOpen({ row: { ...row }, action });
+                        }}
                       >
                         {title}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
@@ -208,7 +428,25 @@ export function MantleApp(props: {
           );
         })}
       </ul>
-      {call ? <MoreRows count={rows.length} hasMore={cursor !== undefined} more={more} labels={labels} onMore={() => { void loadMore(); }} /> : null}
+      {limit !== null ? (
+        <div className="px-3 pb-3">
+          <Button type="button" variant="outline" size="sm" onClick={props.expand}>
+            {labels.moreRows.replace("{count}", `${rows.length - limit}${cursor !== undefined ? "+" : ""}`)}
+          </Button>
+        </div>
+      ) : call ? (
+        <MoreRows
+          count={rows.length}
+          hasMore={cursor !== undefined}
+          more={more}
+          labels={labels}
+          onMore={() => {
+            void loadMore();
+          }}
+        />
+      ) : null}
+      {/* where the App's content ends, whatever height the root has */}
+      <div ref={end} />
     </CellEnv.Provider>
   );
 }
@@ -229,22 +467,118 @@ type PagesAction =
 
 /** A new or refreshed result replaces the list and ends any load in flight: its page, when it arrives, is for a list that is gone. */
 export function pagesReducer(state: Pages, action: PagesAction): Pages {
-  if (action.type === "reset") return { rows: action.result ? rowsOf(action.result) : null, cursor: action.result ? nextCursorOf(action.result) : undefined, more: "idle", generation: state.generation + 1 };
+  if (action.type === "reset")
+    return {
+      rows: action.result ? rowsOf(action.result) : null,
+      cursor: action.result ? nextCursorOf(action.result) : undefined,
+      more: "idle",
+      generation: state.generation + 1,
+    };
   if (action.type === "loading") return { ...state, more: "loading" };
   if (action.generation !== state.generation) return state;
   if (action.type === "failed") return { ...state, more: "failed" };
   const next = rowsOf(action.result);
-  return next ? { ...state, rows: [...(state.rows ?? []), ...next], cursor: nextCursorOf(action.result), more: "idle" } : { ...state, more: "failed" };
+  return next
+    ? {
+        ...state,
+        rows: [...(state.rows ?? []), ...next],
+        cursor: cursorAfter(state.cursor, action.result),
+        more: "idle",
+      }
+    : { ...state, more: "failed" };
 }
 
 /** "Load more" under the rows: busy while loading; `useLoadMore` announces the rows added and keeps focus. */
-function MoreRows(props: { readonly count: number; readonly hasMore: boolean; readonly more: Pages["more"]; readonly labels: AppLabels; readonly onMore: () => void }): ReactNode {
-  const { box, status, start } = useLoadMore({ count: props.count, hasMore: props.hasMore, loading: props.more === "loading", message: (added) => props.labels.rowsLoaded.replace("{count}", String(added)) });
+function MoreRows(props: {
+  readonly count: number;
+  readonly hasMore: boolean;
+  readonly more: Pages["more"];
+  readonly labels: AppLabels;
+  readonly onMore: () => void;
+}): ReactNode {
+  const { box, status, start } = useLoadMore({
+    count: props.count,
+    hasMore: props.hasMore,
+    loading: props.more === "loading",
+    message: added => props.labels.rowsLoaded.replace("{count}", String(added)),
+  });
   return (
-    <div ref={box} tabIndex={-1} aria-busy={props.more === "loading"} className="grid justify-items-start gap-2 px-3 pb-3 outline-none">
-      <span role="status" className="sr-only">{status}</span>
-      {props.more === "failed" ? <p role="alert" className="text-destructive text-sm">{props.labels.loadMoreFailed}</p> : null}
-      {props.hasMore ? <button type="button" className="rounded-md border px-3 py-1 text-sm font-medium" disabled={props.more === "loading"} onClick={() => { start(); props.onMore(); }}>{props.labels.loadMore}</button> : null}
+    <div
+      ref={box}
+      tabIndex={-1}
+      aria-busy={props.more === "loading"}
+      className="grid justify-items-start gap-2 px-3 pb-3 outline-none"
+    >
+      <span role="status" className="sr-only">
+        {status}
+      </span>
+      {props.more === "failed" ? (
+        <p role="alert" className="text-destructive text-sm">
+          {props.labels.loadMoreFailed}
+        </p>
+      ) : null}
+      {props.hasMore ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={props.more === "loading"}
+          onClick={() => {
+            start();
+            props.onMore();
+          }}
+        >
+          {props.labels.loadMore}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** Export the rows the App holds through the host or present a copyable CSV when it has no download capability. */
+function ExportRows(props: {
+  readonly labels: AppLabels;
+  readonly csv: () => string;
+  readonly onExport?: (csv: string) => Promise<HostRequestOutcome>;
+}): ReactNode {
+  // `accepted` says no more than the host took the request, so it shows nothing; `unknown` is not reported as a failure
+  const [state, setState] = useState<"idle" | "pending" | HostRequestOutcome>("idle");
+  const [copy, setCopy] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-3 pt-3">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={state === "pending"}
+        aria-expanded={props.onExport ? undefined : copy}
+        onClick={() => {
+          if (!props.onExport) {
+            setCopy(open => !open);
+            return;
+          }
+          setState("pending");
+          void props.onExport(props.csv()).then(setState);
+        }}
+      >
+        {props.labels.exportCsv}
+      </Button>
+      <span
+        role="status"
+        className={state === "refused" ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
+      >
+        {state === "refused" ? props.labels.exportFailed : state === "unknown" ? props.labels.exportUnconfirmed : null}
+      </span>
+      {copy && !props.onExport ? (
+        <textarea
+          aria-label={props.labels.exportCsv}
+          className="w-full rounded border bg-background p-2 font-mono text-xs"
+          readOnly
+          rows={3}
+          value={props.csv()}
+          onFocus={event => event.currentTarget.select()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -252,7 +586,9 @@ function MoreRows(props: { readonly count: number; readonly hasMore: boolean; re
 /** The View's declared list columns, else what the rows carry but the id and version, as Admin's report shows them. */
 function columnsOf(view: AppCatalogView, rows: readonly Row[]): string[] {
   if (view.list.columns.length) return [...view.list.columns];
-  return [...new Set(rows.flatMap((row) => Object.keys(row)))].filter((field) => field !== "id" && field !== "version").slice(0, 6);
+  return [...new Set(rows.flatMap(row => Object.keys(row)))]
+    .filter(field => field !== "id" && field !== "version")
+    .slice(0, 6);
 }
 
 function RowAction(props: {
@@ -279,7 +615,7 @@ function RowAction(props: {
           // reopens the action from the refreshed list
           invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
           // One key per opened action, so a retry after an uncertain write reuses it.
-          initialInput: Object.fromEntries(automatic.map((field) => [field, crypto.randomUUID()])),
+          initialInput: operationInitialInput(action.inputSchema, automatic, !!(action.bind.length || action.version)),
           automatic,
         }),
       };
@@ -288,7 +624,11 @@ function RowAction(props: {
     }
   });
   if ("error" in created) {
-    return <p role="alert" className="text-destructive p-4 text-sm">{String(created.error)}</p>;
+    return (
+      <p role="alert" className="text-destructive p-4 text-sm">
+        {String(created.error)}
+      </p>
+    );
   }
   return <RowActionPanel {...props} controller={created.controller} automatic={automatic} />;
 }
@@ -307,7 +647,9 @@ function RowActionPanel(props: {
   const state = useInteraction(controller);
   const submitted = useRef(false);
   const refreshed = useRef(false);
-  useEffect(() => { void controller.open(); }, [controller]);
+  useEffect(() => {
+    void controller.open();
+  }, [controller]);
   useEffect(() => {
     if (state.phase === "submitting") submitted.current = true;
     if (state.phase === "succeeded" && !refreshed.current) {
@@ -335,7 +677,7 @@ function RowActionPanel(props: {
   // the form's own zone: a native date input reads and writes the iframe's local time
   const fieldValue = (field: string, value: unknown) => renderDataValue(properties[field], value, language);
   const hidden = hiddenInputs(action);
-  const visible = Object.keys(properties).some((name) => !hidden.includes(name));
+  const visible = Object.keys(properties).some(name => !hidden.includes(name));
   return (
     // room for a Select's list or the date picker, which open over the panel inside the host's frame
     <div className="min-h-[28rem] p-3">
@@ -351,10 +693,10 @@ function RowActionPanel(props: {
         {/* Admin's own form: option titles, money and date previews, a field's widget from the Procedure's uiSchema */}
         {visible ? (
           <SchemaFields
-            schema={action.inputSchema as FieldSchema}
+            schema={operationForm(action.inputSchema, !!(action.bind.length || action.version))}
             uiSchema={action.uiSchema ?? null}
             value={state.draft}
-            onChange={(next) => applyFieldEdits(controller, state.draft, next)}
+            onChange={next => applyFieldEdits(controller, state.draft, next)}
             language={language}
             hiddenRootFields={hidden}
             labels={props.labels.fields}

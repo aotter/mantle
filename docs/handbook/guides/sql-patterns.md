@@ -1,5 +1,5 @@
 ---
-description: Eight SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses.
+description: SQL patterns most apps need, each a complete manifest that compiles on every target, with the PostgreSQL spelling and what each refuses; also retries by operation id, and how a handler answers 429.
 ---
 # SQL patterns
 
@@ -257,6 +257,39 @@ check is "at least one", so a statement that writes several rows (`json_each(inp
 passes; give an array input `minItems: 1` when an empty one is a mistake. A ref handler throws its own
 `ContractError` instead.
 
+## Change another member's row: inline author_id
+
+A Procedure `restrict` narrows every statement in the program, including the ones after the first. With
+`restrict: { registrations: "author_id = auth.uid()" }`, "cancel my seat and give it to the first person waiting"
+cannot work: the promotion runs as the caller and sees no other member's row, so it changes nothing. Leave the
+Procedure without `restrict` and pin the caller's own row inline, in every statement that reads it, with
+`author_id = auth.uid()`; the statement that acts on other members' rows then runs unrestricted. Decide everything
+that depends on the waiting list before the statement that changes it, and end with the own-row write that must
+change exactly one row (`WHERE id = input.id`), so another member's id is `CONFLICT` and the whole program rolls back.
+
+```sql
+-- 1. Return the seat only if nobody waits for it.
+UPDATE events SET seats_taken = seats_taken - 1
+  WHERE id = (SELECT r.eventId FROM registrations r WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted)
+    AND NOT EXISTS (SELECT 1 FROM registrations w WHERE w.eventId = events.id AND w.waitlisted)
+  RETURNING capacity - seats_taken AS seats_left;
+-- 2. Otherwise the earliest waiter (another member's row) takes it.
+UPDATE registrations SET waitlisted = false
+  WHERE id = (SELECT w.id FROM registrations w JOIN registrations r ON r.eventId = w.eventId
+      WHERE r.id = input.id AND r.author_id = auth.uid() AND NOT r.waitlisted AND w.waitlisted
+      ORDER BY w.created_at, w.id LIMIT 1)
+  RETURNING id AS promoted;
+-- 3. The caller's own row: exactly one, or CONFLICT and nothing above stays.
+DELETE FROM registrations WHERE id = input.id AND author_id = auth.uid() RETURNING id
+```
+
+A `= auth.uid()` term in the SQL is a filter like any other, not a policy: every statement that must stay on the
+caller's rows needs its own. Rows another member waits with are their own inserts, so `author_id` names them; a
+Procedure never inserts a row on someone else's behalf, since `author_id` is stamped from the caller. D1 runs the
+program serialized. Under PostgreSQL's READ COMMITTED, two cancels for the same event at once can both pick the same
+waiter and leave one seat counted as taken; measure that case before relying on it there.
+[Club events](../../examples/club-events/README.md) has the whole waiting list (`cancel-registration`).
+
 ## A row with its children in one read
 
 An admin, or an AI client, reads each product with its orders in one call instead of one call per product. A
@@ -310,3 +343,92 @@ spec:
       FROM orders o
     ) x WHERE x.n = 1 ORDER BY x.productId
 ```
+
+## Retry safely: the row is the replay record
+
+A client that timed out sends the same create again, with the same `operationId`. Mantle keeps no idempotency table
+and adds no write to every call (ADR-0040 §2–3); the business row is the
+record. `uniqueIndexes: [[owner, operationId]]` makes the id unique per caller (a scoped Schema's unique index starts
+with its scope column), and the insert's conflict branch decides the retry in the same statement:
+
+- The first request inserts and returns the new invoice.
+- The same request again matches the stored row in the `DO UPDATE … WHERE`, so it returns that row: the same `id`.
+- The same `operationId` with other values matches nothing; the statement returns no row and `onNoRows: conflict`
+  makes it `CONFLICT` (409) with `kind: "row"` and `step: "replay"`. Another caller's `operationId` is its own.
+- Two first requests at once: PostgreSQL makes the second wait on the unique index until the first commits, then takes
+  the conflict branch, so both get the same `id` and one row exists. D1 and SQLite run writes one at a time.
+
+```yaml
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: invoices }
+spec:
+  title: Invoices
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, operationId]]
+  indexes: [[owner, createdAt]]
+  schema:
+    type: object
+    required: [owner, operationId, customer, amount]
+    properties:
+      owner: { type: string }
+      operationId: { type: string, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-invoice }
+spec:
+  description: Create an invoice. Sending the same operationId again returns the same invoice; reusing it for a different invoice is refused (409).
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [operationId, customer, amount]
+    properties:
+      operationId: { type: string, minLength: 1, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    steps:
+      - name: replay
+        sql: |
+          INSERT INTO invoices (operationId, customer, amount) VALUES (input.operationId, input.customer, input.amount)
+            ON CONFLICT (operationId) DO UPDATE SET amount = invoices.amount
+              WHERE invoices.customer = excluded.customer AND invoices.amount = excluded.amount
+            RETURNING id, amount
+        onNoRows: conflict
+```
+
+The conflict branch is an UPDATE, so a replay raises the row's `version` and `updated_at` and changes nothing else. The
+`WHERE` compares the stored columns, which here hold the whole request. A Procedure cannot `SELECT`, so a pure
+read-back without that update needs a ref handler.
+
+## Per-caller quotas: a handler answers 429
+
+A quota that counts the caller's own rows ("at most 20 transfers an hour") is decided in the Procedure that writes the
+next row; Core keeps no counter table. A ref handler refuses with a `ContractError` that carries `status: 429` and
+`fields: { retryAfter }`:
+
+```ts
+import { ContractError } from "@aotter/mantle/contracts";
+
+throw new ContractError("RATE_LIMITED", "At most 20 transfers an hour.", "procedures/send-transfer", {
+  status: 429,
+  fields: { retryAfter: 3600 },
+});
+```
+
+- REST answers HTTP 429 with `{ "error": { "code", "message", "path", "retryAfter" } }`.
+- MCP answers the `tools/call` with an error result (`isError: true`) whose text is
+  `{ "diagnostics": [{ "code", "message", "path", "retryAfter" }] }`.
+
+A handler cannot set response headers: an application that sends `Retry-After` adds it in its route, from the error
+body. The same error rejected from `authorize` keeps its status and `retryAfter` too, and is answered before any
+database work; a list such as `tools/list` hides the target instead of failing
+([limits and authorize](../reference/authorization.md#limits-and-authorize)). Limits on the request rate itself (per
+client address or credential, before any database work) are counted in the application's route before the generated
+surface; `authorize` may refuse from that count.

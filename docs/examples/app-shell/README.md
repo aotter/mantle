@@ -73,11 +73,17 @@ on one version.
 | `src/signup.ts` | `allowSignUp(env, email)`: who may create an account (allow-all by default). `auth.ts` calls it before Better Auth creates a user; `ADMIN_EMAIL` is always allowed. |
 | `src/auth.ts` | Better Auth options. Two roles only: `admin` (the admin layer) and `user`. Replace the console OTP sender before deploying. |
 | `smoke.mjs` | Your acceptance steps on `smoke-kit.mjs` (fresh local D1, OTP sign-in per user, REST/MCP/Admin calls). |
+| `public/` | Optional static files. `mantle bundle` copies them into `dist/client`: `public/assets/*` is served at `/assets/*` by the edge without running the Worker; other files (for example `public/favicon.ico`) go through the Worker, which serves them from `ASSETS`. `public/admin` is reserved. Cloudflare's default is `Cache-Control: max-age=0, must-revalidate` with an ETag; for content-hashed files add a `public/_headers` rule with `max-age=86400, immutable` (a day, because the edge sends the rule on its 404 for a missing file too); `mantle bundle` appends Admin's `/admin/assets/*` rule, and with browser entries in `src/client/` the `/assets/client/h/*` rule for their content-hashed copies, to the copy in `dist/client` unless the file has one for that path. `wrangler dev` rebuilds on changes under `src` and `generated` only: after editing `public/`, save a file in `src` or restart it. |
 | `accept.mjs` | Independent acceptance setup: one URL per role that carries its session, plus a minimal MCP client. Add a fixtures module for realistic data. |
 
 `src/service.ts` and `src/index.ts` rarely change. The default shell mounts REST and MCP together. If the app deliberately
 chooses asymmetric exposure, delete the blocks marked `MCP / OAuth (deliberate exception)` in `auth.ts` and `service.ts`;
-HTTP-only Procedures will keep generating with a warning.
+HTTP-only Procedures will keep generating with a warning. `fetchService` gives a response that states no
+`Cache-Control` `private, no-store`, so a cache in front of the Worker never keeps it by default; the smoke kit fails a
+response without one ([caching](../../handbook/guides/caching.md)). The SDK reads the local issuer's keys in process
+([Verifying access tokens on Workers](../../handbook/cloudflare/authentication.md#verifying-access-tokens-on-workers)).
+The Worker opts in to `enable_request_signal` so MCP tools can stop cancellable work when the client disconnects.
+See [progress and cancellation](../../handbook/guides/mcp-apps.md#progress-and-cancellation) for deployed behavior.
 
 Search for `AGENT:` to find what an app must fill in.
 
@@ -158,9 +164,16 @@ Node 22.22+ can read this pure static
 TypeScript descriptor directly; no generated request handlers are executed to derive expected names.
 A TypeScript smoke scenario can instead import `tools` from generated `mcp.ts`.
 Explicitly select the permitted subset if the app narrows authorization, and include any app-composed tools.
-The assertion initializes MCP, forwards supplied identity/session headers, reads all tools/list pages,
-and compares exact names without calling business tools. JSON/SSE protocol failures, missing routes,
-unexpected/missing tools and repeated/excessive pagination fail; it never obtains credentials or mounts routes.
+Mantle serves both MCP protocol eras. The kit shipped with new apps speaks revision 2026-07-28 (`mcpRequest` in the
+kit builds one such request): the assertion checks `server/discover`, forwards supplied identity/session headers, reads
+all tools/list pages, then checks that a 2025-era `initialize` is served too, and compares exact names without calling
+business tools. JSON/SSE protocol failures, missing routes, unexpected/missing tools and repeated/excessive pagination
+fail; it never obtains credentials or mounts routes.
+
+An app made by an earlier `mantle init` owns copies of `smoke-kit.mjs` and `accept.mjs` that speak the 2025 form (an
+`initialize` handshake, requests without the `_meta` envelope). That older kit keeps working: Core's tests run the kit
+released with 0.2.2-alpha.7 against the current Core. Replace it with this shell's only if you want the 2026-07-28
+form or the two-era assertion.
 
 This local cookie test does not prove OAuth Bearer or an external client's connection. Test those separately
 with supplied credentials and record their results as layer 4 of the layered report. For each declared interface,

@@ -4,19 +4,24 @@ A club's event sign-up. Officers (the `admin` layer) create events with their se
 members list events, register, and see and cancel only their own registrations, from a page or through their own AI
 over MCP. Only members the officers listed in Admin can sign up. Officers see every registration in Admin. Seats never oversell, even when members race for the last one.
 
+The Admin UI uses the built-in forms, operations and reports, configured through the manifest; no custom Admin entry
+is needed. See [Purchasing](../purchasing/README.md) for a custom Admin page using typed hooks and shared components.
+
 ## Capabilities shown
 
-- **Member-owned rows**: `restrict: { registrations: "author_id = auth.uid()" }` on the `my-registrations` View and the
-  `cancel-registration` Procedure (`manifests/club-events.yaml`). Registrations have no field `scope`, which would hide
+- **Member-owned rows**: `restrict: { registrations: "author_id = auth.uid()" }` on the `my-registrations` View
+  (`manifests/club-events.yaml`); `cancel-registration` pins the caller's row inline instead (see the waiting list). Registrations have no field `scope`, which would hide
   rows from officers too; Admin lists all of them.
 - **No duplicates**: `uniqueIndexes: [[eventId, member]]`. Native `authorId` is not allowed in a unique index, so the
   `register` handler writes `member` from the verified caller (`src/handlers.ts`); a second registration is 409.
-- **Capacity that never oversells**: officers edit `capacity`; `seats_taken` is a `readOnly` property, so Admin's
+- **Capacity that never oversells**: creating and editing both allow zero capacity while no seats are taken.
+  Officers edit `capacity`; `seats_taken` is a `readOnly` property, so Admin's
   generic edit never writes it, and `checks: ["seats_taken <= capacity"]` guards both. `register-write` inserts the
   registration and adds to `seats_taken` in one program, so a full event fails the check and the insert rolls back;
   `cancel-registration` returns the seat in the same program as the delete.
 - **A `ref` handler that checks before writing**: `register` refuses a missing (404) or closed (409) event, then calls
-  the internal SQL Procedure. It does not pre-check seats: the database check is what holds under concurrency.
+  the internal SQL Procedure. Both the seat and waitlist writes recheck that the event is open in SQL. The database
+  capacity check still arbitrates concurrent claims for the last seat.
 - **Who registered**: the handler stores a `memberName` snapshot from Better Auth's `user` row, since `member` is an
   opaque id; Admin's registration list shows it.
 - **Members-only sign-up**: officers list members' emails in the `members` Schema in Admin (unique, lower case by a
@@ -26,6 +31,11 @@ over MCP. Only members the officers listed in Admin can sign up. Officers see ev
 - **An event with its attendees in one read**: the admin View `event-roster` returns each event with an `attendees`
   JSON array built by `json_group_array(json_set('{}', ...))` in a correlated subquery, so an event nobody joined has
   `[]`. PostgreSQL writes it with `jsonb_agg(jsonb_build_object(...))`; see `mantle help sql-patterns`.
+- **A waiting list**: `register` with `waitlist: true` on a full event writes the member's own row with
+  `waitlisted: true` (`waitlist-write`), which takes no seat. `cancel-registration` has no `restrict`, because
+  promoting the earliest waiter changes another member's row; each statement pins the caller's row with
+  `author_id = auth.uid()` inline, and the final own-row DELETE makes another member's id 409 and rolls back the rest.
+  See `mantle help sql-patterns` ("Change another member's row").
 - **Member MCP tool**: the `register-mcp` Trigger (`surface: public`) exposes `register` on `/mcp`, so the member's AI
   registers with the member's own sign-in.
 
@@ -60,6 +70,8 @@ its sign-in is 403 and creates no user row. The officer adds the members in Admi
 they sign in. An officer creates events in Admin. A member registers (seats 3 → 2); registering twice is 409
 and takes no seat; a closed event is 409 and a missing one 404. Another member cannot see or cancel the registration
 (cancel is 409; the row and seats stay). Four members race for a 1-seat event: exactly one succeeds, the rest are 409,
-no seat is left and only one row exists. Cancelling returns the seat. A member registers through the MCP tool.
+no seat is left and only one row exists. Cancelling returns the seat. A member registers through the MCP tool. On a full event, registering is 409 unless the
+member asks for the waiting list; cancelling a seat promotes the earliest waiter (another member's cancel is still 409
+and promotes nobody), leaving the waiting list frees nothing, and with nobody waiting the seat returns.
 The officer sees every registration, with the member's name, through Admin's API; a member gets 403 on Admin.
 Admin cannot write `seats_taken` or lower `capacity` below the seats taken.

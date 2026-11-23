@@ -3,11 +3,12 @@
 ## Status
 
 Accepted. Amended 2026-05-14, 2026-05-15, 2026-06-30, 2026-07-15,
-2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, and 2026-09-22.
+2026-08-03, 2026-08-22, 2026-09-18, 2026-09-21, 2026-09-22, 2026-10-02 and
+2026-11-12.
 
 ## Date
 
-2026-05-09 (last amended 2026-09-22)
+2026-05-09 (last amended 2026-11-12)
 
 > **Current authority:** the original decision below records the rejected
 > Better-Auth-for-MCP design. The 2026-08-22 Better Auth 1.7 amendment is
@@ -427,18 +428,17 @@ The original ADR-0014 §"Auth as contract, Better Auth as default" framing stays
 
 ## Amendment — 2026-06-30: Hosted-auth boundary and first-party cookie fields
 
-Mantle Platform introduces a first-party hosted-auth use case. Platform owns
-site-owner accounts, billing, entitlement, provider credentials, and managed
-email, while Hosted Auth is an OAuth proxy rather than a member directory.
+A hosting platform introduces a first-party hosted-auth use case. The host owns
+site-owner accounts, provider credentials, and managed email, while its
+hosted auth is an OAuth proxy rather than a member directory.
 Each customer site owns its Better Auth users, linked provider accounts,
-sessions, roles, and grants. For Hosted GitHub, the validated proxy profile's
+sessions, roles, and grants. For hosted GitHub, the validated proxy profile's
 `github_login` maps to the existing site-local `user.githubLogin`, so hosted
 and self-managed GitHub reuse the same atomic first-owner bootstrap rule. The
 conventional customer-site path uses the proxy's public OAuth client with PKCE
-and `ADMIN_GITHUB_LOGIN`; it does not use Platform Account OIDC, a client
+and `ADMIN_GITHUB_LOGIN`; it does not use the host's account OIDC, a client
 secret, or an owner email handoff. The local provider id remains `github`.
-The wire contract remains in [Platform #35](https://github.com/aotter/mantle-platform/issues/35),
-and the product boundary is documented in
+The wire contract is owned by the hosting platform, and the product boundary is documented in
 [`docs/auth-hosting-model.md`](https://github.com/aotter/mantle/blob/main/docs/auth-hosting-model.md).
 
 This does not change ADR-0014's core rule: Mantle does not expose an
@@ -454,21 +454,21 @@ The first-party SSO use case needs exactly three Better Auth fields:
 - `crossSubDomainCookies` — Better Auth's same-parent-domain cookie
   support for a trusted first-party app family.
 - `cookiePrefix` — required when two Better Auth apps can write cookies
-  under the same parent domain, so Platform cookies do not collide with
-  Landing or generated-site cookies.
+  under the same parent domain, so the host's cookies do not collide with
+  landing-page or generated-site cookies.
 
 These fields are additive. Existing consumers that do not pass them keep
 the previous cookie/session behavior.
 
 The boundary is deliberately narrower than "hosted auth everywhere":
 
-- Free users can still self-host every login method Mantle exposes
+- Self-hosted sites can still use every login method Mantle exposes
   through `createAuth()`.
 - Same-parent-domain SSO can use `crossSubDomainCookies` when the same
   party controls all participating subdomains.
-- Customer-owned domains cannot receive `mantle.tools` cookies. Paid
-  hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
-  Platform authenticates and returns identity; the customer site creates
+- Customer-owned domains cannot receive the host's parent-domain cookies.
+  Hosted auth for `customer.com` must use an OAuth/OIDC broker flow:
+  the host authenticates and returns identity; the customer site creates
   its own local session and maps identity into local grants.
 
 ## Amendment — 2026-07-15: one adapter-owned authorization pipeline
@@ -901,8 +901,8 @@ Authorization needs a `jwt-bearer` (ID-JAG) grant whose issuer and JWKS belong
 to one enterprise IdP; that is adopter configuration, not an SDK default, and
 Core has no business knowing the issuer. Curating a first-class
 `enterpriseIdp` field would put an IdP contract inside Core and still forward
-it verbatim underneath. The reference implementation lives outside Core
-(`@aotterclam/id-jag`).
+it verbatim underneath. An implementation lives outside Core, in the
+adopter's own package.
 
 Boundaries that stay:
 
@@ -921,6 +921,9 @@ Boundaries that stay:
 
 ## 2026-10-02 amendment — a surface with no anonymous tool challenges at connect
 
+> **Restated by the 2026-11-21 amendment** for both MCP protocol eras: the connect step is `initialize` (2025) or
+> `server/discover` (2026-07-28), and there is no SSE `GET`.
+
 The 2026-09-21 amendment kept anonymous `initialize` and `tools/list` open on the public surface and moved the `401` to
 the first `tools/call` that needs identity. MCP clients do not all follow that: several decide whether to run OAuth from
 the connect step alone (an anonymous `initialize` that succeeds means "no sign-in"), so a surface whose every tool needs
@@ -937,3 +940,78 @@ every unauthenticated request for the same reason.
   `tools/call` that needs identity answers `401`.
 - Nothing is configured: the rule follows from the plan, so a project that adds a public tool reopens discovery by
   declaring it.
+
+## 2026-11-12 amendment — managed grants for consent-less extension-grant tokens
+
+Issue #1990. The 2026-09-22 amendment made the `jwt-bearer` (ID-JAG) grant of MCP
+enterprise-managed authorization adopter code. Its tokens went through the shared
+token path, but `assertActiveUserGrant` refused them: they have no consent row, no
+browser session and, as such a client asks, no refresh token. Core now offers one
+opt-in binding for them, a **managed grant**. Whether to support enterprise-managed
+authorization stays the adopter's decision; Core only provides the binding.
+
+1. **Opt-in.** `oauthGrantRevocation({ managedGrants: true })` declares an
+   `oauthManagedGrant` table through Better Auth's plugin schema, so generated
+   `schema.sql` carries it for SQLite/D1 and PostgreSQL; Core runs no DDL. Without
+   the option, schema, queries and token checks are unchanged, and the
+   `mantle_managed_grant` claim is ignored.
+2. **Record.** `issueManagedGrant(handlerInput, { client, user, scopes, resources,
+   issuer })`, called by the adopter's grant handler after it validated the
+   assertion, keeps one live record per user, client and resource set: scopes,
+   resources, grant type, asserting issuer (audit only) and a `revoked` date. A new
+   assertion for the same resources renews that record rather than adding one;
+   one for other resources has its own record, so a client's grants for two
+   resources of one server never replace each other. A first grant's record is
+   created live before the ban check and issuance, so a ban, reset or disconnect
+   that lands while tokens are issued ends it like any live grant; a renewal is
+   written only after Better Auth has issued the tokens, and only to a record
+   still live. Either way such a request fails with `invalid_grant`. A first
+   grant whose issuance Better Auth refuses is deleted, so a refused token
+   request changes no grant. A user banned at that moment is refused, so no
+   grant asserted during a ban passes after the unban.
+3. **Claim.** While `issueManagedGrant` mints, `oauthGrantExtension` stamps
+   `mantle_managed_grant` (the record id) in place of the consent claims.
+4. **Check.** `assertActiveUserGrant` accepts a token naming a managed grant only
+   when that record is unrevoked, has the token's `sub` and `azp`, covers the
+   requested audience (also in the token's `aud`) and every token scope, and its
+   client is enabled. It needs no `sid`, consent or refresh token, and it is one
+   single-row read. Better Auth lets a grant handler's per-issuance claims override
+   extension claims, so the claim is only a pointer: the stored record decides.
+5. **No refresh token.** `issueManagedGrant` drops `offline_access`, so Better Auth
+   issues no refresh token, even when the client asked for it. Renewal is a new
+   assertion.
+6. **Revocation.** The events `oauthGrantRevocation()` already handles (password
+   reset or admin password change, password change that signs out other devices,
+   ban, admin session revocation, unverified-email proof) and a disconnect mark the
+   user's managed grants revoked. Sign-out and session expiry do not end them.
+7. **Visibility.** The connected-apps list shows live managed grants, one entry per
+   client (with the scopes of all its resources) not already listed by a consent, under a `managed:`-prefixed id (consent
+   and managed-grant ids come from different tables and may coincide), so a user
+   can disconnect them. A disconnect ends every grant of that client, as before.
+
+Rejected: reusing `oauthConsent` (a later interactive authorization would find a
+consent that never happened and skip the screen); asking adopters to issue
+`offline_access` refresh tokens (against the client's guidance, and renewable
+without a new assertion); letting `resolveCredential` return an `oauth` Caller
+(removes a deliberate guard and moves token verification into every
+application); and validating ID-JAG in Core (rejected by the 2026-09-22
+amendment, not reopened). Assertion validation, trusted-issuer storage, admin
+settings and account matching remain adopter code.
+
+## 2026-11-21 amendment — the connect step in both MCP protocol eras
+
+Issue #2100 (ADR-0029's 2026-11-21 amendment: both protocol eras on SDK 2.4.0). Core serves the 2025 revisions
+statelessly and 2026-07-28, so the 2026-10-02 rule has one connect step per era: `initialize` on a 2025 revision and
+`server/discover` on 2026-07-28. "An anonymous `initialize` that succeeds means no sign-in" holds for either.
+
+> *Revised the same day, before release.* This amendment first read "the connect step under MCP 2026-07-28": with
+> ADR-0029's then "2026-07-28 only" amendment, the connect step was `server/discover` alone and a signed-in 2025-era
+> `initialize` got HTTP `400` with JSON-RPC `-32022`. That amendment is superseded, and so is that reading.
+
+- On a closed surface every anonymous request (`initialize`, `server/discover`, `tools/list`, `tools/call`) answers
+  `401` with the RFC 9728 `WWW-Authenticate` challenge (the surface's scope floor and `resource_metadata`).
+- On an open surface an anonymous `initialize` or `server/discover` answers `200`; the first `tools/call` that needs
+  identity answers `401`, as the 2026-09-21 amendment describes.
+- There is no SSE `GET` in either era: the MCP SDK answers `GET` and `DELETE` with `405` and `Allow: POST`. The caller
+  rules still run first, so on a closed surface an anonymous `GET` gets the `401` challenge; once signed in it gets
+  `405`.

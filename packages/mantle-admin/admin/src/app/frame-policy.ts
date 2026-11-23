@@ -10,18 +10,22 @@ declare global {
 export function canRenderAdmin(win: Window, preview: boolean): boolean {
   if (!preview) return win.self === win.top;
   try {
-    return win.self !== win.parent
-      && win.parent.location.origin === win.location.origin
-      && typeof win.__MANTLE_ADMIN_PREVIEW__?.fetch === "function"
-      && win.__MANTLE_ADMIN_PREVIEW__.fetch === win.fetch;
+    return (
+      win.self !== win.parent &&
+      win.parent.location.origin === win.location.origin &&
+      typeof win.__MANTLE_ADMIN_PREVIEW__?.fetch === "function" &&
+      win.__MANTLE_ADMIN_PREVIEW__.fetch === win.fetch
+    );
   } catch {
     return false;
   }
 }
 
 export function isAdminPreview(): boolean {
-  return typeof document !== "undefined"
-    && document.querySelector('meta[name="mantle-admin-preview"]')?.getAttribute("content") === "1";
+  return (
+    typeof document !== "undefined" &&
+    document.querySelector('meta[name="mantle-admin-preview"]')?.getAttribute("content") === "1"
+  );
 }
 
 /** Keep legacy host bridges from falling through to the live origin. */
@@ -43,5 +47,5 @@ export function installPreviewPolicy(win: Window): void {
   policy.httpEquiv = "Content-Security-Policy";
   policy.content = PREVIEW_CSP;
   win.document.head.append(policy);
-  win.document.addEventListener("submit", (event) => event.preventDefault(), true);
+  win.document.addEventListener("submit", event => event.preventDefault(), true);
 }

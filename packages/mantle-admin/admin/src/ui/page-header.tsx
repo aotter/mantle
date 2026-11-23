@@ -17,7 +17,10 @@ export function PageHeader({
         {eyebrow ? <div className="mb-1 text-sm text-muted-foreground">{eyebrow}</div> : null}
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? (
-          <div data-slot="page-description" className="mt-1 max-w-3xl text-sm text-muted-foreground dark:text-foreground">
+          <div
+            data-slot="page-description"
+            className="mt-1 max-w-3xl text-sm text-muted-foreground dark:text-foreground"
+          >
             {description}
           </div>
         ) : null}

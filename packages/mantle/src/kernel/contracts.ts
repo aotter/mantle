@@ -3,17 +3,21 @@ import { ContractError } from "./contract-error.js";
 export { ContractError } from "./contract-error.js";
 import { hasRole, isAdminCaller as isAdmin } from "./caller-identity.js";
 export type CredentialKind = "session" | "oauth" | "api-key" | "personal-token";
+/** The declared user fields an entry's `fields` option takes, and the values a Caller carries for them. */
+export type { AllValues, UserField, UserFields, UserValue } from "./user-fields.js";
 
-export interface Gateway { readonly tenant: string }
-export interface RequestContext { readonly props?: unknown }
+export interface Gateway {
+  readonly tenant: string;
+}
+export interface RequestContext {
+  readonly props?: unknown;
+}
 /** Gateway mode or the one execution prop carrying forwarded authority. */
-export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean => !!(gateway || ctx?.props && Object.hasOwn(ctx.props, "mantle"));
+export const forwarded = (ctx?: RequestContext, gateway?: Gateway): boolean =>
+  !!(gateway || (ctx?.props && Object.hasOwn(ctx.props, "mantle")));
 /** Generated gateway metadata is loaded only after a forwarded request. */
 export interface AccessTarget {
   readonly targetHash: string;
-  readonly opaque: boolean;
-  readonly guard?: string;
-  readonly variants?: readonly (Pick<AccessTarget, "opaque" | "guard"> & { readonly id: string })[];
 }
 export interface AccessEvent {
   readonly v: 1;
@@ -24,7 +28,6 @@ export interface AccessEvent {
   readonly outcome: "allow" | "deny" | "error";
   readonly reason?: string;
   readonly field?: string;
-  readonly dryRun: boolean;
 }
 export interface GatewayOptions {
   readonly accessTargets?: () => Promise<Readonly<Record<string, AccessTarget>>>;
@@ -51,16 +54,23 @@ type IdentityCaller = {
   readonly requestId?: string;
   readonly target?: string;
   readonly targetHash?: string;
-  readonly dryRun?: boolean;
 };
 export type Caller =
   | { readonly kind: "anonymous" }
   | (IdentityCaller & { readonly kind: "user" })
-  | (IdentityCaller & { readonly kind: "host"; readonly authenticatedAs: "snapshot" | "fresh"; readonly requestId: string })
+  | (IdentityCaller & {
+      readonly kind: "host";
+      readonly authenticatedAs: "snapshot" | "fresh";
+      readonly requestId: string;
+    })
   | { readonly kind: "system"; readonly reason: string };
 
 /** A selected boundary's application authorization target. */
-export type Target = { kind: "view" | "procedure" | "schema"; name: string; action?: "read" | "create" | "update" | "delete" };
+export type Target = {
+  kind: "view" | "procedure" | "schema";
+  name: string;
+  action?: "read" | "create" | "update" | "delete";
+};
 export type Authorize = (target: Target, caller: Caller) => boolean | Promise<boolean>;
 
 /** Privilege never follows a member role name. Only the original verified identity carries the admin layer. */
@@ -70,34 +80,72 @@ export const isUser = (caller: Caller): boolean => caller.kind === "user" || isA
 export const hasAdminRole = (caller: Caller, name: string): boolean => isAdmin(caller) && hasRole(caller, name);
 
 /** Only the core transport failures; other codes carry their own status, and unknown codes remain server errors. */
-export const statusOf = (code: string): number => ({ __proto__: null,
-  INPUT_VALIDATION_FAILED: 400, UNAUTHENTICATED: 401, AUTH_DENIED: 403, NOT_FOUND: 404,
-  METHOD_NOT_ALLOWED: 405, CONFLICT: 409, OUTCOME_UNKNOWN: 503,
-} as Record<string, number | null>)[code] ?? 500;
+export const statusOf = (code: string): number =>
+  (
+    ({
+      __proto__: null,
+      INPUT_VALIDATION_FAILED: 400,
+      UNAUTHENTICATED: 401,
+      AUTH_DENIED: 403,
+      NOT_FOUND: 404,
+      METHOD_NOT_ALLOWED: 405,
+      CONFLICT: 409,
+      OUTCOME_UNKNOWN: 503,
+    }) as Record<string, number | null>
+  )[code] ?? 500;
 
 /** Redact native errors at the selected boundary; the bare query preserves their identity. */
-export function wire(error: unknown): { status: number; error: { code: string; message: string; path: string; [field: string]: unknown } } {
-  const status = error instanceof ContractError ? error.status ?? statusOf(error.code) : 500;
-  if (status !== 500) { const { code, message, path, fields } = error as ContractError; return { status, error: { code, message, path, ...fields } }; }
+export function wire(error: unknown): {
+  status: number;
+  error: { code: string; message: string; path: string; [field: string]: unknown };
+} {
+  const status = error instanceof ContractError ? (error.status ?? statusOf(error.code)) : 500;
+  if (status !== 500) {
+    const { code, message, path, fields } = error as ContractError;
+    return { status, error: { code, message, path, ...fields } };
+  }
   return { status, error: { code: "INTERNAL_ERROR", message: "An internal error occurred.", path: "" } };
 }
 
 /** One result row. */
 export type Row = Record<string, unknown>;
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+/**
+ * The input half of the generated surfaces' transport conversion, the same function REST, MCP, web and Admin call: it
+ * turns validated boundary input into the driver input a generated View or Procedure binds, in place. For each
+ * `[field, type]` of a generated route's or tool's `convert` table, a missing or null value becomes `null`, `json` is
+ * stringified, `bool` becomes 0/1 (SQLite and D1 only) and `""` passes through. Fields outside the table are untouched.
+ */
+export { convert as convertInput, type Conversions } from "./surface.js";
+declare const jsonText: unique symbol;
+/**
+ * A JSON value's text as `convertInput` makes it of a `json` field. A generated Procedure binds it as it is; its generated
+ * `input(raw)` types each JSON-bound field so.
+ */
+export type JsonText = string & { readonly [jsonText]: true };
 /** Static declared-column conversions, used only by selected transport boundaries. */
 export type WireColumns = ReadonlyArray<readonly [field: string, type: "json" | "bool" | "int"]>;
 export function wireRows(rows: readonly Row[], fields: WireColumns = []): readonly Row[] {
   if (!fields.length) return rows;
   return rows.map(row => {
     const result = { ...row };
-    for (const [key, type] of fields) if (Object.hasOwn(row, key) && row[key] != null) {
-      const value = row[key];
-      if (type === "json") {
-        try { result[key] = JSON.parse(value as string); }
-        catch { throw new ContractError("INVALID_STORED_JSON", "Persisted JSON could not be parsed."); }
-      } else result[key] = type === "bool" ? value === true || value === 1
-        : typeof value === "number" || Number.isSafeInteger(Number(value)) ? Number(value) : String(value);
-    }
+    for (const [key, type] of fields)
+      if (Object.hasOwn(row, key) && row[key] != null) {
+        const value = row[key];
+        if (type === "json") {
+          try {
+            result[key] = JSON.parse(value as string);
+          } catch {
+            throw new ContractError("INVALID_STORED_JSON", "Persisted JSON could not be parsed.");
+          }
+        } else
+          result[key] =
+            type === "bool"
+              ? value === true || value === 1
+              : typeof value === "number" || Number.isSafeInteger(Number(value))
+                ? Number(value)
+                : String(value);
+      }
     return result;
   });
 }
@@ -105,32 +153,68 @@ export function wireRows(rows: readonly Row[], fields: WireColumns = []): readon
 export type Output = { readonly results: ReadonlyArray<ReadonlyArray<Row>> };
 /** Deny unless `allowed`: a user is AUTH_DENIED, anyone else UNAUTHENTICATED. */
 export function deny(caller: Caller, allowed: boolean, path: string): void {
-  if (!allowed) throw new ContractError("subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED", "Authorization predicate not satisfied.", path);
+  if (!allowed)
+    throw new ContractError(
+      "subject" in caller ? "AUTH_DENIED" : "UNAUTHENTICATED",
+      "Authorization predicate not satisfied.",
+      path,
+    );
 }
 /** A row statement that changed no row cannot tell why without leaking whether the row exists, so it says how to recover. */
-export const ROW_CONFLICT = "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
-/** CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not change exactly one row ("row"). */
-export const conflict = (path: string, unique: boolean, cause?: unknown): ContractError =>
-  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, { cause, fields: { kind: unique ? "unique" : "row" } });
+export const ROW_CONFLICT =
+  "No row matched this change: it does not exist or is not visible to you, it changed since it was read, or its state no longer allows this change. Read it again before deciding whether to retry.";
+/**
+ * CONFLICT for a write the database refused: a unique-index clash (`fields.kind` "unique"), or a row statement that did not
+ * change exactly one row ("row"), with `fields.step` when the author named that step (#1974).
+ */
+export const conflict = (path: string, unique: boolean, cause?: unknown, step?: string): ContractError =>
+  new ContractError("CONFLICT", unique ? "A unique constraint of the Schema was violated." : ROW_CONFLICT, path, {
+    cause,
+    fields: { kind: unique ? "unique" : "row", ...(step ? { step } : {}) },
+  });
 /** A guarded row write that changed no row (#1822): CONFLICT `kind: "lock"` when its probe found the row visible and held by a lock, else the row conflict, which reveals nothing. */
-export const lockConflict = (path: string, probe: { readonly schema: string; readonly verb: string; readonly locks: Readonly<Record<string, string>>; readonly required?: string }, rows: readonly Row[]): ContractError => {
+export const lockConflict = (
+  path: string,
+  probe: {
+    readonly schema: string;
+    readonly verb: string;
+    readonly locks: Readonly<Record<string, string>>;
+    readonly required?: string;
+  },
+  rows: readonly Row[],
+  step?: string,
+): ContractError => {
   const lock = rows[0]?.lock;
   // a published row would lose data `publish` requires: the input is wrong, not the row's state
-  if (lock === "publishing.required" && probe.required) return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
-  if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false);
+  if (lock === "publishing.required" && probe.required)
+    return new ContractError("INPUT_VALIDATION_FAILED", probe.required, path);
+  if (typeof lock !== "string" || !Object.hasOwn(probe.locks, lock)) return conflict(path, false, undefined, step);
   const message = probe.locks[lock]!;
-  return new ContractError("CONFLICT", message, path, { fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message } });
+  return new ContractError("CONFLICT", message, path, {
+    fields: { kind: "lock", schema: probe.schema, verb: probe.verb, lock, message },
+  });
 };
 /** A Schema `checks` violation (Mantle's SQLite check trigger, or PostgreSQL SQLSTATE 23514) is a CONFLICT naming the check. */
 export const checkConflict = (path: string, error: unknown): ContractError | undefined => {
-  const message = (error as Error)?.message ?? "", marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
+  const message = (error as Error)?.message ?? "",
+    marker = /MANTLE_CHECK ([^:\n]+): (.+)/.exec(message);
   if (!/MANTLE_CHECK /.test(message)) return undefined;
   // D1 appends its own `: SQLITE_CONSTRAINT (extended: …)`; it stays in `cause`, not in what a client reads.
   return schemaCheckFailed(path, error, marker?.[1], marker?.[2]?.replace(/: SQLITE_CONSTRAINT.*$/, ""));
 };
 /** One message on every target, built from the parsed fields; the driver's own text stays in `cause`. */
-export const schemaCheckFailed = (path: string, cause: unknown, schema: string | undefined, check: string | undefined): ContractError =>
-  new ContractError("CONFLICT", schema && check ? `A check of the Schema failed: ${schema}: ${check}` : "A check of the Schema failed.", path, { cause, fields: { kind: "check", schema, check } });
+export const schemaCheckFailed = (
+  path: string,
+  cause: unknown,
+  schema: string | undefined,
+  check: string | undefined,
+): ContractError =>
+  new ContractError(
+    "CONFLICT",
+    schema && check ? `A check of the Schema failed: ${schema}: ${check}` : "A check of the Schema failed.",
+    path,
+    { cause, fields: { kind: "check", schema, check } },
+  );
 
 /** One result of `unsafe`: the rows (typed by the generated function), plus the affected count. */
 export type PostgresResult = any[] & { readonly count: number | null };
@@ -140,11 +224,16 @@ export type PostgresResult = any[] & { readonly count: number | null };
  * COMMIT only after `fn` resolves.
  */
 export interface Postgres {
-  unsafe(text: string, values: any[]): PromiseLike<PostgresResult>;
+  /**
+   * Mantle passes `{ prepare: true }` for its own statements: postgres.js otherwise sends `unsafe` as an unnamed,
+   * describe-first statement whatever the client's `prepare`. Bun.SQL and adapters may ignore it.
+   */
+  unsafe(text: string, values: any[], options?: { prepare?: boolean }): PromiseLike<PostgresResult>;
   /** The transaction handle only needs `unsafe`: postgres.js 3.4.9 types it without `begin`. */
   begin<T>(options: string, fn: (tx: Unsafe) => Promise<T>): PromiseLike<T>;
 }
 /** What a read or a single statement needs: a transaction handle suits it too. */
 export type Unsafe = Pick<Postgres, "unsafe">;
 
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
 export { checkOrigin, surfaceCaller, surfaceError, surfaceFailure } from "./surface-failure.js";

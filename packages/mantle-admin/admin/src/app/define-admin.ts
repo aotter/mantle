@@ -1,7 +1,22 @@
 import type * as React from "react";
 import { MAX_BADGE_VIEWS } from "./transport";
 import type { AdminLayers, SlotComponent } from "./slots";
-import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps, InputProps, ListActionsProps, RecordActionsProps, RecordAsideProps, RecordViewProps, ShellProps, SidebarProps, SurfaceProp } from "./slot-props";
+import type {
+  BrandProps,
+  CellProps,
+  CollectionListProps,
+  HeaderProps,
+  HomeProps,
+  InputProps,
+  ListActionsProps,
+  RecordActionsProps,
+  RecordAsideProps,
+  RecordViewProps,
+  ShellProps,
+  SidebarProps,
+  SignInProps,
+  SurfaceProp,
+} from "./slot-props";
 
 /**
  * What `generated/admin-client.ts` knows about an application, as types: the input and row of each admin View, the
@@ -9,7 +24,13 @@ import type { BrandProps, CellProps, CollectionListProps, HeaderProps, HomeProps
  * generated types, so its names are any string and its shapes are open.
  */
 export interface AdminTypes {
-  readonly views: { readonly [name: string]: { readonly input: object; readonly row: object; /** `true` when the View is an admin MCP tool, null when it is not; absent for the built-in entry. */ readonly mcp?: true | null } };
+  readonly views: {
+    readonly [name: string]: {
+      readonly input: object;
+      readonly row: object /** `true` when the View is an admin MCP tool, null when it is not; absent for the built-in entry. */;
+      readonly mcp?: true | null;
+    };
+  };
   readonly collections: { readonly [name: string]: { readonly data: object } };
   readonly operations: { readonly [name: string]: { readonly input: object; readonly output: unknown } };
   /** The sidebar groups beyond Admin's own that the manifest places items in (`uiSchema.nav.group`), which `defineAdmin` must declare in `nav.groups`; any name when absent. */
@@ -34,6 +55,14 @@ type Browser<P> = SlotComponent<P>;
 type Both<P> = SlotComponent<P, SurfaceProp>;
 /** A record/collection slot keeps its explicit surface, but is mounted only in browser Admin. */
 type BrowserRecord<P> = SlotComponent<P, { readonly surface: "browser" }>;
+/** `Brand` always receives `placement`; props passed to `renderDefault` may leave it out to keep the one received. */
+type BrandComponent = (
+  props: BrandProps & {
+    readonly renderDefault: (
+      props: Omit<BrandProps, "placement"> & Partial<Pick<BrandProps, "placement">>,
+    ) => React.ReactNode;
+  },
+) => React.ReactNode;
 
 type Name<K> = K & string;
 type Collections<T extends AdminTypes> = Name<keyof T["collections"]>;
@@ -41,19 +70,30 @@ type Views<T extends AdminTypes> = Name<keyof T["views"]>;
 /** The keys of an object type; any name for the open shape the built-in entry has. */
 type Keys<O> = [keyof O] extends [never] ? string : Name<keyof O>;
 /** `<collection>.<field>` for every field of every collection. */
-type FieldKey<T extends AdminTypes> = { [C in Collections<T>]: `${C}.${Keys<T["collections"][C]["data"]>}` }[Collections<T>];
+type FieldKey<T extends AdminTypes> = {
+  [C in Collections<T>]: `${C}.${Keys<T["collections"][C]["data"]>}`;
+}[Collections<T>];
 /** `<view>.<column>` for every column of every admin View. */
 type ColumnKey<T extends AdminTypes> = { [V in Views<T>]: `${V}.${Keys<T["views"][V]["row"]>}` }[Views<T>];
-type DataOf<T extends AdminTypes, C extends string> = C extends keyof T["collections"] ? T["collections"][C]["data"] : never;
-type FieldOf<T extends AdminTypes, K extends string> = K extends `${infer C}.${infer F}` ? Member<DataOf<T, C>, F> : never;
+type DataOf<T extends AdminTypes, C extends string> = C extends keyof T["collections"]
+  ? T["collections"][C]["data"]
+  : never;
+type FieldOf<T extends AdminTypes, K extends string> = K extends `${infer C}.${infer F}`
+  ? Member<DataOf<T, C>, F>
+  : never;
 /** A member's type; `unknown` for the open shape the built-in entry has. */
 type Member<O, F extends string> = [keyof O] extends [never] ? unknown : F extends keyof O ? O[F] : never;
 type RowOf<T extends AdminTypes, V extends string> = V extends keyof T["views"] ? T["views"][V]["row"] : never;
-type ColumnOf<T extends AdminTypes, K extends string> = K extends `${infer V}.${infer F}` ? Member<RowOf<T, V>, F> : never;
+type ColumnOf<T extends AdminTypes, K extends string> = K extends `${infer V}.${infer F}`
+  ? Member<RowOf<T, V>, F>
+  : never;
 /** What a collection list passes as `row`: the columns it shows, `null` where empty. */
 type ListRow<D> = unknown extends D ? Readonly<Record<string, unknown>> : { readonly [P in keyof D]?: D[P] | null };
 /** The Views an MCP host can open: those with an admin MCP tool. Any View name for the open shape the built-in entry has. */
-type McpViews<T extends AdminTypes> = string extends Views<T> ? string : { [V in Views<T>]: T["views"][V] extends { readonly mcp: true } ? V : never }[Views<T>];
+type McpViews<T extends AdminTypes> =
+  string extends Views<T>
+    ? string
+    : { [V in Views<T>]: T["views"][V] extends { readonly mcp: true } ? V : never }[Views<T>];
 type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer Rest}` ? Rest : never;
 
 /**
@@ -62,7 +102,7 @@ type Of<K extends string, Prefix extends string> = K extends `${Prefix}${infer R
  * name fails `tsc`. In a key, `<schema>` is a collection's name, `<field>` one of its fields (names contain no `.`), and
  * `<view>.<column>` a column of an admin View.
  *
- * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList` and `list.actions:` exist in the browser only.
+ * Surface: `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn` and `list.actions:` exist in the browser only.
  * `cell:view:` renders in both surfaces. `RecordView`, `record.aside:`, `record.actions:`, collection cells and
  * record inputs render only in browser Admin; their `surface` is the literal `"browser"`. An MCP row-action form
  * edits a Procedure's input, not a collection record, and never mounts record/input overrides.
@@ -71,20 +111,30 @@ export type AdminComponents<T extends AdminTypes = AdminTypes> = {
   readonly Shell?: Browser<ShellProps>;
   readonly Sidebar?: Browser<SidebarProps>;
   readonly Header?: Browser<HeaderProps>;
-  readonly Brand?: Browser<BrandProps>;
+  readonly Brand?: BrandComponent;
   readonly Home?: Browser<HomeProps>;
+  readonly SignIn?: Browser<SignInProps>;
   readonly CollectionList?: Browser<CollectionListProps>;
   readonly RecordView?: BrowserRecord<RecordViewProps>;
 } & {
   readonly [K in `record.aside:${Collections<T>}`]?: BrowserRecord<RecordAsideProps<DataOf<T, Of<K, "record.aside:">>>>;
 } & {
-  readonly [K in `record.actions:${Collections<T>}`]?: BrowserRecord<RecordActionsProps<DataOf<T, Of<K, "record.actions:">>>>;
+  readonly [K in `record.actions:${Collections<T>}`]?: BrowserRecord<
+    RecordActionsProps<DataOf<T, Of<K, "record.actions:">>>
+  >;
 } & {
   readonly [K in `list.actions:${Collections<T>}`]?: Browser<ListActionsProps>;
 } & {
-  readonly [K in `cell:${FieldKey<T>}`]?: BrowserRecord<CellProps<FieldOf<T, Of<K, "cell:">>, ListRow<DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>>;
+  readonly [K in `cell:${FieldKey<T>}`]?: BrowserRecord<
+    CellProps<FieldOf<T, Of<K, "cell:">>, ListRow<DataOf<T, Of<K, "cell:"> extends `${infer C}.${string}` ? C : never>>>
+  >;
 } & {
-  readonly [K in `cell:view:${ColumnKey<T>}`]?: Both<CellProps<ColumnOf<T, Of<K, "cell:view:">>, RowOf<T, Of<K, "cell:view:"> extends `${infer V}.${string}` ? V : never>>>;
+  readonly [K in `cell:view:${ColumnKey<T>}`]?: Both<
+    CellProps<
+      ColumnOf<T, Of<K, "cell:view:">>,
+      RowOf<T, Of<K, "cell:view:"> extends `${infer V}.${string}` ? V : never>
+    >
+  >;
 } & {
   readonly [K in `input:${FieldKey<T>}`]?: BrowserRecord<InputProps<FieldOf<T, Of<K, "input:">>>>;
 };
@@ -123,15 +173,26 @@ type ScalarOf<V> = Extract<NonNullable<V>, Scalar>;
 /** One declared field of a collection and the value to list it by: the list filters on a single field. Any field name for the open shape the built-in entry has. */
 type NavFilter<D> = [keyof D] extends [never]
   ? { readonly [field: string]: Scalar }
-  : { [F in keyof D & string]-?: [ScalarOf<D[F]>] extends [never] ? never : { readonly [P in F]: ScalarOf<D[F]> } & { readonly [Q in Exclude<keyof D & string, F>]?: never } }[keyof D & string];
+  : {
+      [F in keyof D & string]-?: [ScalarOf<D[F]>] extends [never]
+        ? never
+        : { readonly [P in F]: ScalarOf<D[F]> } & { readonly [Q in Exclude<keyof D & string, F>]?: never };
+    }[keyof D & string];
 
 /** Where a sidebar item leads: a collection's list, preset to one field's value, or an admin View with its input. */
 export type AdminNavTarget<T extends AdminTypes = AdminTypes> =
-  | { [C in Collections<T>]: { readonly collection: C; readonly filter?: NavFilter<T["collections"][C]["data"]> } }[Collections<T>]
+  | {
+      [C in Collections<T>]: { readonly collection: C; readonly filter?: NavFilter<T["collections"][C]["data"]> };
+    }[Collections<T>]
   | { [V in Views<T>]: { readonly view: V; readonly input?: T["views"][V]["input"] } }[Views<T>];
 
 /** A count shown on a sidebar item: `field` of the one row an aggregate admin View returns, typically one with `uiSchema.nav.hidden: true`. */
-export type AdminBadge<T extends AdminTypes = AdminTypes> = { [V in Views<T>]: { readonly view: V; readonly field: [keyof T["views"][V]["row"]] extends [never] ? string : keyof T["views"][V]["row"] & string } }[Views<T>];
+export type AdminBadge<T extends AdminTypes = AdminTypes> = {
+  [V in Views<T>]: {
+    readonly view: V;
+    readonly field: [keyof T["views"][V]["row"]] extends [never] ? string : keyof T["views"][V]["row"] & string;
+  };
+}[Views<T>];
 
 /**
  * A sidebar entry added beside the ones `uiSchema.nav` produces. Several items may lead to one resource with different
@@ -148,6 +209,13 @@ export interface AdminNavItem<T extends AdminTypes = AdminTypes> {
   /** A count beside the title, read as the caller through the View's own `requires`; refused or missing shows nothing. Surface: browser. */
   readonly badge?: AdminBadge<T>;
 }
+
+// Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+/**
+ * The application's own MCP tools a page may render (`pages[].mcp.renders`), declared by merging:
+ * `declare module "@aotter/mantle-admin/app" { interface AdminMcpTools { approve_request: true } }`. Type-only.
+ */
+export interface AdminMcpTools {}
 
 /** Explicitly compose a custom page's native heading in browser Admin and its opted-in MCP App. */
 export interface AdminPageHeader {
@@ -180,18 +248,22 @@ export interface AdminPage<T extends AdminTypes = AdminTypes> {
   readonly icon?: React.ElementType;
   /** Without `nav` the page keeps its route and stays out of the sidebar. */
   readonly nav?: { readonly group: BuiltInNavGroup | CustomGroup<T>; readonly order?: number };
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
   /**
-   * Also the page of an MCP App: when the host called this admin View's tool, the App shows `element` instead of the View's rows,
-   * in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host). `renders` names an admin View that
-   * has an MCP tool; `tsc` refuses any other name. The page reads its data through the hooks, so in a host without server tools it
-   * shows what its components make of `unavailable`. When several pages name one View, the first is shown.
+   * Also the page of an MCP App: when the host called this tool, the App shows `element` instead of a View's rows, or for
+   * a Procedure's result, in the `mcp-app` surface (browser-only hooks read `unavailable`, links go through the host).
+   * `renders` names an admin View that has an MCP tool, an admin operation, or an application tool declared in
+   * `AdminMcpTools`, each of which `adminMcpApps({ tools })` must list unless it is a View; `tsc` refuses any other name.
+   * The page reads its data through the hooks, so in a host without server tools it shows what its components make of
+   * `unavailable`. When several pages name one tool, the first is shown.
    */
-  readonly mcp?: { readonly renders: McpViews<T> };
+  readonly mcp?: { readonly renders: McpViews<T> | Name<keyof T["operations"]> | Name<keyof AdminMcpTools> };
 }
 
 /** Declare a project group for every `uiSchema.nav.group` the manifest uses; `tsc` refuses a missing one, and refuses Admin's own group ids. */
-export type AdminNavGroups<T extends AdminTypes = AdminTypes> =
-  { readonly [K in RequiredGroup<T>]: AdminNavGroup } & { readonly [id: string]: AdminNavGroup } & { readonly [K in BuiltInNavGroup]?: never };
+export type AdminNavGroups<T extends AdminTypes = AdminTypes> = { readonly [K in RequiredGroup<T>]: AdminNavGroup } & {
+  readonly [id: string]: AdminNavGroup;
+} & { readonly [K in BuiltInNavGroup]?: never };
 
 /** `defineAdmin`'s `nav`. `groups` is required when the manifest uses a group Admin does not have. */
 export interface AdminNav<T extends AdminTypes = AdminTypes> {
@@ -203,7 +275,8 @@ export interface AdminNav<T extends AdminTypes = AdminTypes> {
 type NeedsGroups<T extends AdminTypes> = [RequiredGroup<T>] extends [never] ? false : true;
 
 /** What `defineAdmin` takes beside the generated metadata. */
-export type AdminConfig<T extends AdminTypes = AdminTypes> = AdminOptions<T> & (NeedsGroups<T> extends true ? { readonly nav: AdminNav<T> & { readonly groups: AdminNavGroups<T> } } : unknown);
+export type AdminConfig<T extends AdminTypes = AdminTypes> = AdminOptions<T> &
+  (NeedsGroups<T> extends true ? { readonly nav: AdminNav<T> & { readonly groups: AdminNavGroups<T> } } : unknown);
 
 /** The options of `AdminConfig`, all optional. */
 export interface AdminOptions<T extends AdminTypes = AdminTypes> {
@@ -245,19 +318,34 @@ export interface AdminDefinition {
  */
 export function defineAdmin<T extends AdminTypes>(
   meta: AdminMeta<T>,
-  ...[config = {} as AdminConfig<NoInfer<T>>]: NeedsGroups<T> extends true ? [config: AdminConfig<NoInfer<T>>] : [config?: AdminConfig<NoInfer<T>>]
+  ...[config = {} as AdminConfig<NoInfer<T>>]: NeedsGroups<T> extends true
+    ? [config: AdminConfig<NoInfer<T>>]
+    : [config?: AdminConfig<NoInfer<T>>]
 ): AdminDefinition {
   const layers: { [name: string]: SlotComponent<never>[] } = {};
   for (const components of [...(config.plugins ?? []).map(plugin => plugin.components), config.components]) {
-    for (const [name, component] of Object.entries(components ?? {})) if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
+    for (const [name, component] of Object.entries(components ?? {}))
+      if (component) (layers[name] ??= []).push(component as SlotComponent<never>);
   }
   // A bad page is skipped, not thrown: this runs at module load in the browser, where a throw would blank all of Admin.
   const pages = ((config.pages ?? []) as unknown as readonly AdminPage[]).filter((page, i, all) => {
-    const problem = !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path) ? "must be lowercase letters, digits and hyphens" : all.findIndex(other => other.path === page.path) !== i ? "is already used by an earlier page" : "";
+    const problem = !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(page.path)
+      ? "must be lowercase letters, digits and hyphens"
+      : all.findIndex(other => other.path === page.path) !== i
+        ? "is already used by an earlier page"
+        : "";
     if (problem) console.error(`defineAdmin: page path '${page.path}' ${problem}; the page is skipped.`);
     return !problem;
   });
-  const badged = new Set((config.nav?.items ?? []).flatMap(item => item.badge ? [item.badge.view] : []));
-  if (badged.size > MAX_BADGE_VIEWS) console.error(`defineAdmin: nav badges read ${badged.size} Views; only the first ${MAX_BADGE_VIEWS} are counted.`);
-  return { meta: meta as AdminMeta, pages, nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] }, layers, ...(config.home ? { home: config.home as AdminNavTarget | { readonly page: string } } : {}), ...(config.mcp ? { mcp: config.mcp } : {}) };
+  const badged = new Set((config.nav?.items ?? []).flatMap(item => (item.badge ? [item.badge.view] : [])));
+  if (badged.size > MAX_BADGE_VIEWS)
+    console.error(`defineAdmin: nav badges read ${badged.size} Views; only the first ${MAX_BADGE_VIEWS} are counted.`);
+  return {
+    meta: meta as AdminMeta,
+    pages,
+    nav: { groups: config.nav?.groups ?? {}, items: (config.nav?.items ?? []) as unknown as readonly AdminNavItem[] },
+    layers,
+    ...(config.home ? { home: config.home as AdminNavTarget | { readonly page: string } } : {}),
+    ...(config.mcp ? { mcp: config.mcp } : {}),
+  };
 }

@@ -1,0 +1,74 @@
+name: Extension point request
+description: An application had to work around the SDK. Report the workaround so the extension point is opened on evidence.
+title: "[Extension] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when an application reaches past the public API: it re-implements SDK logic, patches a package, or imports something that is not a documented entry point.
+        Mark the workaround in the application with `drop when aotter/mantle#<this issue>`, so the same need found again is counted here instead of rediscovered.
+        Do not include secrets, customer names or private repository links.
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Core's boundary
+      description: "Many requests are the application's to solve with a documented pattern: [what Core does, and what it does not](https://github.com/aotter/mantle/blob/develop/docs/handbook/concepts/core-boundary.md) (also `mantle help core-boundary`)."
+      options:
+        - label: I read the boundary page and its "what Core does not do" table. This request is not on it, or I am supplying the evidence its decision says would reopen it.
+          required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What the application needs to do
+      description: The outcome, not the hook you expect.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: The workaround today
+      description: The code or patch, reduced to what shows which SDK behaviour it depends on.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: patterns
+    attributes:
+      label: Why the documented patterns do not fit
+      description: The row of the boundary page's table (or the handbook pattern) you checked, and what it cannot express for this application.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary_tests
+    attributes:
+      label: Which boundary tests it passes
+      description: "For each of the four tests on the boundary page: must it be enforced where SQL is compiled, or is it a closed value the generator must know? Does it avoid Core-owned storage and runtime DDL? Does it avoid coupling Core to one auth plugin's tables, and work for an application behind a gateway? What real application code shows the need?"
+    validations:
+      required: true
+  - type: textarea
+    id: knowledge
+    attributes:
+      label: What it has to know about the SDK
+      description: Internal shapes, ordering or defaults the workaround relies on. This is what breaks on upgrade.
+    validations:
+      required: true
+  - type: dropdown
+    id: varies
+    attributes:
+      label: What varies
+      description: Extension points belong where applications differ; pick the closest.
+      options:
+        - Host runtime (Workers, Bun, other)
+        - Identity or authorization
+        - Storage or media
+        - MCP host behaviour
+        - Admin or UI composition
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: seen
+    attributes:
+      label: Where else this was needed
+      description: Other applications or issues with the same need, if any.

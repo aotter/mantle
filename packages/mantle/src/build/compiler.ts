@@ -1,20 +1,46 @@
 /** Deployment compiler leaves. Optional request surfaces are never constructed. */
 export { compilePlan, tableOutputs, viewOutputs, jsonOutputs } from "./spec/infrastructure/sql/compilePlan.js";
-export { refChecks, userScopeTerm } from './spec/domain/service/SqlRowPolicy.js';
+export { refChecks, userScopeTerm } from "./spec/domain/service/SqlRowPolicy.js";
 export { BUILT_IN_NAV_GROUPS } from "./spec/domain/model/AdminNav.js";
-export { enumOptions, parseNumeric, NATIVE_NOT_NULL, NATIVE_COLUMNS, notNullColumns, protectedColumns, rowPolicy, writePolicy, mcpTools, mcpToolNameSegment, toolTitle, viewAnnotations, procedureAnnotations, assertSiteDefaultsCanonical, canonicalizeLocaleList, expandPolicyRequired, INPUT_RULE_KEYWORDS, lookupLocalRef, rootRefChain } from "./spec/domain/index.js";
+export {
+  enumOptions,
+  parseNumeric,
+  NATIVE_NOT_NULL,
+  NATIVE_COLUMNS,
+  notNullColumns,
+  protectedColumns,
+  rowPolicy,
+  writePolicy,
+  mcpTools,
+  mcpToolNameSegment,
+  toolTitle,
+  viewAnnotations,
+  procedureAnnotations,
+  procedureOutputSchema,
+  assertSiteDefaultsCanonical,
+  canonicalizeLocaleList,
+  expandPolicyRequired,
+  INPUT_RULE_KEYWORDS,
+  lookupLocalRef,
+  rootRefChain,
+} from "./spec/domain/index.js";
 export { canonical, fnv } from "./spec/domain/service/PlanFingerprint.js";
 export type { ManifestSourceSet } from "./spec/domain/service/ManifestParser.js";
 export type { JsonSchema } from "./spec/domain/model/ManifestGrammar.js";
-export type { RuntimePlan, PlanSchema, PlanLowered, LoweredStatement, LoweredView, LoweredPage } from "./spec/domain/model/RuntimePlan.js";
+export type {
+  RuntimePlan,
+  PlanSchema,
+  PlanLowered,
+  LoweredStatement,
+  LoweredView,
+  LoweredPage,
+} from "./spec/domain/model/RuntimePlan.js";
 export type { SqlNode } from "./spec/domain/model/SqlIr.js";
 export type { RowMode } from "./spec/domain/service/SqlRowPolicy.js";
 export type { SiteDefaults } from "./spec/domain/model/SiteConfig.js";
 export { lowerPlan } from "./core/sql/lowered.js";
 export { d1Dialect } from "./d1/dialect.js";
 export { postgresDialect } from "./postgres/dialect.js";
-export * as sqliteCompiler from "./d1/compile/index.js";
-export * as postgresCompiler from "./postgres/compile/index.js";
 export { initialStorageSql as sqliteSchema } from "./d1/storage.js";
 export { initialStorageSql as postgresSchema } from "./postgres/storage.js";
 export { collectionOf, isPrimaryCollection, adminIndexColumns } from "./admin/collections.js";

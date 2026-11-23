@@ -19,6 +19,8 @@ export interface MantleDialect {
   /** What a plan compiled for this dialect records (`RuntimePlan.dialect`); boot refuses any other. */
   readonly name: string;
   readonly version: string;
+  /** Compile side (ADR-0035 decision 3): throws the first refusal of a parsed program as a `SqlRefusal` with its source offset. */
+  accepts(stmts: SqlNode[], context: SqlContext & { source: string }, locations: (number | undefined)[]): void;
   /** The dialect's refusals of a program's IR. Run on every program: the runtime never trusts an IR. */
   check(plan: SqlPlan, context: SqlContext): readonly SqlDiagnostic[];
   readonly lowering: PolicyLowering;
@@ -29,18 +31,8 @@ export interface MantleDialect {
    */
   readonly nativeOrder?: boolean;
   /**
-   * The engine's SQL is its own (ADR-0039), not SQLite's vocabulary lowered onto it: `json_each`, `->> '$.path'`, integer
-   * truthiness and `||` over non-text are refused or mean what the engine says. The compliance suite then runs the engine's
-   * spelling of those cases.
-   */
-  readonly nativeSql?: boolean;
-  /**
    * The dialect's printer: the very function its executor prints with (ADR-0044 decision 3). `mantle generate` prints every View and
-   * inline Procedure through it. Absent, a plan for this dialect carries no lowered statements.
+   * inline Procedure through it.
    */
-  print?(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
-  /** What else the printed text depends on (PostgreSQL: the time zone); compared with `plan.lowered.dialect.key`. */
-  readonly lowerKey?: string;
-  /** Set by `restricted()`: an operator's refusals run on every program, so lowered statements are never used (ADR-0044 decision 5). */
-  readonly restricted?: boolean;
+  print(ast: SqlNode, schemas: Readonly<Record<string, StorageSchema>>): string;
 }

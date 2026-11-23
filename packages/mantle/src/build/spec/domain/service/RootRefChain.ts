@@ -5,9 +5,17 @@ export function lookupLocalRef(root: JsonSchema, ref: unknown): JsonSchema | und
   if (typeof ref !== "string" || !ref.startsWith("#/")) return undefined;
   let value: unknown = root;
   try {
-    for (const key of decodeURIComponent(ref.slice(2)).split("/").map(key=>key.replace(/~1/g,"/").replace(/~0/g,"~"))) value = value && typeof value === "object" && Object.hasOwn(value,key) ? (value as Record<string,unknown>)[key] : undefined;
-  } catch { return undefined; }
-  return value && typeof value === "object" ? value as JsonSchema : undefined;
+    for (const key of decodeURIComponent(ref.slice(2))
+      .split("/")
+      .map(key => key.replace(/~1/g, "/").replace(/~0/g, "~")))
+      value =
+        value && typeof value === "object" && Object.hasOwn(value, key)
+          ? (value as Record<string, unknown>)[key]
+          : undefined;
+  } catch {
+    return undefined;
+  }
+  return value && typeof value === "object" ? (value as JsonSchema) : undefined;
 }
 
 /**

@@ -54,9 +54,12 @@ not load auth. `basePath` must match Better Auth if changed. Better Auth owns al
 `/api/auth/*` endpoints and RFC 8414/9728 well-known discovery routes. Mount those
 well-known paths at the origin, before a catch-all or proxy; retain the external
 issuer/resource URL and trusted forwarding rules. The SDK handler receives them
-unchanged. A POST registration whose redirect URIs are all HTTP localhost,
-127.0.0.1 or [::1] becomes `application_type: "native"` when omitted; explicit
-types and mixed/external callbacks stay under the SDK's validation.
+unchanged. With `authHardening`, their GET/HEAD requests (for the default `/mcp`
+resource and `/api/auth` base) skip Better Auth's database rate limiter and make no
+database round trip; the documents and headers are Better Auth's own. A POST
+registration whose redirect URIs are all HTTP localhost, 127.0.0.1 or [::1]
+becomes `application_type: "native"` when omitted; explicit types and
+mixed/external callbacks stay under the SDK's validation.
 
 With the optional Admin UI selected, use `consentPage:
 "/admin/oauth/consent"`, as in `docs/examples/app-shell/src/auth.ts`, and keep
@@ -73,6 +76,34 @@ HTML. Their `/data` routes serve the 0.2 UI JSON shapes. Consent approval and
 mutation; bearer credentials cannot grant or disconnect apps. Consent completion
 uses only the provider-validated signed query and redirect. All responses are
 private/no-store. Connected-app redirects must be same-origin paths.
+
+## Brand
+
+Core's consent and connected-apps pages show the application's name, logo and
+primary colour from `authRoutes`' `brand`. Admin's own pages use your `Brand`
+component instead ([Customising Admin](native-admin.md#brand)); pass both the
+same values.
+
+```ts
+const routes = authRoutes(auth, {
+  methods: [{ kind: "email-otp" }],
+  brand: { name: "Acme", logo: "/brand/logo.svg", primary: "#0f766e", primaryForeground: "#ffffff" },
+});
+```
+
+Every field is optional and plain text: the pages take no markup from the
+application. `name` is escaped and also ends the page title. `logo` must be an
+`https:` URL or a same-origin path such as `/brand/logo.svg` (not `//host`, no
+backslash or whitespace); it is shown at most 32px high, and its origin (or
+`'self'`) becomes the page's only `img-src`. `primary` (the Connect button and
+focus ring) and `primaryForeground` (its text) must be hex colours (3, 4, 6
+or 8 digits) or `rgb()`, `rgba()`, `hsl()`, `hsla()`, `lab()`, `lch()`,
+`oklab()` or `oklch()` of three numbers, percentages, angles (`deg`, `rad`,
+`grad`, `turn`) or `none`, separated by spaces with an optional `/ alpha`
+(`hsl(210deg 50% 40%)`, `oklch(0.6 0.2 240 / 90%)`) or by commas with an
+optional fourth (`rgba(15, 118, 110, 0.9)`); one value serves light and dark.
+`authRoutes` throws when it is built with any other value, since the value is
+written into the page's stylesheet. Without `brand` the pages are unchanged.
 
 `resolveCaller(request, loader, { audience, scopes })` verifies token signature,
 issuer, audience and request-bound DPoP through Better Auth, including a durable
@@ -192,8 +223,11 @@ Database failures remain server errors, rather than silently authenticating.
 
 For app-owned API keys/personal tokens, supply `resolveCredential(request)` in
 `resolveCaller` options. It runs before OAuth/cookies; return a verified user
-Caller or null when absent, and throw when presented but invalid. The same scope
-floor applies. Any non-Bearer/DPoP Authorization header (including Basic from a staging
+Caller (credential `api-key` or `personal-token`) or null when absent, and throw when
+presented but invalid. The same scope floor applies, and the Caller's scopes are an allow-list: on generated REST,
+MCP and web surfaces it reaches only a target whose `requires` names a `ctx.auth.scope` it holds, and every other
+target, including `ctx.user`-only and ungated ones, refuses it with `AUTH_DENIED` and is left out of its MCP tool
+list. Any non-Bearer/DPoP Authorization header (including Basic from a staging
 gateway), unless handled by the app-owned credential hook, is UNAUTHENTICATED
 and never falls back to a cookie. The application owns credential verification;
 Mantle loads live roles, bans and declared stored fields.
@@ -217,3 +251,94 @@ Merely setting storeSessionInDatabase true does not fix those SDK endpoints.
 Mantle's caller and raw-admin guard validate primary authority before refreshing,
 but do not make arbitrary SDK session caching safe. Keep verification
 consumption and DPoP single-use reservations in the database.
+
+## Managed grants (opt-in)
+
+MCP [enterprise-managed authorization](https://modelcontextprotocol.io/extensions/auth/enterprise-managed-authorization)
+lets an organization authorize a client for its members once: the client posts
+a signed identity assertion (ID-JAG) to the token endpoint with an extension
+grant such as `urn:ietf:params:oauth:grant-type:jwt-bearer`, and gets a user
+access token with no consent screen. Supporting it is the application's choice.
+Mantle does not enable it, does not validate assertions and knows no issuer.
+What Core supplies is the binding that lets such a token pass `resolveCaller`:
+
+- Opt in with `oauthGrantRevocation({ managedGrants: true })`. This declares the
+  `oauthManagedGrant` table, so `mantle generate --auth` adds it to `schema.sql`
+  for SQLite/D1 and PostgreSQL. Apply it through your own migration. Without
+  the option nothing changes: no table, no new query, and a token's
+  `mantle_managed_grant` claim is ignored.
+- In your own grant handler, after **your** code has validated the assertion,
+  authenticated the client and matched the user, call `issueManagedGrant`. It
+  records (or renews) one live grant per user, client and resource set, with its
+  scopes, resources, grant type and the asserting issuer (kept for audit only),
+  and issues the tokens through Better Auth's shared token path. A client's
+  grants for two resources of one server are separate records. A request
+  Better Auth refuses (for example an unknown `resource`) changes no grant, and
+  a ban, password reset or disconnect that lands while the tokens are being
+  issued ends that grant too, so the request fails with `invalid_grant`. A user
+  banned at that moment is refused.
+- The access token names that record (`mantle_managed_grant`) instead of a
+  consent. `resolveCaller` accepts it with no browser session and no refresh
+  token, only while the record is live, belongs to the token's user and client,
+  covers the requested resource and every token scope, and the client is
+  enabled. It is one single-row read per request. A claim alone never passes:
+  a handler can set any claim on its own tokens, so the stored record decides.
+- A managed grant never gets a refresh token: `offline_access` is dropped from
+  the grant, so Better Auth issues none. The client renews with a new assertion,
+  which updates the record for the same resources.
+- The events in the table above end managed grants too (they are marked
+  revoked), and so does a disconnect: managed grants are listed on the
+  connected-apps page, one row per client. Sign-out and session expiry do not
+  end them. A banned user is refused on every request, as for any token, and a
+  ban ends the grants for good: none is issued during the ban, so after an
+  unban the client needs a new assertion that your handler accepts.
+
+```ts
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { issueManagedGrant, oauthGrantExtension, oauthGrantRevocation } from "@aotter/mantle/auth/oauth";
+// Your code: verify the assertion's signature, issuer, audience, expiry and single use, check that it names this
+// client, and return the verified user it names with the scopes and resource it grants.
+import { verifyIdJag } from "./id-jag.js";
+
+const JWT_BEARER = "urn:ietf:params:oauth:grant-type:jwt-bearer";
+
+oauthProvider({
+  loginPage: "/sign-in",
+  consentPage: "/oauth/consent",
+  // ...the other options above
+  extensions: [
+    oauthGrantExtension,
+    {
+      grants: {
+        [JWT_BEARER]: async input => {
+          const body = input.ctx.body as Record<string, string>;
+          const scopes = (body.scope ?? "").split(" ").filter(Boolean);
+          const { client } = await input.provider.authenticateClient({ scopes });
+          const asserted = await verifyIdJag(input.ctx, body.assertion, client); // throws invalid_grant
+          // Grant only what the assertion authorizes, never more than the client asked for.
+          const resource = body.resource ?? asserted.resource;
+          if (resource !== asserted.resource) throw input.ctx.error("BAD_REQUEST", { error: "invalid_target" });
+          return issueManagedGrant(input, {
+            client,
+            user: asserted.user,
+            scopes: scopes.filter(scope => asserted.scopes.includes(scope)),
+            resources: [resource],
+            issuer: asserted.issuer,
+          });
+        },
+      },
+    },
+  ],
+});
+// plugins: [..., oauthGrantRevocation({ managedGrants: true }), oauthProvider(...)]
+```
+
+Validating the assertion, choosing which issuers and clients to trust, and
+matching its subject to a user are the application's job, as are any admin
+settings for them. Match only a verified account (or verify the address from the
+assertion before linking): Core ends grants on an unverified-email proof because
+someone else may have registered that address first, and `issueManagedGrant`
+accepts whatever user your handler passes. For what Claude expects from such a
+server, see Claude's
+[enterprise-managed authorization page](https://claude.com/docs/connectors/building/enterprise-managed-auth.md).
+The decision is recorded in ADR-0014's 2026-11-12 amendment.

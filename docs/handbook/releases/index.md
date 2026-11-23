@@ -32,6 +32,129 @@ Pin every package you use to the same exact version and upgrade them together.
 From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
 move, and never booting 0.2 against a 0.1.x database.
 
+## 0.2.2 (2026-11-23)
+
+Mantle 0.2.2 supports both the 2025 and 2026-07-28 MCP protocols, optional scoped application credentials and
+managed OAuth grants, and private or downloadable media. Admin and its MCP App use the same operation forms:
+an untouched required checkbox in an unbound operation submits its displayed value; an operation bound to an existing
+row asks for a choice. Optional checkboxes can be cleared without turning an omitted value into false.
+
+An existing application upgrades its own code and data. A local D1 rehearsal from 0.2.1 retained rows and sessions
+and restored its pre-upgrade snapshot. It covered one application. The four native targets passed conformance,
+including Workers with a local PostgreSQL connection. The OSS release gate does not include hosted platform
+deployments or a production soak. Hyperdrive pooling and external MCP hosts need their own acceptance.
+
+[GitHub Release](https://github.com/aotter/mantle/releases/tag/v0.2.2) lists the full change history since v0.2.1.
+
+### Upgrading from 0.2.1
+
+Pin each of the Mantle packages you use to exactly `0.2.2` and refresh the lockfile. Use the application's own
+`mantle generate` command. Check the generated SQL, types and access targets. Rehearse any application-owned migration
+on a copy and keep existing users, sessions and data; the generated `schema.sql` initializes an empty database.
+See [migrations](../guides/migrations.md) and [Upgrade an application](#upgrade-an-application).
+
+#### Breaking changes
+
+- **Peers (#2071, #2114).** Move all selected Better Auth peers from `1.7.7` to `1.7.16` together, with
+  `@better-auth/utils` at `0.5.1` when installed. If you serve MCP, move `@modelcontextprotocol/server` from
+  `2.3.1` to exact `2.4.0`. Both protocol eras remain served.
+- **Imports and generated options (#1967, #2024).** Use `body` from `@aotter/mantle/rest` for
+  `@aotter/mantle/json-body`; use the native handle in `store(db, caller).transaction((tx, db) => …)` for
+  `@aotter/mantle/driver/postgres`; use `convertInput`, `Conversions` and `ContractError` from
+  `@aotter/mantle/contracts` for `@aotter/mantle/surface`. Those three old subpaths ship throwing migration stubs
+  through this release. `surface.decode` has no replacement. Use types from `@aotter/mantle/mcp` in place of
+  `@aotter/mantle/mcp-apps`, and `userOf` for `sessionUserOf`. Generated-code plumbing moves under
+  `@aotter/mantle/internal/`; use documented public entries in application code. Drop the `fields` option from
+  generated `rest`, `mcp` and `web`; the manifest supplies those fields. Replace MCP `onRefusal` with
+  `onObservation` for `kind: "request-refused"` and its `reason`. Unused diagnostic codes have no replacement.
+- **Grammar and validation (#1967, #1964, #2118, #2123).** `schedule` and lifecycle Triggers and `requires.guard`
+  now fail at parsing, including in `mantle describe`. Wire the application's `scheduled()` or check authorization
+  in its handler. NUL and unpaired surrogates now fail input validation; `maxLength` counts code points and
+  `x-mantle-maxBytes` limits bytes. Escaped LIKE patterns over the D1 limit now fail on every target; use a shorter
+  pattern. A Store write and a flat `restrict` cannot name one column in two spellings. Use the declared
+  spelling once; complex row policy can use `OR` and parentheses.
+- **Transactions and ref handlers (#2017, #2070).** Catching a failed statement no longer lets the outer Store
+  transaction commit earlier steps or report success. Handle the rollback; use a separate transaction for an
+  independent write. Declare `spec.db: native` on a ref Procedure that reads `ctx.db` or needs the native handle
+  in its transaction callback. Prefer the caller-bound Store when direct SQL is unnecessary.
+- **Application credentials (#1979).** A Caller with `credential: "api-key"` or `"personal-token"` can reach
+  generated REST, MCP and web targets only when the target explicitly requires a scope it holds. Add
+  `ctx.auth.scope` in the target's `requires`, or `scopes` on a hand-written MCP tool. They cannot use the
+  built-in Admin endpoints. The `resolveCredential` hook no longer accepts `credential: "oauth"`; use the
+  verified OAuth flow for that identity.
+- **HTTP routing and authorizer errors (#1967, #2132, #2103).** Admin's unknown paths, methods and malformed paths
+  return 404, 405 with `Allow`, and 400 before checking authentication, with REST diagnostic paths. MCP checks
+  authorization before input validation; `nativeRest` runs a route's check and its declared target authorization.
+  An `authorize` rejection with status 429 now keeps its code, message and `retryAfter`. Gateway observation
+  records an error and Admin View batch reports `error: true`; other non-authorization errors still refuse with 403.
+  Admin entry read/write uses one Schema read authorization check where it previously used two. Treat a
+  `describe` diff for a removed user-field restriction as `changed`, and review whether it widens access.
+  Auth and MCP responses previously missing a cache policy now carry `private, no-store`. Older app shells
+  should adopt [the shell's response default](../guides/caching.md#the-shells-default) for their own routes.
+- **Host access contract (#2133).** Remove `dryRun` from forwarded host props; any value now fails
+  `HOST_CONTRACT` (412). `HostProps`, `Caller`, `AccessEvent` and the REST/web/MCP result no longer carry
+  `dryRun`. Preview policy with `mantle describe` or `describeApp`. Regenerate `access-targets.ts`;
+  `AccessTarget.opaque` and `variants` are gone, leaving `targetHash`. Remove the dry-run argument before
+  `call` in `callToolLazy`, and remove references to route `variant`/`prepare` and pipeline
+  `dryRun`/`dryRunResult`/`dryRunResponse`. There is no replacement for those hooks. An unknown identifier
+  key on host props may now be named in the 412 diagnostic.
+- **MCP results and observation (#2098, #2104, #2114).** Use `withResult(data, { content, _meta })` or
+  `withResultMeta` in place of an object literal typed as `ResultWith` or `ResultWithMeta`. REST, Admin
+  operations and Admin WebMCP answer the data itself rather than `{ data, _meta }`; WebMCP may also forward
+  `content`. The 2026 MCP wire supports a non-object `structuredContent` where the declared root schema
+  allows it; use object output for tools called by ext-apps 2.0.4. Invalid result shapes now fail before being
+  recorded. App-only calls still require the tool's own authorization and are no longer refused only because a
+  client lacks Apps capability; keep authorization independent of discovery. Cancellation records
+  `REQUEST_CANCELLED` (499); a pre-aborted call runs no step. Extend exhaustive `McpObservation` handling for
+  `request-refused` status 400 / `protocol-version`, and optional invocation `client` / `protocolVersion`.
+  A legacy batch larger than 100 messages is refused before authorization.
+- **Admin host customizations (#2004, #2005, #2117).** `useHost().sendMessage` returns a
+  `HostRequestOutcome`: handle `"accepted"`, `"refused"` and `"unknown"`. Avoid treating a timeout as a
+  refusal or repeating an uncertain write. An `AdminHost` implementation or mock now provides
+  `registerTools` and `downloadFile`; rename custom app tools with the reserved `view_` prefix. Hosts may
+  observe the `tools.listChanged` capability. `Brand` now renders on sign-in, consent, connected apps,
+  access-denied, error and loading pages as well as the sidebar. Pass through `BrandProps.placement` when
+  composing `renderDefault`, or return null on placements that should stay unbranded.
+- **Media configuration (#2035, #2051).** Replace invalid purpose MIME tokens with a supported shorthand or a
+  lowercase MIME type without parameters; e.g. `heic` becomes `image/heic` in both `required` and
+  `maxBytes`. A custom `S3Signer` must sign the requested headers including `Content-Type`, and custom
+  storage must respect `contentDisposition`. Review the
+  [safe delivery rules](../cloudflare/media-r2.md#safe-delivery) when adding non-image or wildcard types.
+  The default `mediaUploadCard()` tool is now `open_media_upload`. Use that name for the card, or explicitly
+  pass `{ tool: "upload_media" }` to retain the combined behavior. Direct `upload_media` remains available.
+- **Copied sample applications (#2149, #2150).** When adopting the new Purchasing example, supply `reason`
+  to `reject_request` and first apply the example's nullable text `rejectionreason` migration. When adopting
+  the new Recipes example, the default locale is `en` instead of `zh-TW`, and the translation locale is
+  `fr` instead of `en`. Plan any necessary content migration and redirects to preserve existing URLs.
+
+#### New options and regeneration
+
+- Regeneration updates access targets, MCP bindings and input validators. Bare Procedures can use the
+  generated `input(raw)` validator and converter. Application credentials and opt-in managed OAuth grants are
+  covered by the [OAuth guide](../guides/oauth.md); enabling managed grants on existing data requires adding
+  the generated `oauthManagedGrant` table with an application migration.
+- Review [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md) if applicable. Keep the Better
+  Auth instance per isolate with a request-local database client, and confirm Hyperdrive query caching is
+  disabled. postgres.js sends named statements unless its client has `prepare: false`. A column-changing
+  migration can invalidate prepared statements; plan the application upgrade accordingly.
+- Media tools are `upload_media`, `find_media`, `update_media` and `delete_media`, with an optional upload
+  card. The seven deprecated names remain through 0.2.2. Private purposes use signed reads. A generated
+  Worker serves static assets directly and `mantle bundle` emits content-hashed browser entries. Review
+  existing Wrangler routing and replace longer cache rules for Admin and app chunks if appropriate.
+- The [agent workflow](../guides/agent-workflow-acceptance.md) calls for independent browser verification of
+  Admin writes. The [examples](../examples/hub.md) show native Bun and Workers routes. Run the project's
+  generation, type and behavior checks, then verify the affected UI/API, permissions, version conflicts and
+  session flows before upgrading.
+
+#### Known limits
+
+The built-in Admin page and its MCP App exceed the
+[100 KB first-load JavaScript target](../guides/size-and-startup.md#native-admin-baselines). Admin tables can
+require horizontal scrolling on a narrow display. Optional checkbox inputs start unchecked and an untouched
+field preserves the stored value; read the reviewed snapshot before selecting a new state. Some 2025-era MCP
+clients still list App-only tools without declaring Apps support (#2129). The release uses the documented
+authorization boundary for all tool calls.
+
 ## 0.2.1 (2026-10-30)
 
 0.2.1 adds **Schema locks**: a manifest rule that refuses a row's update or delete on every caller path (REST, MCP,
@@ -494,7 +617,7 @@ See [HTTP, MCP, CLI and packages](../reference/surface.md) for the full list.
 
 **Hosting.** `createMantleWorker` assembles the conventional Cloudflare Worker:
 D1 and assets bindings, Better Auth 1.7 (social providers, email OTP, magic
-link, passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
+link, and app-enabled plugins such as passkey), Admin, MCP, Web and R2 media uploads. The Bun and Vercel
 adapters are experimental, cover public Views and HTTP Triggers only, and leave
 authentication and CSRF to the host. ChatGPT Sites is a
 first-class integration with a runnable reference.

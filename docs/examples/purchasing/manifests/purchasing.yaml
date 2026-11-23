@@ -43,6 +43,7 @@ spec:
       budgetId: { type: string, x-mantle-ref: budgets, readOnly: true }
       requestStatus: { type: string, enum: [submitted, approved, rejected, ordered, confirmed] }
       supplierOrderId: { type: string }
+      rejectionReason: { type: string, maxLength: 1000, readOnly: true, title: Rejection reason }
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -78,6 +79,37 @@ spec:
   sql: |
     SELECT id, title, amount, department, requestStatus AS "requestStatus", version
     FROM requests ORDER BY created_at DESC, id DESC
+---
+# One of the employee's own requests, by id: the detail page of the app under /app (src/client/app.tsx), so a deep
+# link opens any request, not only one on the list's first page.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: my-request }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  restrict: { requests: "author_id = auth.uid()" }
+  input:
+    type: object
+    additionalProperties: false
+    required: [id]
+    properties:
+      id: { type: string, maxLength: 100 }
+  sql: |
+    SELECT id, title, amount, department, requestStatus AS "requestStatus", supplierOrderId AS "supplierOrderId",
+      rejectionReason AS "rejectionReason", version
+    FROM requests WHERE id = input.id ORDER BY id
+---
+# Each department and what its budget has left, for any signed-in employee: the app's new-request form shows it
+# beside the department, so an employee sees before submitting whether the request fits.
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: department-budgets }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.user] } }
+  sql: |
+    SELECT department, remaining FROM budgets ORDER BY department
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
@@ -232,15 +264,18 @@ kind: Procedure
 metadata: { name: reject-request }
 spec:
   title: Reject a purchase request
+  uiSchema: { fields: { reason: { widget: textarea } } }
+  description: Reject a submitted request with a reason; keeps the department budget unchanged and notifies the requester.
   requires: { auth: { all: [ctx.admin] } }
   target: { schema: requests, id: id, version: expectedVersion }
   input:
     type: object
     additionalProperties: false
-    required: [id, expectedVersion]
+    required: [id, expectedVersion, reason]
     properties:
       id: { type: string }
       expectedVersion: { type: integer }
+      reason: { type: string, minLength: 1, maxLength: 1000, pattern: '\S', title: Reason, description: Explain why this request is being rejected. }
   output: { type: object }
   handler: { ref: reject-request }
 ---
@@ -252,16 +287,17 @@ spec:
   input:
     type: object
     additionalProperties: false
-    required: [id, expectedVersion]
+    required: [id, expectedVersion, reason]
     properties:
       id: { type: string }
       expectedVersion: { type: integer }
+      reason: { type: string, minLength: 1, maxLength: 1000, pattern: '\S' }
   output: { type: object }
   handler:
     sql: |
-      UPDATE requests SET requestStatus = 'rejected'
+      UPDATE requests SET requestStatus = 'rejected', rejectionReason = input.reason
       WHERE id = input.id AND version = input.expectedVersion AND requestStatus = 'submitted'
-      RETURNING id, title, author_id AS "authorId"
+      RETURNING id, title, author_id AS "authorId", rejectionReason AS "rejectionReason"
 ---
 # Called after the supplier accepted the order: by the approve handler (admin caller) and by the cron retry (system
 # caller). System callers satisfy no `requires` predicate, so it has none; no Trigger exposes it.

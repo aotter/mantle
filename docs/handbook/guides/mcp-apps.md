@@ -33,6 +33,54 @@ passed through as the resource's `_meta.ui`. `domain` is the dedicated sandbox
 origin for hosts that serve each App from its own origin; use the form that
 host documents.
 
+When one App is served at several server URLs and the host derives `domain`
+from the server URL, pass a function source and set `domain` from `request.url`,
+the URL of the request being answered. Core does not compute host-specific
+values; apply the formula the host documents, for Claude
+[Set `ui.domain` for Claude](https://claude.com/docs/connectors/building/mcp-apps/getting-started#set-ui-domain-for-claude):
+
+```ts
+import type { McpAppsSource } from '@aotter/mantle/mcp';
+
+declare function loadAppHtml(): string;
+declare function hostDomain(serverUrl: string): string; // the formula your host documents
+
+const app: McpAppsSource = ({ request }) => ({ resources: [{
+  uri: 'ui://my-app/records/build-1', name: 'my-app-records',
+  html: () => loadAppHtml(), renders: ['records'],
+  domain: hostDomain(request.url),
+}] });
+```
+
+For Claude, `domain` must match the connector exactly; otherwise Claude shows
+`Invalid ui.domain format` or `ui.domain mismatch` instead of the App
+([`ui.domain` validation fails](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#ui-domain-validation-fails)):
+
+- The hash covers the exact connector URL configured in Claude, scheme, path
+  and any trailing slash included: `https://example.com/mcp` and
+  `https://example.com/mcp/` give different values.
+- `request.url` is that URL only when nothing in front of the server changes
+  it. Behind a proxy, a gateway or a rewrite (another host, scheme or path, a
+  trailing slash added or removed), hash the public connector URL from your own
+  configuration, not `request.url`.
+- A local stdio server has no URL to hash, so Claude offers it no `domain`:
+  leave `domain` unset.
+
+Without `domain`, Claude derives the App's origin from the conversation and the
+connector, so the origin differs between conversations. Storage that the App
+calls directly must allow for that ([The upload card](#the-upload-card)).
+
+A resource's `meta` adds host-defined keys to the `_meta` of the
+`resources/read` content item, merged as a tool's `meta` is: the top level
+shallowly, `ui` one key deep. The typed fields (`csp` or a loader's `csp`,
+`permissions`, `domain`, `prefersBorder`) are applied after it and win over
+`meta.ui` keys of the same name. `meta` is not sent on `resources/list` or in
+tool `_meta`. For example, `meta: { ui: { preferredDisplayMode: 'fullscreen' } }`
+asks Claude to open the App in its side panel, where available, without a click.
+This is a Claude extension outside the MCP Apps specification, as Claude's
+[display modes](https://claude.com/docs/connectors/building/mcp-apps/display-modes)
+page describes it; other hosts may ignore it.
+
 ### Tool metadata and result `_meta`
 
 A hand-built kernel `Tool` may set `meta`, merged into its `_meta` in
@@ -42,9 +90,16 @@ deep. Use it for keys such as `ui.visibility`, `ui.resourceUri` with
 link (another `ui.resourceUri` than the `renders` resource, or a visibility other
 than `["app"]` on an `appOnly` tool) fails when `mcp()` is constructed.
 `meta: { ui: { visibility: ["app"] } }` hides any tool, a Procedure included,
-from clients that declare no MCP Apps support, as `appOnly` does for Views. It
-is a listing hint only: `tools/call` still runs every identity, scope, `check`
-and `authorize` decision, so an App-only write is authorized like any other.
+from the `tools/list` of clients that declare no MCP Apps support, as `appOnly`
+does for Views. It is a listing hint only: a `tools/call` that names the tool
+runs it whatever the request declares (an App's own call that a host forwards,
+say), after every identity, scope, `check` and `authorize` decision, so an
+App-only write is authorized like any other.
+It is not an access boundary either: any client holding the same credential can
+call an App-only tool directly. An action that needs the person present is
+enforced on the server, for example by a Procedure that accepts only a
+single-use value which a person-present check in the browser produces and
+which no MCP result ever returns.
 
 A `run` may return `withResultMeta(data, meta)` from `@aotter/mantle/mcp`. The
 result's text and `structuredContent` are built from `data` exactly as before;
@@ -68,10 +123,233 @@ const uploadTarget: Tool<unknown> = {
 };
 ```
 
-`callTool` and `callToolLazy` return the wrapper itself, `{ data, _meta }`.
+`run` also receives `{ apps }` after `handlers`: `apps` is true when the
+`tools/call` request declares MCP Apps support and an App resource renders the
+tool, so a tool can keep a secret in
+the result `_meta` for an App and return it in the data for a client that has
+none (`upload_media` does this with its targets). `callTool` and `callToolLazy`
+take it as an optional last argument (default `{ apps: false }`).
+
+### Progress and cancellation
+
+The same argument carries `signal` and, when the client asked for progress with
+a `progressToken`, `progress(progress, total?, message?)`. Progress
+notifications go out on the call's SSE stream before its result, on 2025-era and
+2026-07-28 requests alike. `signal` aborts while the tool runs if the request
+ends before its result: a 2026-07-28 client cancels by closing the request, and
+a dropped connection does the same. It never aborts after the call finished. A
+2025-era client's `notifications/cancelled` arrives as a separate request that a
+stateless server cannot relate to the call, so for that client the signal aborts
+only when its connection closes. Only hand-written tools receive them; a
+generated Procedure tool's handler is shared with Store and REST callers and
+gets neither.
+
+The signal follows the incoming `Request.signal`, so it aborts only where the
+runtime aborts that one on a client disconnect:
+
+| Stack | Client disconnect aborts `signal` |
+|---|---|
+| `bun-sqlite`, `bun-postgres` (`Bun.serve`) | Yes |
+| `cloudflare-d1`, `cloudflare-postgres` (Workers), `compatibility_date` 2026-11-17 or later, or the `enable_request_signal` flag (and not `disable_request_signal`) | Yes, when Cloudflare sees the disconnect, for a JSON result and for a streamed (SSE) one |
+| Workers, an earlier date without the flag | Only while the result streams as SSE (a call that sent progress); a JSON result does not abort it |
+
+`mantle generate` gives a new project the newest compatibility date its installed
+workerd supports, which can be earlier than 2026-11-17 (2026-11-02 with workerd
+1.20261102): on such a date add `enable_request_signal` to the Worker's
+`compatibility_flags` yourself. Whether a disconnect reaches the platform at once
+depends on the client's path: an HTTP/2 stream reset arrives at once, an HTTP/1.1
+close through a proxy may arrive late or not at all. Local `wrangler dev` and
+`workerd serve` do not deliver a client disconnect, so test cancellation on Bun or
+on a deployed Worker.
+
+On Workers the invocation ends at the disconnect: only what the abort listeners do
+synchronously still runs, and the tool's code after its next `await` does not
+resume. So pass the signal to `fetch()` and other cancellable APIs, and stop work
+the application keeps alive with `ctx.waitUntil` when it aborts: such work otherwise
+runs to its end after the client has gone. A call that completes normally never
+sees an abort.
+
+A call whose client goes away before the tool settles is recorded as cancelled
+in the abort event itself, so a Worker records it too: its completion
+observation is `outcome: "failed"` with `code: "REQUEST_CANCELLED"` and a
+`durationMs` that runs to the disconnect, and in gateway mode its access event
+is `outcome: "error"` with that reason. Neither is logged as an unhandled
+failure, and each invocation still has exactly one completion. Both records keep
+that first outcome: the result is not delivered, so a tool that ignores the
+signal and goes on to finish (on Bun, which keeps running it) is still recorded
+as cancelled, although its writes may have been committed. Stop at the signal
+before a write the client should be able to rely on. A request the client left
+before the call started runs no step of it: on 2026-07-28 the SDK answers 499
+and no invocation is observed; on a 2025 revision the stateless transport still
+starts the invocation, which is recorded as cancelled. Its access event records
+the cancellation in both.
+
+```ts
+import type { Tool } from '@aotter/mantle/mcp';
+
+declare function importBatch(index: number, signal?: AbortSignal): Promise<void>;
+
+const importAll: Tool<unknown> = {
+  name: 'import_all', surface: 'admin', description: 'Import every batch.', closed: true,
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
+  run: async (_db, _caller, _input, _handlers, call) => {
+    for (let batch = 1; batch <= 10; batch++) {
+      call.signal?.throwIfAborted();
+      await importBatch(batch, call.signal);
+      await call.progress?.(batch, 10, `batch ${batch} of 10`);
+    }
+    return { batches: 10 };
+  },
+};
+```
+
+`withResult(data, { content, _meta })` does the same and also sends standard MCP
+content blocks: image, audio, `resource_link`, an embedded resource, or text
+with `annotations` (for example `audience: ["user"]`). They follow Core's own
+blocks (the JSON text of `data`, the tool version line, the page notice), so
+`content[0]` stays the JSON text, and `structuredContent` and a declared
+`outputSchema` are unchanged. `withResultMeta(data, meta)` is
+`withResult(data, { _meta: meta })`. A model sees an image only as an image
+block, never as base64 inside the JSON:
+
+```ts
+import { withResult, type Tool } from '@aotter/mantle/mcp';
+
+declare function renderChart(caller: unknown): Promise<{ id: string; png: string }>;
+
+const chart: Tool<unknown> = {
+  name: 'chart', surface: 'public', description: 'Draw the chart.', readOnly: true,
+  inputSchema: { type: 'object', additionalProperties: false }, validate: raw => raw as Record<string, unknown>,
+  run: async (_db, caller) => {
+    const { id, png } = await renderChart(caller);
+    return withResult({ id }, { content: [{ type: 'image', data: png, mimeType: 'image/png' }] });
+  },
+};
+```
+
+Blocks are typed loosely (`McpContentBlock`); the SDK's own types, such as
+`import type { ImageContent } from "@modelcontextprotocol/server"`, are
+assignable to it. The installed SDK checks each block before the call is
+recorded: a block it refuses (bad base64, an unknown type) fails the call with
+an `INTERNAL_ERROR` diagnostic and a failed outcome, after `run` has already
+finished. A thrown error carries no application blocks.
+
+`callTool` and `callToolLazy` return what the tool's `run` or `page` returned,
+the wrapper included, `{ data, content?, _meta? }`; for a generated ref
+Procedure tool that is what its handler returned. `resultData(value)` from
+`@aotter/mantle/mcp` returns a wrapper's `data` and any other value as it is.
 A caller that forwards a result to a model, such as an application's own agent,
-must forward only `data` and drop `_meta`, or the signed URL leaks through that
-path. A thrown error still produces the standard diagnostics result.
+must forward only `data` (and `content`) and drop `_meta`, or the signed URL
+leaks through that path. Admin's WebMCP route does this. A thrown error still
+produces the standard diagnostics result.
+
+```ts
+import { callTool, resultData, type Tool } from '@aotter/mantle/mcp';
+
+declare const tool: Tool<unknown>;
+declare const db: unknown;
+declare const caller: import('@aotter/mantle/contracts').Caller;
+
+const data = resultData(await callTool(tool, {}, db, caller, undefined as never));
+```
+
+Only `withResult` and `withResultMeta` make a wrapper: a plain object with a
+`data` field is the tool's data, and the types refuse it as a ref handler's
+return unless it matches the declared output.
+
+A ref Procedure handler may return the wrapper too: its generated type is
+`Promise<Output | ResultWith<Output>>`. The Procedure's generated MCP tool sends
+the blocks and `_meta`; `store(...).procedures[name]`, `ctx.store.procedures`,
+its REST route and its Admin operation return `Output` alone, so other code
+calling the Procedure never sees the wrapper. `structuredContent` and the
+advertised output schema describe `Output`:
+
+```ts
+import { withResult } from '@aotter/mantle/mcp';
+import type { Handlers } from './generated/generated.js';
+
+declare function renderChart(id: string): Promise<string>;
+
+export const handlers = {
+  'chart-report': async (ctx, input) => {
+    const report = { id: input.id };
+    return withResult(report, { content: [{ type: 'image', data: await renderChart(input.id), mimeType: 'image/png' }] });
+  },
+} satisfies Partial<Handlers>;
+```
+
+### Results that are not objects
+
+A tool may return any JSON value: an array, a string, a number, a boolean or
+`null` (SEP-2106). On a 2026-07-28 request its `outputSchema` (a ref Procedure's
+output, or `Tool.outputSchema`) is listed with whatever root `type` it declares,
+and a success sends the value as `structuredContent` beside its JSON text block,
+so a client validates it against that schema. On a 2025-era request, whose
+structured content is an object, such a tool lists no `outputSchema` and its
+result is the JSON text block alone (the SDK's `{ result }` wrapping never
+reaches the client); an object output is the same in both eras, and so is the
+tool version. Data the listed schema's root `type`
+does not admit, `undefined` included, fails the call as `INTERNAL_ERROR`: the
+server does not send a result its own schema refuses. A failure omits
+`structuredContent` when the tool lists a schema. An App reads either an object
+or any other value with `outputOf` from `@aotter/mantle-admin/controller`. An
+App that calls a tool itself through the official bridge (`callServerTool`,
+ext-apps 2.0.4) gets an "Invalid result for tools/call" error for a non-object
+`structuredContent`, because that bridge still checks result shapes the way the
+2025 protocol revisions did: give a tool an App calls an object output. A host's
+tool-result notification reaches the App with any value.
+
+### Open an App from a host's entry point
+
+Claude can list an App on its Artifacts page, so people open it without asking
+for it, when one of its tools is marked as a global entry point: the tool's
+`_meta` keeps `ui.resourceUri` and adds `"openai/ui": { entrypoints: [{ type: "global" }] }`.
+That key is a host extension, outside the MCP Apps specification; other hosts may
+ignore it. The host offers entry points only to some organizations and only for
+remote Verified directory or custom connectors, so the App must still work when
+it is opened from a conversation. Core adds no entry-point API: the generated
+tools are plain objects, so give one of them `meta` before calling the generated
+`mcp()`:
+
+```ts
+import { mcp, tools } from './generated/mcp.js';
+
+declare const db: (env: Env) => D1Database; // as in service composition
+declare const caller: Parameters<typeof mcp>[0]['caller'];
+declare function loadAppHtml(): string;
+
+const entry = tools.find(tool => tool.name === 'my_tasks')!;
+Object.assign(entry, { meta: { ...entry.meta, 'openai/ui': { entrypoints: [{ type: 'global' }] } } });
+const handler = mcp({ db, caller, apps: { public: { resources: [{
+  uri: 'ui://my-tasks/build-1', name: 'my-tasks', html: () => loadAppHtml(), renders: ['my_tasks'],
+}] } } });
+```
+
+Mark the tool in place rather than passing a copied array to the kernel `mcp()`
+from `@aotter/mantle/mcp`: the generated `mcp()` also passes the access targets
+that gateway pins check, the manifest's access user fields, and the
+read catalogue that lets a cookie-session read count as read-only, and a kernel
+composition would have to supply each of them again.
+
+`renders` still produces `ui.resourceUri`; the two keys merge. The mark is a
+listing hint and grants nothing: every call of the tool still runs its
+`requires`, scope and `authorize` decisions. A client that declares no MCP Apps support
+sees the tool without `ui.resourceUri` and reads its result as text. The
+[frontend example](../../examples/frontend-mcp-app/README.md) is tested this way.
+
+The host's requirements for the marked tool are on Claude's
+[entry points](https://claude.com/docs/connectors/building/mcp-apps/entry-points)
+page; check them there. In short: every input optional, with a useful first
+view for `{}` (a View tool's `limit` and `cursor` are optional, so a View with
+no required input opens on its first page), and since the model may fill an
+optional input, a value is no proof of the user's choice; `ui.visibility` omitted or
+containing `"model"` (not an `appOnly` View); a `title` of at most 60
+characters that leaves out Claude's and Anthropic's names; and a `name` with no
+two underscores in a row, no two dots in a row and no dot next to an underscore.
+Core derives a tool name from the manifest name, lower-cased with `-` turned
+into `_`, and adds no prefix, so a manifest name can break the name rule:
+`my--tasks`, `my_-tasks` and `my__tasks` all become `my__tasks`, and `a..b` and
+`a._b` stay as they are. Rename such a View or Procedure before marking it.
 
 ## Package and application ownership
 
@@ -82,7 +360,11 @@ data and invocation callbacks; it knows no MCP connection, cookie, role or Admin
 `@aotter/mantle-admin` owns the Admin product, its existing hooks/surface transport
 and the thin adapter to the pinned official ext-apps client. The official client
 owns protocol negotiation, messages and connection lifecycle; the separate browser
-source/origin guard is not a protocol implementation.
+source/origin guard is not a protocol implementation. That guard keeps the host's
+origin after the handshake only when the App is framed; without a distinct parent
+(`window.parent === window`, as in a native WebView) it pins nothing and leaves the
+official transport's own checks. That unframed case is not yet confirmed on a
+mobile host.
 
 Applications own domain components and build entries. A frontend MCP App uses its
 own React entry, official ext-apps and optionally mantle-ui, registered through
@@ -113,6 +395,12 @@ const adminApps = [
 Register the array on `apps.admin`. Leaving Admin's default ownership of all Views
 while another resource claims one is an error, independent of registration order.
 
+`renders` names catalogue Views. To have the Admin App also render a Procedure's result, or
+a tool of your own, list it in `tools`: `adminMcpApps({ catalogue, tools: ['approve_request'] })`.
+The App shows the page that declares it (`pages: [{ ..., mcp: { renders: 'approve-request' } }]`
+in `defineAdmin`), or the result's rows when it has any. The endpoint refuses a name it does
+not serve.
+
 An HTML loader receives `{ tools, env, request }`: `tools` is the same tool names this caller's
 `tools/list` returns on the endpoint (with `authorize` configured, only those
 it allows), so the HTML it renders names no tool the caller cannot see; `env` is
@@ -135,24 +423,29 @@ file carries the `csp` your `defineAdmin({ mcp: { csp } })` declared; a loader m
 `resources/read`; it replaces the resource's own `csp` rather than merging with it. A loader
 that throws answers the host with a redacted error and logs the message on the server.
 
-Resource URIs are immutable cache identities. By default Admin contributes an async
-resource source: after the request passes the origin/identity/Admin gates, Admin
-reads its built asset and hashes the HTML, full static catalogue and material
-resource metadata into `ui://mantle-admin/admin/<digest>`. A new UI build or catalogue
-gets a new URI, used consistently by tools and resource reads. Workers cache only
-the raw immutable asset/identity per contributor and ASSETS binding; caller-filtered
-catalogues are embedded per read. Bun rereads the file so rebuilding in the same
-process changes the identity. Run `mantle bundle` and deploy its assets with the server;
-missing assets can fail discovery when Admin resolves the build identity.
+Resource URIs are stable identities. The MCP Apps specification lets a host prefetch
+and cache a UI resource by its URI, so by default Admin links its tools to the fixed
+`ui://mantle-admin/admin`: after a deploy a host keeps the link it saved, and a new read
+returns the new build. After the request passes the origin/identity/Admin gates, Admin
+reads its built asset and also serves it at `ui://mantle-admin/admin/<digest>`, a hash of
+the HTML, full static catalogue and material resource metadata, for conversations that
+hold that URI. Workers cache only the raw asset and its identity per contributor and
+ASSETS binding; caller-filtered catalogues are embedded per read. Bun rereads the file,
+so a rebuild in the same process serves the new build. Run `mantle bundle` and deploy its
+assets with the server; missing assets can fail discovery.
 
-An explicit `uri` keeps application-owned identity. A custom `html` function must
-supply a build-specific `uri`: Core cannot infer its build or safely memoize its
-request-dependent output. A raw `html` string may use the automatic identity.
+Change the URI only when saved conversations must not load the new App, because its
+contract with its tools changed incompatibly: pass an explicit `uri` such as
+`ui://mantle-admin/admin/v2`. A custom `html` function has no build identity to hash: it
+is served at the fixed URI or an explicit `uri`.
 
 ### Keep old conversations working after an upgrade
 
-A new URI does not invalidate a host's saved tool definitions or old conversation
-cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
+With the fixed default, conversations keep rendering across deploys without retention.
+A conversation that holds a content-hash URI from an earlier build (one started before
+this default, or before an explicit `uri` change) needs that page
+retained: a new URI does not invalidate a host's saved tool definitions or old
+conversation cards. Keep previously deployed pages with `adminMcpApps({ catalogue, previous })`.
 `previous` is an array of `AdminMcpSnapshot` from `@aotter/mantle-admin/mcp`:
 `{ uri, html, csp?, domain?, title? }`. Each `html` includes the original `mantle-catalog`
 script (the page returned by `resources/read`, not the raw bundle). The SDK serves
@@ -186,8 +479,9 @@ serveMcpHandler ??= serveMcp(tools, { ...options, apps: {
 } });
 ```
 
-Keep custom `renders`, catalogue extensions, `domain` and `title` in the shared
-definition too. Node 22.18+ can read these generated `.ts` modules; a TypeScript
+Keep custom `renders`, catalogue extensions, `domain`, `title`, `fontDomains`,
+`prefersBorder` and `meta` in the shared definition too: each is part of the
+content-hash URI. Node 22.18+ can read these generated `.ts` modules; a TypeScript
 app using `.ts` import paths enables `allowImportingTsExtensions` with `noEmit`.
 Keep snapshots outside the directory containing `admin.tsx`: Tailwind scans that
 directory, and compiled HTML/JavaScript inside a snapshot can be mistaken for
@@ -199,31 +493,72 @@ for the next build. Run it in the deployment script, not as a manual cache fix:
 
 ```js
 import { readFileSync, writeFileSync } from 'node:fs';
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
 import { adminMcpApps } from '@aotter/mantle-admin/mcp';
 import { appDefinition } from '../src/mcp-app-definition.ts';
 
 const path = 'mcp-app-previous.json';
 const previous = JSON.parse(readFileSync(path, 'utf8'));
 const context = { env: {}, request: new Request('https://archive.invalid/mcp') };
-const source = adminMcpApps({ ...appDefinition,
-  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') });
-const { resources: [resource] } = typeof source === 'function' ? await source(context) : source;
+const { resources } = await resolveMcpApps(adminMcpApps({ ...appDefinition,
+  html: readFileSync('dist/client/admin/mcp-app.html', 'utf8') }), context);
+// The build's own content-hash URI (an explicit `uri` contributes only that URI).
+const resource = resources.find(r => /\/admin\/[a-f0-9]{64}$/.test(r.uri)) ?? resources[0];
 const tools = new Set([...Object.keys(appDefinition.catalogue.views),
   ...Object.keys(appDefinition.catalogue.actions)]);
-const loaded = typeof resource.html === 'string' ? resource.html
-  : await resource.html({ ...context, tools });
-const page = typeof loaded === 'string' ? { html: loaded } : loaded;
+const page = await resource.html({ ...context, tools });
 const snapshot = { uri: resource.uri, title: resource.title, ...page,
-  ...(resource.domain === undefined ? {} : { domain: resource.domain }) };
+  ...(resource.domain === undefined ? {} : { domain: resource.domain }),
+  ...(resource.prefersBorder === undefined ? {} : { prefersBorder: resource.prefersBorder }),
+  ...(resource.meta === undefined ? {} : { meta: resource.meta }) };
 // This application's policy: retain the last two deployed pages for future builds.
 writeFileSync(path, JSON.stringify([...previous.filter(p => p.uri !== snapshot.uri), snapshot].slice(-2)) + '\n');
 ```
+
+To observe every page as a host reads it (to audit reads, or to store the page a
+deployment actually served), wrap the contributor. `resolveMcpApps` returns it in normal
+form, so the wrapper needs no option on `adminMcpApps` and no shape checks:
+
+```ts
+import { resolveMcpApps } from '@aotter/mantle/mcp/apps';
+import { adminMcpApps, type AdminMcpSnapshot } from '@aotter/mantle-admin/mcp';
+import { appDefinition } from './mcp-app-definition.ts';
+
+declare const keep: (snapshot: AdminMcpSnapshot) => Promise<void>;
+
+const admin = adminMcpApps(appDefinition);
+export const observedAdmin = async (context: { env: unknown; request: Request }) => ({
+  resources: (await resolveMcpApps(admin, context)).resources.map(resource => ({
+    ...resource,
+    html: async (render: Parameters<typeof resource.html>[0]) => {
+      const page = await resource.html(render);
+      await keep({ uri: resource.uri, ...page,
+        ...(resource.title === undefined ? {} : { title: resource.title }),
+        ...(resource.domain === undefined ? {} : { domain: resource.domain }) });
+      return page;
+    },
+  })),
+});
+```
+
+Pass `observedAdmin` as `apps.admin`. A page read this way embeds the catalogue of the
+caller who read it; keep it for `previous` only when that caller sees every tool, and
+otherwise archive with the script above.
 
 This archives static UI/catalogue metadata, never rows, cookies or OAuth tokens.
 Custom loaders must archive their actual immutable resource, including CSP/domain,
 instead of using this default-asset recipe. Compare the archived URI with deployed
 `tools/list`/`resources/read`; a mismatching declaration or stale local build is
 not deployment evidence.
+
+Contributors are convenient to write and uniform to read. What you pass may be a static
+`McpApps` or a function of `{ env, request }`, and a resource's `html` may be a string, a
+loader, or a loader returning a string or `{ html, csp }`. What comes back is in one normal
+form: `resolveMcpApps(sources, { env, request })` from `@aotter/mantle/mcp/apps` returns
+`NormalMcpApps`, whose every `html` is an async loader resolving to `{ html, csp? }`. The
+endpoint reads its Apps through the same function, and `adminMcpApps` and `mediaUploadCard`
+return resources already in that form. Wrap a contributor by resolving it and returning
+the changed resources; do not test for functions or strings yourself.
 
 Core accepts static contributors or async `(context: { env, request }) => McpApps`
 sources, including mixed arrays. Static declarations are checked at construction;
@@ -243,10 +578,26 @@ are never retained in that cache. The low-level SDK also accepts an async
 catalogue. If its tool names change, those links are checked again, and a call
 always uses the current request's tool table.
 
+### MCP Apps support per protocol era
+
 Clients advertise `io.modelcontextprotocol/ui` and MIME type
-`text/html;profile=mcp-app` in initialization capabilities or, for stateless
-requests, in `params._meta["io.modelcontextprotocol/clientCapabilities"]`.
-An explicit capability declaration without UI support receives no UI resources, UI tool metadata or App-only tools. A stateless request with no capability declaration is treated as unknown and retains App support. Other tools retain their existing validation,
+`text/html;profile=mcp-app` in `params._meta["io.modelcontextprotocol/clientCapabilities"]`
+(on every 2026-07-28 request, which requires that envelope) or, on a 2025 revision, in
+the `initialize` capabilities. A stateless 2025-era request after `initialize` carries
+no capabilities: its support is unknown, and it keeps App support.
+
+| Era | Request declares | App-only tool in `tools/list` | `tools/call` of an App-only tool | `ToolCall.apps` (result rendered in an App) | App resources |
+|---|---|---|---|---|---|
+| 2025 | UI support | listed | runs | `true` for a linked tool | listed |
+| 2025 | capabilities without UI support | not listed | runs | `false` | none |
+| 2025 | nothing (unknown) | listed | runs | `false` | listed |
+| 2026-07-28 | UI support | listed | runs | `true` for a linked tool | listed |
+| 2026-07-28 | capabilities without UI support | not listed | runs | `false` | none |
+
+A request without UI support receives no UI resources or UI tool metadata. A
+`tools/call` that names an App-only tool runs it whatever the request declares, so a
+host that forwards an App's own calls need not declare the extension for them; the
+result then carries no UI metadata. Every tool retains its validation,
 authorization, caller, origin and database behavior.
 
 ## The Admin App in a host
@@ -266,27 +617,241 @@ the host advertises in `hostCapabilities`:
   `ui/message`, which would speak for the user.
 - It declares `availableDisplayModes: ["inline", "fullscreen"]` and offers a
   full-screen toggle (`ui/request-display-mode`) when the host lists
-  `fullscreen` in its context.
+  `fullscreen` in its context. A host reports `fullscreen` in a side panel as
+  well as full screen, so the way back reads "Back to the conversation". A
+  refusal answers the mode the App already has; the App then says the host kept
+  the current view.
+- When the host offers `downloadFile`, a View with rows shows "Export CSV". It
+  saves the rows the App holds, "Load more" pages included, in the columns
+  shown, as one `text/csv` resource named `<tool>.csv` through
+  `ui/download-file`, laid out as Admin's browser export. It makes no server
+  call. The person confirms the download in the host, so the App waits up to
+  ten minutes. An error answer shows that the download did not finish (the
+  host's answer does not tell a refusal from a cancellation). When no answer
+  comes (a timeout, a lost connection) the host's dialog may still save the
+  file, so the App says the download could not be confirmed, not that it
+  failed. An answer without an error shows nothing: it says the host took the
+  request, not that the file was saved.
 - `appInfo.version` is the `@aotter/mantle-admin` version.
 
 The pinned official client validates host context. Invalid protocol data is not
 reinterpreted by a second Mantle wire parser; connection failures are visible.
 Mantle applies only presentation fields and style variables it supports. `locale` and
 `timeZone` format dates (an unknown zone falls back to the browser's);
-`safeAreaInsets` become root padding; `containerDimensions` bound the root: a
-fixed or maximum height scrolls, and the reported size stays within it.
+`safeAreaInsets` become root padding; `containerDimensions` size the root. A
+fixed `height` (full screen or a side panel) bounds it, and it scrolls inside.
+In the conversation the host gives only `maxHeight`, caps the frame and clips
+what exceeds it, and on a touch screen a vertical pan scrolls the conversation,
+so the App is not its own scroll container there: its content sets the height
+it reports. A View shows as many rows as fit under the cap (at least one), then
+one button that says how many more there are and opens them in full screen
+(`ui/request-display-mode`, from that click). A row action asks for full screen
+as it opens, and opens in the conversation if the host refuses. When the host
+offers no full screen, or refuses it once, the App falls back to scrolling
+inside the cap, so nothing is out of reach. `view_state` and `view_focus` keep
+describing every row the App holds: `view_state` adds `inline`, the number of
+rows the conversation shows, and `view_focus` on a row past them highlights it
+for full screen and says that only the person can open it. A `pages[].mcp` page
+is not cut: under the cap it is reached through the full-screen toggle.
 `theme: "dark"` sets both `data-theme` and the `.dark` class. Only the spec's
 style variables are applied; [Theme](#theme) says how they meet your own.
 
+### Custom MCP App views
+
+Use the same presentation helper in a custom view built with the official MCP Apps
+`App` client. Apply the initial host context after connecting, then apply each
+context update.
+
+```ts
+import { applyHostContext } from "@aotter/mantle-admin/mcp-app";
+
+app.onhostcontextchanged = context => applyHostContext(context);
+await app.connect();
+applyHostContext(app.getHostContext() ?? {});
+```
+
+The helper sets the root language, theme, supported host styles, fonts, dimensions
+and safe-area padding. Fixed elements can use `--mantle-safe-top`,
+`--mantle-safe-right`, `--mantle-safe-bottom` and `--mantle-safe-left`, for example
+`bottom: var(--mantle-safe-bottom, 0px)`. Omitted top-level fields leave the current
+presentation in place. Pass zero insets to clear a previous safe area.
+
+### Result size
+
 A View result carries its rows twice, as the JSON text block and as
-`structuredContent`. Hosts truncate long tool results (about 150k characters
-is reported for some), and a truncated text block is no longer JSON. So an MCP
-View page is cut by size: `limit` still accepts 1 to 500, but a page holds only
-as many of those rows as fit 60,000 characters of JSON. It stops before the first
-row that overflows, and the next cursor resumes at that row, so no row is skipped
-or repeated. A single row over the budget is returned alone, with its cursor, and a
-View without an order (one page, no cursor) is returned whole; any page still over the
-budget carries a notice that hosts may truncate it. The default is 50 rows. REST and native paging keep their 500-row limit.
+`structuredContent`. A host does not always pass a large result to the App. On
+claude.ai and Claude Desktop, when a result exceeds about 150,000 characters
+and Claude's code execution sandbox is active, Claude writes it to the
+sandbox's files instead, and the App receives a pointer to that file rather
+than the result, so it never shows the rows
+([App doesn't render when tool results are large](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#app-doesnt-render-when-tool-results-are-large)).
+That page does not say whether the threshold counts the text block alone or
+the text and `structuredContent` together. Claude Code limits results in
+tokens instead. Another host may truncate a long result, and a truncated text
+block is no longer JSON.
+
+So an MCP View page is cut by size: `limit` still accepts 1 to 500, but a page
+holds only as many of those rows as fit 60,000 characters of JSON, which stays
+under that threshold even counted twice. It stops before the first row that
+overflows, and the next cursor resumes at that row, so no row is skipped or
+repeated. The default is 50 rows. REST and native paging keep their 500-row
+limit.
+
+Three results the App renders are not cut, and can pass the threshold:
+
+- a single row over the budget, returned alone with its cursor;
+- a View without an order, which is one page with no cursor and is returned
+  whole;
+- the result of a Procedure, or of your own tool, that `adminMcpApps({ tools })`
+  names: Core neither pages nor measures it.
+
+A View page still over the budget carries a notice that a host may truncate it
+or not render its App. Core does not turn these results into errors: a
+Procedure's result reports a write that has already happened, so an error in
+its place invites a retry, and on Claude a stored result is kept in the
+sandbox rather than lost. Keep them small instead: give a View that can grow an
+order, so it pages; keep large values (document text, base64 images, logs) out
+of rows, and read one through a View or tool of its own; have a Procedure
+return what it changed, not a collection. An image in a row is only a string to
+a model; to show it, a tool returns it as an image block with `withResult`.
+Those blocks count towards a host's result-size limit too, and Core neither
+measures nor cuts them: the page budget counts `data` only.
+
+### Fonts, border and display mode
+
+`adminMcpApps` and `mediaUploadCard` take three options for their own
+resources, sent on `resources/read`:
+
+- `fontDomains`: the origins the host serves the font files of its
+  `styles.css.fonts` from. Both Apps apply that CSS, and a font loads only from
+  an origin in the resource's `resourceDomains`. None by default, so the App
+  falls back to its own fonts. On Claude, set
+  `fontDomains: ['https://assets.claude.ai']`, the origin Claude's
+  [transparent theming](https://claude.com/docs/connectors/building/mcp-apps/transparent-theming#allow-the-host-font-origin-in-your-csp)
+  page names; it is added to the `resourceDomains` your build declared. It is
+  not a default because a host also applies `resourceDomains` to scripts and
+  styles: a default would let one host's origin serve them to the App in every
+  host, for every application. Declare only the origins of the hosts you serve.
+- `prefersBorder`: sent as `_meta.ui.prefersBorder`. Unset by default, so each
+  host uses its own default.
+- `meta`: host-defined keys, merged as a resource's [`meta`](#mcp-apps) is, for
+  example `meta: { ui: { preferredDisplayMode: 'fullscreen' } }`.
+
+They apply to the current build, at the fixed URI and at its content-hash URI,
+and they are part of that hash. A page kept in `previous` is served with the
+`csp`, `domain`, `prefersBorder` and `meta` its snapshot holds, which the
+archive script above captures.
+
+### App tools: the model reads the open View
+
+The App declares the `tools` capability (`{ listChanged: true }`) and registers
+three tools of its own ("app tools"), which a host may let the model call while
+the App is open. Host-to-App `tools/list` and `tools/call` are in the MCP Apps
+draft specification, not in the stable `2026-01-26` text, which only names the
+capability:
+
+| Tool | Input | What it does |
+|---|---|---|
+| `view_state` | none | Returns the View tool, its input, the ids of the rows the App holds, the row count and whether more rows exist, as JSON text. |
+| `view_more` | none | Does what "Load more" does: calls the same View tool with the same input and the next cursor, appends the rows, and answers as `view_state`. |
+| `view_focus` | `{ id }` | Scrolls to the row with that id and highlights it; a row past the conversation's cap is highlighted for full screen. |
+
+They are view-only. They read what the App already holds or make the same
+read "Load more" makes, under the person's own authorization, so they show the
+model nothing the person could not see in the App. No app tool writes, runs a
+row action or Procedure, or leaves the View; writes stay server tools that the
+model calls under the host's approval. While no View's rows are on screen
+(waiting for a result, a `pages[].mcp` page, an open row action) every tool
+answers that, and does nothing. A host may hand the model an error result
+without its text, so whatever the model can act on is a normal answer that says
+what was not done and what to call instead: no rows shown, an id `view_focus`
+does not find, no next page, a page already loading, a list replaced while a
+page loaded, a host without server tools. Only an unknown tool, a `view_state`
+whose View input alone is over the limit and a page read that failed are
+`isError` results. `view_more` gives up on its read after 40 seconds, inside
+the 45 seconds Claude waits (other hosts may differ), so it answers instead of
+leaving the host to time out. The definitions are fixed and marked `readOnlyHint`, and an answer is at most
+100,000 characters: `view_state` lists as many ids as fit and adds
+`truncated: true`.
+
+Host support varies. Some hosts offer app tools only to some accounts or
+surfaces, and some never call them. A host that does not is unaffected: it
+sees the capability in `ui/initialize` and nothing else changes; the App sends
+`notifications/tools/list_changed` only when a page registers or removes tools
+of its own ([below](#a-pages-own-app-tools)), and a host that does not handle it
+ignores it.
+
+### A page's own app tools
+
+A [`pages[].mcp` page](#a-page-for-an-mcp-app-view-pagesmcp), or any component it
+renders, may register app tools of its own over the App's connection with
+`useHost()?.registerTools(tools)`. Each tool is a name, a description, an
+optional title and annotations, a plain JSON Schema `inputSchema` (no schema
+library) and a `handler` the page supplies:
+
+```tsx
+function QueuePage() {
+  const host = useHost();
+  const [only, setOnly] = useState<string | null>(null);
+  // registered while the page is shown; the returned function removes them on unmount
+  useEffect(() => host?.registerTools([{
+    name: "queue_only",
+    title: "Show one item",
+    description: "Shows only the queue item with this name on the open Queue page.",
+    inputSchema: { type: "object", properties: { item: { type: "string" } }, required: ["item"] },
+    annotations: { readOnlyHint: true },
+    handler: ({ item }) => {
+      if (typeof item !== "string" || !item) throw new Error("Name an item.");
+      setOnly(item);
+      return `Showing ${item}.`;
+    },
+  }]), [host]);
+  // …
+}
+```
+
+- **What the App lists.** `tools/list` always starts with `view_state`,
+  `view_more` and `view_focus`, so a host's approval of them holds; while a page
+  is shown they answer, as a normal result, that no View's rows are on screen. The page's tools follow,
+  by name, while they are registered. Back on a View, the list is the three again.
+- **Lifecycle.** Each `registerTools` call adds its tools to those registered
+  before, so the page and a component it renders can each register their own;
+  the function it returns removes only that call's tools and aborts their
+  handlers' `signal`. Return it from the `useEffect`, so the tools go with the
+  component that registered them. A call is looked up when it arrives: a
+  removed tool's handler is never called, and the host gets an error result.
+  Each change of the listed definitions sends
+  `notifications/tools/list_changed`; registering the same definitions again
+  (an effect re-run, a new handler) sends nothing. Register again when what a
+  handler reads changes, or have it read state through a ref.
+- **Names.** Letters, digits, `.`, `_` and `-`, up to 128. `view_` names belong
+  to the App, so a page's tool never collides with a built-in one;
+  `registerTools` throws on such a name and on one already registered, by this
+  call or another, and the tools registered before stay.
+- **Results.** The handler returns the text the model reads. A throw is an
+  `isError` result carrying its message, but a host may not pass the message to
+  the model; for a mistake the model can fix, return a normal answer that says
+  what to change. The App does not check arguments against `inputSchema`: the
+  handler does. `signal` aborts when the host cancels the call or the tool is
+  removed.
+- **Limits.** `registerTools` throws when, with the App's own three and those
+  already registered, the tools break a limit Claude documents: at most 64 tools, 1 MiB of definitions as
+  JSON, an `inputSchema` with `type: "object"` at its root, at most 64 KiB and 32
+  levels deep. A host reads 100,000 characters of result text and waits 45
+  seconds, not counting the person's approval: keep answers short, and start
+  longer work and report it from a second tool.
+- **Keep definitions constant.** A host may ask the person to approve a tool
+  again when its name, title, description or input schema changes. Put what
+  changes in the result.
+- **View-layer only.** A handler runs the page's own code in the App. Anything
+  it does on the server goes through the page's hooks (`useView`,
+  `useOperation`), as the signed-in caller and under the host's server-tool
+  rules; it is not a way around them, and the host's approval of the app tool
+  is not the server's authorization.
+
+A frontend App that is not Admin's (your own `ui://` entry) uses the official
+`@modelcontextprotocol/ext-apps` `App` directly: `app.registerTool` with a
+schema library, or `onlisttools` and `oncalltool` with your own JSON Schema.
 
 Checks against real hosts need an account and a public HTTPS endpoint, so
 they are manual: add the endpoint as a custom connector in each host, call a
@@ -295,19 +860,117 @@ full screen, a row action, and a link. Check too that the host advertises
 `hostCapabilities.serverTools`; without it the App is read-only. The automated interoperability test
 uses the official `AppBridge`; your app runs its generated version ([Run the compatibility test](#run-the-compatibility-test)).
 
+## The upload card
+
+`open_media_upload` on `/mcp/admin` opens the manual fallback upload card, an MCP App Admin ships
+prebuilt. Register it beside the Admin App, with the same `media` function you
+pass `mcp(...)`:
+
+```ts
+import { adminMcpApps, mediaUploadCard } from '@aotter/mantle-admin/mcp';
+import type { MediaStorage } from '@aotter/mantle/site';
+import { mcp } from './generated/mcp.js';
+import { mcpAppCatalogues } from './generated/admin-descriptors.js';
+
+declare const options: Parameters<typeof mcp>[0];
+declare function storage(env: unknown): MediaStorage; // e.g. r2MediaStorage(...)
+
+const handler = mcp({ ...options, media: storage, apps: { admin: [
+  adminMcpApps({ catalogue: mcpAppCatalogues.admin }),
+  mediaUploadCard({ media: storage }),
+] } });
+```
+
+When the fallback tool is linked to a card, policy-only calls include a `card` hint even when the request omits MCP Apps capabilities (including host callers). The hint describes hosts that render Apps and offers a direct-upload fallback if no card appears; it does not claim the card rendered. Upload targets still move into result `_meta` only when the request declares Apps support.
+
+The card is `ui://mantle-admin/upload` and renders `open_media_upload`. Keep `upload_media` unlinked: it is the agent's direct presigned-PUT entry, so its targets stay model-visible even when a client supports Apps. Explicit `mediaUploadCard({ tool: "upload_media", ... })` keeps the earlier combined behavior; use that only when you intentionally want this tool's targets to go to the App. The person
+picks a file (and may type alt text for an image); the file input accepts the purpose's types, any file for `*/*`; the card reads the purposes with
+`open_media_upload`, calls it with the file's metadata, PUTs the file straight to the
+target with progress, calls `open_media_upload` again with the `uploadId`, and sends
+`ui/message` with the asset id, and also `ui/update-model-context` unless the
+host accepted the message. The bytes never pass through MCP or the host. The card uploads the
+original file as the single variant a purpose takes
+([ADR-0017](https://github.com/aotter/mantle/blob/v0.2.2/docs/adr/0017-media-multi-variant-agent-side-optimization.md)); a
+purpose with several variant slots needs an agent that prepares them, and the
+card says so. It needs the host's `serverTools`. It shows no View, so it declares
+no `tools` capability and lists none of the App's `view_*` tools.
+
+The Admin MCP App and the upload card use the host locale. Their main controls cover the Admin languages, with
+English fallback for strings that have no translation. The card follows the host theme or the system theme if the host
+leaves it unset. Host updates preserve the selected file and upload progress. File names, purpose names, asset IDs and
+server diagnostics are left as supplied. If the file reached storage but the save outcome is unknown, retry asks the
+server to commit the same upload ID, avoiding a second transfer or a duplicate asset.
+
+`tool` names the tool the card renders and calls (default `open_media_upload`; another tool takes `upload_media`'s
+arguments) and `forward` lists the arguments of the rendering call's input that the card repeats on every call, for
+example `mediaUploadCard({ media, tool: "upload_to_folder", forward: ["folder"] })`. With `forward`, calls wait for the
+host's tool input at most `inputTimeoutMs` after connecting (5,000 ms by default; `false` waits until it arrives),
+then go without it; an input that arrives later is used from then on and the purposes are read again.
+
+The targets reach the card in the result `_meta` (`net.aotter.mantle/upload`)
+when the request declares MCP Apps support and the card is registered;
+otherwise they are in the result,
+for an agent that PUTs them itself. The card reads either.
+
+On `resources/read` the card declares the storage origin as
+`_meta.ui.csp.connectDomains`. It is the storage's `uploadOrigin`:
+`r2MediaStorage` sets it to the origin of its `endpoint`; a custom
+`MediaStorage` sets it to the origin its `uploadUrl`s PUT to. Without it the
+read fails with a logged error.
+
+The bucket must answer the card's CORS preflight. Allow `PUT` with the
+`Content-Type` header from the origin the host serves the card from, and key
+the rule on `Origin`: the request carries no cookies, and WebKit on iOS sends no
+`Referer` on cross-origin requests. Which origin that is depends on the host.
+
+**Claude, with `domain`.** Set `mediaUploadCard({ media, domain })` to the value
+Claude documents for the exact connector URL, `{hash}.claudemcpcontent.com`
+([as above](#mcp-apps)), and allow exactly that origin. For example, as R2 CORS
+JSON, for the connector URL `https://example.com/mcp`:
+
+```json
+[{ "AllowedOrigins": ["https://c3d80a4ed901ee05b21755a88273b4a4.claudemcpcontent.com"], "AllowedMethods": ["PUT"], "AllowedHeaders": ["content-type"], "MaxAgeSeconds": 3600 }]
+```
+
+**Claude, without `domain`.** The origin differs between conversations, so a
+rule that names one origin matches no other conversation, and the card reports
+that storage could not be reached. Allow `https://*.claudemcpcontent.com`, the
+pattern Claude's
+[troubleshooting](https://claude.com/docs/connectors/building/mcp-apps/troubleshooting#assets-or-api-requests-fail-only-on-ios)
+page gives, if your storage's CORS rules accept a subdomain wildcard (check its
+documentation); otherwise set `domain`.
+
+The wildcard matches every connector's Apps on Claude, not only yours.
+Claude's [embedded sites](https://claude.com/docs/connectors/building/mcp-apps/embedded-sites#allow-claude-to-frame-your-site)
+page warns that a wildcard in `frame-ancestors` lets other connectors' Apps
+frame your site. On a bucket the effect is narrower, as long as the rule allows
+only `PUT`, the request carries no cookies or other ambient credentials, and
+the bucket accepts a `PUT` only at a signed upload URL (as `r2MediaStorage`'s
+are): another connector's App can then pass the CORS check, but it still needs
+a valid signed URL, which only your server issues and which works from any
+client outside a browser, where CORS does not apply. The warning applies in full to any rule on the same bucket that allows reading
+private objects, or relies on cookies or credentials: keep such rules off the
+wildcard, or set `domain`.
+
+**Other hosts.** Allow the sandbox origin the host documents for its Apps; a
+host that honours `_meta.ui.domain` serves the card from that origin, and
+`mediaUploadCard` passes `domain` through. A sandboxed frame without an origin
+of its own sends `Origin: null`; do not allow `null`, which any such frame
+sends.
+
 ## Customising Admin for MCP hosts
 
 `mantle bundle` builds the Admin MCP App from the same entry as the browser Admin
 (`src/admin.tsx`, or the built-in one) into one self-contained file,
 `<assets>/admin/mcp-app.html`, which `adminMcpApps` serves as
-`ui://mantle-admin/admin/<digest>` by default. Shared View cells and opted-in pages reach the host, with application plugins,
+`ui://mantle-admin/admin` by default. Shared View cells and opted-in pages reach the host, with application plugins,
 Tailwind classes and CSS. Browser-only record/input overrides do not mount there.
 
 ### Which slots render where
 
 | Slot | Browser | MCP host |
 | --- | --- | --- |
-| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
+| `Shell`, `Sidebar`, `Header`, `Brand`, `Home`, `CollectionList`, `SignIn`, `list.actions:<schema>` | yes | never: the App has no shell, sidebar or router |
 | `cell:view:<view>.<column>` | yes | yes: each column of the rows the host's View tool returned |
 | `cell:<schema>.<field>`, `input:<schema>.<field>`, `record.aside:<schema>`, `record.actions:<schema>`, `RecordView` | yes | never: browser-only record/collection slots; their `surface` is `"browser"` (`mantle bundle` reminds you) |
 | `pages[]`, `nav`, `home`, nav badges | yes | only a page that declares `mcp` (below) |
@@ -373,14 +1036,17 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 2. **Links through the host.** `<AdminLink>` and `useOpenLink()` open an http(s)
    URL through `ui/open-link`; the sandbox blocks `window.open` and
    `target="_blank"`. An `/admin/...` path has no origin in a host, so
-   `<AdminLink>` shows it as text.
+   `<AdminLink>` shows it as text. `useOpenLink()` resolves `false` when the
+   host cannot or refuses, or does not answer in time; a link the person
+   confirms late can still open.
 3. **No assumed width.** The host sets the frame; a narrow one and a full screen
    must both work.
 4. **Remote assets only from origins you declare.** Something from another origin
    loads only if `defineAdmin({ mcp: { csp } })` names it in the list its use needs:
    `resourceDomains` for an image, font, stylesheet or script,
    `connectDomains` for `fetch`, `WebSocket`, `EventSource` and `import()`,
-   `frameDomains` for an iframe (`baseUriDomains` is for `<base>`). Each entry is an
+   `frameDomains` for an iframe (`baseUriDomains` is for `<base>`; Claude ignores
+   it and keeps the base URI on the App's own origin). Each entry is an
    origin, `https://host[:port]` or `https://*.host`; the build refuses `*`, a bare
    scheme or a path. You declare it once: the build writes it into
    `mcp-app.html` and `adminMcpApps` sends it as `_meta.ui.csp` on `resources/read`
@@ -388,6 +1054,33 @@ declare its read View and write Procedure; `useEntry` is unavailable in MCP.
 5. **Branch on the surface if you must, but both branches render.**
    `useAdminSurface()` and the `surface` prop say where you are; a component that
    shows nothing in a host is a hole in the host's view.
+6. **Read a message's outcome as the host gives it.** `useHost()?.sendMessage(text)`
+   sends `ui/message` when the person acts, and resolves to one of three
+   outcomes. `"accepted"`: the host answered without an error, which is not
+   proof of delivery (a host may answer before the person agrees to send it).
+   `"refused"`: the host answered with an error or offers no messages, so it was
+   not sent. `"unknown"`: no answer came (a timeout, a lost connection); the host
+   may still deliver it, so do not say it failed or resend it in code, and keep
+   the control usable for the person to try again. The text is kept within what
+   Claude documents it accepts: invisible characters such as soft hyphens and
+   zero-width spaces are dropped (zero-width joiners and variation selectors,
+   which emoji and scripts use, stay), and runs of more than three line breaks
+   (a `\r\n` counts as one) or 64 spaces or tabs are shortened. A blank text
+   (nothing visible, joiners and selectors included), or one over 8,000
+   characters after that, is `"refused"` without asking the host; it is never
+   cut, so shorten a long message yourself.
+7. **Downloads through the host.** The sandbox starts no download from
+   `<a download>`, `blob:` or `data:` URLs. When `useHost()?.capabilities.downloadFile`
+   is set, `useHost().downloadFile(name, text, mimeType)` asks the host to save a
+   text file named `name` (with its extension; the type defaults to
+   `text/plain`) after the person confirms it. The name is the last segment of a
+   `file:///` URI: spaces stay, and `/`, `?`, `#`, which would change that
+   segment, and `%`, `:`, `"`, `*`, `<`, `>`, `|`, `~`, `\`, which Claude
+   replaces anyway, become `_`; an empty name, `.` or `..` is `"refused"`. It
+   resolves to the same three outcomes: `"refused"` covers a refusal, a
+   cancellation and a host that offers no downloads; `"unknown"` means the host's dialog may still save the file.
+   Send one when the person asks, and one at a time. Hosts refuse some
+   extensions, such as `.exe` or `.js`.
 
 ### Theme
 
@@ -428,6 +1121,11 @@ colours (`--color-primary`, `--color-primary-foreground`) and the chart colours
 root with both `data-theme` and the `.dark` class, so your `.dark {}` block and
 `dark:` classes follow it; a host that sends no theme gets the system's colour scheme (`prefers-color-scheme`), as the same `.dark` class, and a theme the host sends wins over it.
 The variables a host does not send fall back to the tokens.
+The App paints no background of its own: `html` and `body` are transparent, so
+the conversation shows through, and the App's HTML (and the upload card's)
+declares `<meta name="color-scheme" content="light dark">`, so a dark host shows
+no light backdrop before the script sets its theme. Text and borders follow that
+theme.
 
 ### A page for an MCP App view: `pages[].mcp`
 
@@ -457,7 +1155,9 @@ the host), so use only `both` hooks and components, and render something sensibl
 when a hook reads `unavailable`.
 The generated `admin-client.ts` records, for each View, `true` when it is an admin MCP tool and `null` when not; `tsc`
 refuses a `renders` that is misspelt, names a collection, or names a View with no
-admin MCP tool. When several pages name one View, the first is shown.
+admin MCP tool. An application's own tool listed in `adminMcpApps({ tools })` is accepted once declared:
+`declare module "@aotter/mantle-admin/app" { interface AdminMcpTools { approve_request: true } }`. When several
+pages name one View, the first is shown.
 
 ### What `mantle bundle` checks
 
@@ -551,6 +1251,9 @@ without that catalogue native row actions are absent. The generated test below
 supplies its own synthetic catalogue and checks rendering, not a real host's
 authorization flow or a completed action dialog.
 
+If you supply custom HTML to `adminMcpApps`, put the UTF-8 charset declaration
+first in `<head>`. Mantle inserts the catalogue after that declaration.
+
 The build check reads text; this test runs the App. `mantle generate --admin` writes
 `generated/admin-mcp-app.check.mjs`. After `npm run build`, run
 `node --test generated/admin-mcp-app.check.mjs` (the examples name it `npm test`;
@@ -579,7 +1282,11 @@ claim to test them. A Procedure action form does not mount these slots.
 It needs `playwright-core` (`npm install -D playwright-core`) and Chrome or Chromium:
 run `npx playwright-core install chromium`, or set `MANTLE_TEST_CHROMIUM` to a Chrome or
 Chromium executable. With no browser the test fails, saying so; it never skips. Import
-`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself. For a real host
+`checkMcpApp` from `@aotter/mantle-admin/testing` to call it yourself:
+`checkMcpApp({ catalogue, html?, inspect? })`. `inspect({ tool, theme, frame })` is called for each scenario after its
+built-in checks, with the App's Playwright `Frame` still open (not when the frame never opened); what it throws, or not
+settling within 10 s, is that scenario's problem, and requests and console errors it causes are collected. `frame`'s
+type comes from the optional peer `playwright-core`. For a real host
 (Claude's custom connector, ChatGPT), follow the manual checks under
 [The Admin App in a host](#the-admin-app-in-a-host).
 

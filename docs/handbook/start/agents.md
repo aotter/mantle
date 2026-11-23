@@ -34,6 +34,11 @@ Write it in the user's language and in business terms: no Schema, SQL, route, to
   ([acceptance](../guides/agent-workflow-acceptance.md#plan-the-run)).
 - **How you will check it is fast:** how much sample data, and what "fast enough" means for each page
   ([performance](../guides/performance.md#plan-the-pass)).
+- **How users will sign in once deployed.** Locally the email code prints in the dev log; a deployment needs one of
+  three methods: email code (needs an email sender), GitHub sign-in (needs a GitHub OAuth App; the app stores no
+  password) or email and password (no outside setup, but Workers Paid and manual admin steps). Give the
+  one-line cost of each from [Choose how users sign in](../cloudflare/sign-in-methods.md) and recommend GitHub unless
+  the users lack GitHub accounts. Assumed answer: keep the email code and ask again before deploying.
 - **What you will do on the user's machine,** such as starting the app and opening the browser for them and for the
   testers. Say it; do not ask. Ask only for what you cannot do yourself, such as a deployment or a credential.
 - **Questions:** every rule the brief leaves open, such as limits, deadlines, who may see or change what, and what
@@ -43,7 +48,8 @@ After the go-ahead, do every step below without stopping, and end with the repor
 for what the plan did not cover and needs the user: a credential, a deployment, a destructive action or a change of
 scope.
 
-1. `mantle init`, install, then read the app's `README.md` and search for `AGENT:`.
+1. `mantle init`, install, then read the app's `README.md` and search for `AGENT:`. If the user chose GitHub or email
+   and password, apply that recipe now (`mantle help sign-in-methods`), so acceptance runs with it.
 2. Map the brief to the [four atoms](../concepts/four-atoms.md): Schemas, Views, Procedures, Triggers.
    Decide what each role (`admin`, `user`) does on each surface: Admin, MCP, REST and any visitor pages.
 3. For each need, find the pattern in `mantle help examples` (the **Combining** table) and read that example's
@@ -52,10 +58,16 @@ scope.
    - Business rules (status transitions, approval thresholds, stock, guards, several rows that commit together)
      belong in SQL Procedures, not in handler code around separate writes: `mantle help sql-patterns`, and
      `mantle help sql` for the SQL each dialect accepts.
-   - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: server-rendered HTML,
-     canonical and Open Graph tags, JSON-LD and an answer block on detail pages, Markdown alternates, `/sitemap.xml`,
-     `/robots.txt` and `/llms.txt`. A brief that names a site, shop or catalogue for visitors includes all of them.
-4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`.
+   - Visitor pages (anything anonymous and indexable) follow `mantle help public-pages`: its one requirement (the
+     content is in the HTML the server returns), the recommended shape with its reasons (the recipes example), and the
+     checklist. A brief that names a site, shop or catalogue for visitors includes every item of that checklist.
+   - An interactive part on a public page (save, add to cart) or an interactive area (a cart, a dashboard, a planner):
+     the same page's "When to choose something else" says which shape fits and what an app beside the pages must keep.
+4. `pnpm generate`, implement every handler it lists, `pnpm check`, then `pnpm smoke`. Write app code in the
+   order of [Write the least code](#write-the-least-code). When a manifest cannot say what the brief needs, or
+   generation refuses a declaration, read [what Core does, and what it does not](../concepts/core-boundary.md)
+   (`mantle help core-boundary`) before working around Mantle or proposing a change to it: most such limits are the
+   app's to solve, with a documented pattern.
 5. **Show the user the wiring.** As soon as the manifests generate, run `pnpm accept --open`: it starts the app,
    signs the admin in without a one-time code and opens the Developer UI (`/admin/dev`) in the user's browser, showing
    the Schemas, Views, Procedures and Triggers and how they connect, with each surface's routes and tools. Tell the user
@@ -73,14 +85,49 @@ scope.
    and the [performance summary](../guides/performance.md#summarise-for-the-user), then the layered status.
 
 The first verified sign-in with `ADMIN_EMAIL` becomes the admin. Further administrators are added in Admin:
-**More → Administrators** invites by email, and **More → Members** grants Admin to an existing member.
+**More → Administrators** invites by email, and **More → Members** grants Admin to an existing member. With email and
+password, the first admin is [promoted by hand](../cloudflare/sign-in-methods.md#the-first-admin) and invitations do
+not work.
 [Authentication](../cloudflare/authentication.md#identity-helpers) documents the same operations as an API.
+
+## Write the least code
+
+Before adding a file, a function or a dependency, stop at the first line that holds:
+
+1. **Does the brief or this handbook need it?** What neither asks for, leave out and name in the final report.
+   What a handbook page requires (the visitor-page set, acceptance, the performance pass) is never left out.
+2. **Can a manifest say it?** A read is a View, with its own REST and MCP surface. A rule, or a write of several rows,
+   is a Procedure, and a Trigger gives it an HTTP or MCP entry. A constraint is a Schema key (`required`, `checks`,
+   `uniqueIndexes`). A manifest change regenerates the SQL, types, REST, MCP and Admin together; hand-written code
+   covers one of them.
+3. **Is it already generated or shipped?** Use the generated bindings and the Store (single-row writes included)
+   before writing SQL or `fetch` by hand, the Admin console before an admin page of your own, and the app shell's
+   files before a new one.
+4. **Does the platform do it?** An HTML element or a Web API before a library.
+5. **Does an installed dependency do it?** Add none for what a few lines do.
+6. **Only then write it,** once, in the smallest form that works.
+
+Keep each piece to one job:
+
+- A `ref` handler does only what SQL cannot: calling another service, sending email, the side effects of its
+  Procedure. A business rule written in handler code around separate writes does not hold for Admin, the Store or
+  another Procedure writing the same rows; in a Procedure's SQL or a Schema constraint it holds for all of them.
+- One query or rule has one home. When two handlers or pages need the same read, both use one View; when two need the
+  same check, it moves into the Procedure they call.
+- `src/routes.ts` holds visitor pages and callbacks, `src/schedule.ts` scheduled work; neither reimplements what a
+  generated surface already serves.
+
+When you cut a corner on purpose (a naive scan, a fixed limit, one request per item), mark it with a comment that
+starts with `ponytail:` (a deliberate shortcut) and names the ceiling and what to do when it is reached, and list
+these in the final report. Never cut input validation, authorization, or handling that prevents data loss.
 
 ## Other tasks
 
 | Task | Read |
 | --- | --- |
+| Change the manifests of an app whose database has data | `pnpm generate`, then write the migration yourself from `git diff -- generated/schema.sql` and apply it before deploying: [schema migrations](../guides/migrations.md#write-a-migration) (`mantle help migrations`). Mantle ships no migration tool. |
+| Something seems missing from Mantle | [What Core does, and what it does not](../concepts/core-boundary.md): the pattern to use instead, or what a request to Core must contain |
 | Upgrade Mantle | [Upgrade an application](../releases/index.md#upgrade-an-application) |
-| Deploy, only when the user asks | [Deploy and operate](../cloudflare/deploy-and-operate.md) |
+| Deploy, only when the user asks | [Before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy): sign-in method, Cloudflare account, `wrangler login`, database and secrets, with the user at each step |
 | A slow page, first request or query | [Performance pass](../guides/performance.md) |
 | Stale media uploads, only when the user asks | [Clean up stale uploads](../cloudflare/media-r2.md#clean-up-stale-uploads) |

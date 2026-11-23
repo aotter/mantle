@@ -1,4 +1,5 @@
 import { ContractError } from "./contracts.js";
+import type { McpIcon } from "./mcp.js";
 /** MCP Apps (ADR-0029 D7): UI resources served beside the tools that render in them. */
 export const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -13,7 +14,12 @@ export interface McpAppRender {
 }
 
 /** The CSP a resource asks its host for, as `_meta.ui.csp`. */
-export type McpAppCsp = { readonly connectDomains?: readonly string[]; readonly resourceDomains?: readonly string[]; readonly frameDomains?: readonly string[]; readonly baseUriDomains?: readonly string[] };
+export type McpAppCsp = {
+  readonly connectDomains?: readonly string[];
+  readonly resourceDomains?: readonly string[];
+  readonly frameDomains?: readonly string[];
+  readonly baseUriDomains?: readonly string[];
+};
 
 /** What a loader may return beside a plain string: the HTML and a CSP known only when it is read. It is sent on `resources/read` and replaces the resource's static `csp` (lists are not merged). */
 export interface McpAppPage {
@@ -27,15 +33,33 @@ export interface McpAppResource {
   readonly name: string;
   readonly title?: string;
   readonly description?: string;
+  /** Listed on `resources/list` as given. */
+  readonly icons?: readonly McpIcon[];
+  readonly annotations?: {
+    readonly audience?: readonly ("user" | "assistant")[];
+    readonly priority?: number;
+    readonly lastModified?: string;
+  };
   readonly html: string | ((render: McpAppRender) => string | McpAppPage | Promise<string | McpAppPage>);
   readonly csp?: McpAppCsp;
-  readonly permissions?: { readonly camera?: Record<string, never>; readonly microphone?: Record<string, never>; readonly geolocation?: Record<string, never>; readonly clipboardWrite?: Record<string, never> };
+  readonly permissions?: {
+    readonly camera?: Record<string, never>;
+    readonly microphone?: Record<string, never>;
+    readonly geolocation?: Record<string, never>;
+    readonly clipboardWrite?: Record<string, never>;
+  };
   readonly prefersBorder?: boolean;
   /** `_meta.ui.domain`: the dedicated sandbox origin a host should serve this App from, in the form that host documents. */
   readonly domain?: string;
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  /**
+   * Host-defined keys merged into the `resources/read` content item's `_meta` (top level shallow, `ui` one key deep).
+   * The typed fields above win over `meta.ui` keys of the same name. It is not sent on `resources/list`.
+   */
+  readonly meta?: Readonly<Record<string, unknown>>;
   /** Tool names whose results this resource renders. */
   readonly renders?: readonly string[];
-  /** Views only this App may call (`visibility: ["app"]`); a client without MCP Apps does not see them. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
+  /** Views only this App may call (`visibility: ["app"]`); a client that declares no MCP Apps support does not list them (a stateless 2025-era request that declares nothing does), though a call that names one runs it. To hide a Procedure, give its tool `meta: { ui: { visibility: ["app"] } }`. */
   readonly appOnly?: readonly string[];
 }
 
@@ -46,22 +70,46 @@ export interface McpApps {
 /** An application-owned contributor resolved after the endpoint's caller gate. */
 export type McpAppsSource = McpApps | ((context: Pick<McpAppRender, "env" | "request">) => McpApps | Promise<McpApps>);
 
+/** The normal form of a resource: its HTML is always an async loader that resolves to a page. */
+export interface NormalMcpAppResource extends Omit<McpAppResource, "html"> {
+  readonly html: (render: McpAppRender) => Promise<McpAppPage>;
+}
+
+/** Contributors in normal form: what the endpoint reads, and what `resolveMcpApps` and first-party contributors return. */
+export interface NormalMcpApps {
+  readonly resources: readonly NormalMcpAppResource[];
+}
+
 /** Flatten contributors; `mcp(...)` reads static resources getters once at construction. */
-export const resourcesOf = (apps: McpApps | readonly McpApps[]): McpApps => ({ resources: (Array.isArray(apps) ? apps : [apps]).flatMap(app => app.resources) });
+export const resourcesOf = (apps: McpApps | readonly McpApps[]): McpApps => ({
+  resources: (Array.isArray(apps) ? apps : [apps]).flatMap(app => app.resources),
+});
 
 /** Static contributors are checked at construction; resolved factories are checked per request. A request-bound tool table defers tool-link checks until its first request. */
-export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlyMap<string, Readonly<Record<string, any>> | undefined>, views?: ReadonlySet<string>) {
+export function linkApps(
+  apps: McpApps | readonly McpApps[],
+  tools?: ReadonlyMap<string, Readonly<Record<string, any>> | undefined>,
+  views?: ReadonlySet<string>,
+) {
   const resources = resourcesOf(apps).resources as McpAppResource[];
-  const uris = new Set<string>(), names = new Set<string>(), renders = new Map<string, string>(), appOnly = new Set<string>();
-  const refuse = (message: string): never => { throw new ContractError("MCP_APP_CONFLICT", message, "mcp:apps", { status: 500 }); };
+  const uris = new Set<string>(),
+    names = new Set<string>(),
+    renders = new Map<string, string>(),
+    appOnly = new Set<string>();
+  const refuse = (message: string): never => {
+    throw new ContractError("MCP_APP_CONFLICT", message, "mcp:apps", { status: 500 });
+  };
   for (const resource of resources) {
     if (!resource.uri.startsWith("ui://")) refuse(`MCP App resource '${resource.name}' must use a ui:// URI.`);
     if (uris.has(resource.uri)) refuse(`MCP App resource URI '${resource.uri}' is registered twice.`);
     if (names.has(resource.name)) refuse(`MCP App resource name '${resource.name}' is registered twice.`);
-    uris.add(resource.uri); names.add(resource.name);
-    for (const tool of [...resource.renders ?? [], ...resource.appOnly ?? []]) {
-      if (tools && !tools.has(tool)) refuse(`MCP App resource '${resource.name}' names tool '${tool}', which this endpoint does not serve.`);
-      if (renders.has(tool) && renders.get(tool) !== resource.uri) refuse(`Tool '${tool}' is claimed by two MCP App resources.`);
+    uris.add(resource.uri);
+    names.add(resource.name);
+    for (const tool of [...(resource.renders ?? []), ...(resource.appOnly ?? [])]) {
+      if (tools && !tools.has(tool))
+        refuse(`MCP App resource '${resource.name}' names tool '${tool}', which this endpoint does not serve.`);
+      if (renders.has(tool) && renders.get(tool) !== resource.uri)
+        refuse(`Tool '${tool}' is claimed by two MCP App resources.`);
       renders.set(tool, resource.uri);
     }
     // appOnly stays for Views; a tool's own `meta.ui.visibility` may hide a Procedure (a listing hint, not authorization)
@@ -72,14 +120,34 @@ export function linkApps(apps: McpApps | readonly McpApps[], tools?: ReadonlyMap
   }
   // A tool's own `meta` merges with what its App links produce, and may not contradict them.
   for (const [tool, uri] of renders) {
-    const meta = tools?.get(tool) ?? {}, ui = meta.ui ?? {};
-    if ([ui.resourceUri, meta["ui/resourceUri"], meta["openai/outputTemplate"]].some(value => value && value !== uri) || appOnly.has(tool) && ui.visibility && `${ui.visibility}` !== "app") refuse(`Tool '${tool}' meta contradicts its MCP App links.`);
+    const meta = tools?.get(tool) ?? {},
+      ui = meta.ui ?? {};
+    if (
+      [ui.resourceUri, meta["ui/resourceUri"], meta["openai/outputTemplate"]].some(value => value && value !== uri) ||
+      (appOnly.has(tool) && ui.visibility && `${ui.visibility}` !== "app")
+    )
+      refuse(`Tool '${tool}' meta contradicts its MCP App links.`);
   }
   return { resources, renders, appOnly };
 }
 
 /** One endpoint's Apps bound to its tool table; `previous` is reused while the table's names are unchanged. */
-export function linkSurface(apps: McpApps | readonly McpApps[], selected: readonly { name: string; page?: unknown; meta?: Readonly<Record<string, unknown>> }[], previous?: { key: string; links: ReturnType<typeof linkApps> }) {
-  const key = JSON.stringify(selected.map(tool => [tool.name, !!tool.page, tool.meta] as const).sort(([a], [b]) => a.localeCompare(b)));
-  return previous?.key === key ? previous : { key, links: linkApps(apps, new Map(selected.map(tool => [tool.name, tool.meta])), new Set(selected.filter(tool => tool.page).map(tool => tool.name))) };
+export function linkSurface(
+  apps: McpApps | readonly McpApps[],
+  selected: readonly { name: string; page?: unknown; meta?: Readonly<Record<string, unknown>> }[],
+  previous?: { key: string; links: ReturnType<typeof linkApps> },
+) {
+  const key = JSON.stringify(
+    selected.map(tool => [tool.name, !!tool.page, tool.meta] as const).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return previous?.key === key
+    ? previous
+    : {
+        key,
+        links: linkApps(
+          apps,
+          new Map(selected.map(tool => [tool.name, tool.meta])),
+          new Set(selected.filter(tool => tool.page).map(tool => tool.name)),
+        ),
+      };
 }

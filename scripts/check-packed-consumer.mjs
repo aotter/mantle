@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -16,40 +17,66 @@ import { tmpdir } from "node:os";
 import { basename, delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const packages = JSON.parse(execFileSync(
-  "pnpm",
-  ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"],
-  { cwd: root, encoding: "utf8" },
-)).filter((pkg) => !pkg.private).map((pkg) => [pkg.name, pkg.path]);
+const packages = JSON.parse(
+  execFileSync("pnpm", ["--filter", "@aotter/mantle*", "list", "--depth", "-1", "--json"], {
+    cwd: root,
+    encoding: "utf8",
+  }),
+)
+  .filter(pkg => !pkg.private)
+  .map(pkg => [pkg.name, pkg.path]);
 const separator = process.argv.indexOf("--");
 const args = separator < 0 ? process.argv.slice(2) : process.argv.slice(2, separator);
 // --pm npm | pnpm@<exact>: install the consumer (no lockfile either way) and run the command with that package
 // manager instead of the pnpm on PATH, as a user copying an example would.
 const pmAt = args.indexOf("--pm");
 const pm = pmAt < 0 ? null : args.splice(pmAt, 2)[1];
-if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? "")) throw new Error("--pm takes npm or pnpm@<exact version>");
+if (pm !== null && pm !== "npm" && !/^pnpm@\d+\.\d+\.\d+$/.test(pm ?? ""))
+  throw new Error("--pm takes npm or pnpm@<exact version>");
 const npm = pm === "npm";
+// pnpm's `minimumReleaseAge` for the consumer install, in minutes (see `before`).
+const MIN_RELEASE_AGE_MINUTES = "120";
 const command = separator < 0 ? [] : process.argv.slice(separator + 1);
-const help = args.some((arg) => arg === "-h" || arg === "--help");
+const help = args.some(arg => arg === "-h" || arg === "--help");
 
 if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   let rejected = false;
   try {
-    assertExactTarballResolutions("version: 0.0.11-alpha.63", new Map([
-      ["@aotter/mantle", "/tmp/exact-mantle.tgz"],
-    ]));
+    assertExactTarballResolutions("version: 0.0.11-alpha.63", new Map([["@aotter/mantle", "/tmp/exact-mantle.tgz"]]));
   } catch (error) {
     rejected = error.message.includes("exact tarball");
   }
   if (!rejected) throw new Error("packed-consumer provenance self-test accepted a registry install");
+  if (before(0).length !== 0 || before(14, Date.UTC(2026, 0, 15))[0] !== "--before=2026-01-01T00:00:00.000Z") {
+    throw new Error("packed-consumer release-age self-test failed");
+  }
+  const tarball404 =
+    " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@tiptap/core/-/core-3.35.0.tgz: Not Found - 404";
+  const metadata404 = " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/@tiptap%2Fcore: Not Found - 404";
+  const waits = output => [1, 2, 3, 4, 5, 6].map(attempt => retryWait(output, attempt));
+  if (
+    waits(tarball404).join() !== "90000,90000,90000,90000,90000," ||
+    waits(metadata404).join() !== "60000,60000,,,," ||
+    waits("ERR_PNPM_PEER_DEP_ISSUES").join() !== "60000,60000,,,,"
+  ) {
+    throw new Error("packed-consumer install retry self-test failed");
+  }
   const source = join(tmpdir(), "source");
   if (!isWithin(source, join(source, "output")) || isWithin(source, join(tmpdir(), "output"))) {
     throw new Error("packed-consumer output boundary self-test failed");
   }
   const archived = archiveProject(join(root, "docs/examples/reference-service"));
   const entries = execFileSync("tar", ["-tf", "-"], { input: archived.bytes, encoding: "utf8" }).split("\n");
-  if (!entries.includes("package.json") || entries.some((entry) => entry.includes("node_modules/") || /^(?:generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts")) {
-    throw new Error("packed-consumer reference archive must contain authored source without dependencies or generated/build output");
+  if (
+    !entries.includes("package.json") ||
+    entries.some(
+      entry =>
+        entry.includes("node_modules/") || /^(?:generated|dist)\//.test(entry) || entry === "worker-configuration.d.ts",
+    )
+  ) {
+    throw new Error(
+      "packed-consumer reference archive must contain authored source without dependencies or generated/build output",
+    );
   }
   const probe = join(tmpdir(), "packed-consumer-peer-rules.json");
   writeFileSync(probe, `${JSON.stringify({ name: "probe", private: true }, null, 2)}\n`);
@@ -63,19 +90,16 @@ if (args.length === 1 && args[0] === "--self-test" && command.length === 0) {
   process.exit(0);
 }
 if (help) {
-  console.log("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
+  console.log(
+    "Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]",
+  );
   process.exit(0);
 }
-const output = args.length === 4 && args[2] === "--output" && args[3]
-  ? resolve(root, args[3])
-  : null;
-if (
-  (args.length !== 2 && !output)
-  || args[0] !== "--project"
-  || !args[1]
-  || command.length === 0
-) {
-  throw new Error("Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]");
+const output = args.length === 4 && args[2] === "--output" && args[3] ? resolve(root, args[3]) : null;
+if ((args.length !== 2 && !output) || args[0] !== "--project" || !args[1] || command.length === 0) {
+  throw new Error(
+    "Usage: node scripts/check-packed-consumer.mjs [--pm npm|pnpm@<version>] --project <path> [--output <path>] -- <command> [args...]",
+  );
 }
 const project = resolve(root, args[1]);
 if (!statSync(project, { throwIfNoEntry: false })?.isDirectory()) {
@@ -118,28 +142,38 @@ try {
     // That exact pnpm, first on PATH for both the install and the command.
     const tool = join(temp, "tool");
     mkdirSync(tool);
-    writeFileSync(join(tool, "package.json"), "{\"private\":true}\n");
+    writeFileSync(join(tool, "package.json"), '{"private":true}\n');
     run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", pm], tool, true, env);
     env.PATH = `${join(tool, "node_modules", ".bin")}${delimiter}${process.env.PATH}`;
   }
   if (npm) {
     addNpmOverrides(join(consumer, "package.json"), tarballs);
-    run("npm", ["install", "--no-audit", "--no-fund", "--prefer-online"], consumer, false, env);
+    await install("npm", ["install", "--no-audit", "--no-fund", "--prefer-online", ...before()], consumer, env);
     const lock = JSON.parse(readFileSync(join(consumer, "package-lock.json"), "utf8"));
     for (const [name, tarball] of tarballs) {
       const resolved = lock.packages?.[`node_modules/${name}`]?.resolved;
-      if (!resolved?.startsWith("file:") || realpathSync(resolve(consumer, resolved.slice(5))) !== realpathSync(tarball)) {
+      if (
+        !resolved?.startsWith("file:") ||
+        realpathSync(resolve(consumer, resolved.slice(5))) !== realpathSync(tarball)
+      ) {
         throw new Error(`consumer lock did not resolve ${name} from its exact tarball (got ${resolved})`);
       }
     }
   } else {
     addOverrides(join(consumer, "package.json"), tarballs);
-    run("pnpm", ["install", "--no-frozen-lockfile"], consumer, false, env);
+    // pnpm 10.16+ resolves only versions published MIN_RELEASE_AGE_MINUTES ago; pnpm 9 ignores the setting.
+    await install("pnpm", ["install", "--no-frozen-lockfile"], consumer, {
+      npm_config_minimum_release_age: process.env.npm_config_minimum_release_age ?? MIN_RELEASE_AGE_MINUTES,
+      ...env,
+    });
     const lockfile = readFileSync(join(consumer, "pnpm-lock.yaml"), "utf8");
     assertExactTarballResolutions(lockfile, tarballs);
   }
 
-  const installed = findInstalled(consumer, packages.map(([name]) => name));
+  const installed = findInstalled(
+    consumer,
+    packages.map(([name]) => name),
+  );
   let installedCount = 0;
   for (const [name] of packages) {
     const paths = installed.get(name) ?? [];
@@ -160,17 +194,21 @@ try {
 
   run(command[0], command.slice(1), consumer, false, env);
   complete = true;
-  console.log(JSON.stringify({
-    core_sha: coreSha,
-    consumer_sha: consumerSha,
-    consumer: basename(project),
-    consumer_path: prefix || ".",
-    package_manager: pm ?? "pnpm",
-    package_version: version,
-    run_artifact_sha256: Object.fromEntries(
-      [...tarballs].map(([name, path]) => [name, sha256(path)]),
+  console.log(
+    JSON.stringify(
+      {
+        core_sha: coreSha,
+        consumer_sha: consumerSha,
+        consumer: basename(project),
+        consumer_path: prefix || ".",
+        package_manager: pm ?? "pnpm",
+        package_version: version,
+        run_artifact_sha256: Object.fromEntries([...tarballs].map(([name, path]) => [name, sha256(path)])),
+      },
+      null,
+      2,
     ),
-  }, null, 2));
+  );
 } finally {
   if (!output || !complete) rmSync(temp, { recursive: true, force: true });
 }
@@ -188,18 +226,19 @@ function addOverrides(path, tarballs) {
   // Disposable consumer only — registry peer checks stay.
   manifest.pnpm.peerDependencyRules = {
     ...(manifest.pnpm.peerDependencyRules ?? {}),
-    allowAny: [...new Set([
-      ...(manifest.pnpm.peerDependencyRules?.allowAny ?? []),
-      ...tarballs.keys(),
-    ])],
+    allowAny: [...new Set([...(manifest.pnpm.peerDependencyRules?.allowAny ?? []), ...tarballs.keys()])],
   };
   writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
   // pnpm 10+ ignores the package.json "pnpm" field and reads these from pnpm-workspace.yaml.
   const workspace = join(dirname(path), "pnpm-workspace.yaml");
   if (!existsSync(workspace)) return;
   const yaml = readFileSync(workspace, "utf8");
-  if (/^(overrides|peerDependencyRules):/m.test(yaml)) throw new Error(`${workspace} already has overrides; merge them by hand`);
-  writeFileSync(workspace, `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`);
+  if (/^(overrides|peerDependencyRules):/m.test(yaml))
+    throw new Error(`${workspace} already has overrides; merge them by hand`);
+  writeFileSync(
+    workspace,
+    `${yaml.trimEnd()}\noverrides: ${JSON.stringify(manifest.pnpm.overrides)}\npeerDependencyRules: ${JSON.stringify(manifest.pnpm.peerDependencyRules)}\n`,
+  );
 }
 
 // npm: a direct dependency and its override must carry the same spec, so both point at the tarball.
@@ -258,6 +297,59 @@ function addIfDirectory(found, name, path) {
   found.set(name, paths);
 }
 
+/**
+ * The consumer installs without a lockfile, as a user copying the example would, so it resolves whatever the registry
+ * serves at that minute. Three guards keep a check or a release from depending on that minute:
+ * - npm resolves only versions published at least MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ago (default 14, the Dependabot
+ *   cooldown; 0 turns it off). The Mantle tarballs are files, so the cutoff never applies to them.
+ * - pnpm 10.16 and newer (`--pm pnpm@10…`) resolve only versions published at least MIN_RELEASE_AGE_MINUTES ago
+ *   (`minimumReleaseAge`; `npm_config_minimum_release_age` in the environment overrides it, 0 turns it off). File
+ *   tarballs have no publish time, so the Mantle packages install whatever their age; their dependencies do not.
+ * - an install that fails is tried again (retryWait), since a dependency published a moment ago may name a peer that
+ *   is not on the registry yet, or a tarball that has not reached every registry edge.
+ * ponytail: the repository's pnpm 9 has no release-age setting, so on that path only the retry guards; the setting
+ * takes effect there by itself once the repository's pnpm is 10.16 or newer.
+ */
+function before(days = Number(process.env.MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS ?? 14), now = Date.now()) {
+  if (!Number.isFinite(days) || days < 0)
+    throw new Error("MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS takes a number of days");
+  return days === 0 ? [] : [`--before=${new Date(now - days * 86_400_000).toISOString()}`];
+}
+
+async function install(command, args, cwd, env) {
+  for (let attempt = 1; ; attempt++) {
+    // Streamed as it arrives, so a stalled install shows progress and a killed run keeps its output, and kept to tell
+    // a registry tarball that is not there yet from any other failure.
+    const child = spawn(command, args, {
+      cwd,
+      env: { ...process.env, CI: "1", ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    for (const stream of ["stdout", "stderr"])
+      child[stream].on("data", chunk => {
+        process[stream].write(chunk);
+        output += chunk;
+      });
+    const [status] = await once(child, "close");
+    if (status === 0) return;
+    const waitMs = retryWait(output, attempt);
+    if (waitMs === undefined) throw new Error(`${command} install failed (exit ${status})`);
+    console.error(`[packed-consumer] ${command} install failed (attempt ${attempt}); retrying in ${waitMs / 1000}s`);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+  }
+}
+
+/**
+ * How long to wait after failed install `attempt` before the next, or undefined to give up. A registry tarball that
+ * answers 404 (pnpm 9's ERR_PNPM_FETCH_404 on a `.tgz`) was published minutes ago and has not reached every registry
+ * edge yet: it gets six attempts 90 s apart. Anything else, a missing package's metadata included, gets three 60 s apart.
+ */
+function retryWait(output, attempt) {
+  const tarball = /ERR_PNPM_FETCH_404\s+GET \S+\.tgz\b/.test(output);
+  if (attempt < (tarball ? 6 : 3)) return tarball ? 90_000 : 60_000;
+}
+
 function run(command, args, cwd, quiet = false, extraEnv = {}) {
   execFileSync(command, args, {
     cwd,
@@ -289,8 +381,12 @@ function isWithin(parent, child) {
 
 function archiveProject(directory) {
   const top = execFileSync("git", ["-C", directory, "rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  const prefix = execFileSync("git", ["-C", directory, "rev-parse", "--show-prefix"], { encoding: "utf8" }).trim().replace(/\/$/, "");
-  const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], { maxBuffer: 64 * 1024 * 1024 });
+  const prefix = execFileSync("git", ["-C", directory, "rev-parse", "--show-prefix"], { encoding: "utf8" })
+    .trim()
+    .replace(/\/$/, "");
+  const bytes = execFileSync("git", ["-C", top, "archive", prefix ? `HEAD:${prefix}` : "HEAD"], {
+    maxBuffer: 64 * 1024 * 1024,
+  });
   return { prefix, bytes };
 }
 

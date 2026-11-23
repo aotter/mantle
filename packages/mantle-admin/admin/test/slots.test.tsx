@@ -44,6 +44,16 @@ describe("slots", () => {
     expect(show(composed.layers, "Home")).toBe("app(second(first(<p data-default=\"true\">built-in</p>)))");
   });
 
+  it("keeps Brand's placement for the layer below when the props passed to renderDefault leave it out", () => {
+    const composed = defineAdmin(admin, {
+      components: { Brand: props => props.renderDefault({ title: "Acme", href: "/" }) },
+      plugins: [{ components: { Brand: props => <i data-placement={props.placement}>{props.title}</i> } }],
+    });
+    expect(show(composed.layers, "Brand", { title: "x", href: "/admin", placement: "sign-in" })).toBe(
+      '<i data-placement="sign-in">Acme</i>',
+    );
+  });
+
   it("keeps record/collection slots browser-only and passes the host surface to View cells", () => {
     const seen: unknown[] = [];
     const probe = (props: object) => { seen.push("surface" in props ? (props as { surface: string }).surface : "none"); return null; };
@@ -126,12 +136,12 @@ describe("matching a View's tool to its slots", () => {
 });
 
 describe("links", () => {
-  const host = (openLink: AdminHost["openLink"]): AdminHost => ({ context: {}, capabilities: { openLinks: {} }, openLink, sendMessage: async () => true, updateModelContext: async () => true, requestDisplayMode: async () => null });
+  const host = (openLink: AdminHost["openLink"]): AdminHost => ({ context: {}, capabilities: { openLinks: {} }, openLink, sendMessage: async () => "accepted" as const, updateModelContext: async () => true, requestDisplayMode: async () => null, downloadFile: async () => "refused" as const, registerTools: () => () => {} });
   const inHost = (node: React.ReactNode, openLink: AdminHost["openLink"] = async () => true) => renderToStaticMarkup(<SurfaceProvider surface="mcp-app" host={host(openLink)} layers={{}}>{node}</SurfaceProvider>);
 
   it("is an anchor in the browser, and in a host opens http(s) through the host and shows any other target as text", () => {
     expect(renderToStaticMarkup(<AdminLink href="/admin/c/requests">Requests</AdminLink>)).toBe('<a href="/admin/c/requests">Requests</a>');
-    expect(inHost(<AdminLink href="https://example.com/a">Docs</AdminLink>)).toBe('<a href="https://example.com/a">Docs</a>');
+    expect(inHost(<AdminLink href="https://example.com/a">Docs</AdminLink>)).toBe('<a role="link" tabindex="0">Docs</a>');
     expect(inHost(<AdminLink href="/admin/c/requests">Requests</AdminLink>)).toBe("<span>Requests</span>");
   });
 

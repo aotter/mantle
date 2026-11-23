@@ -1,11 +1,25 @@
 /** Schema.spec: its JSON Schema subset, local refs, indexes, search and Admin UI. */
-import { INPUT_RULE_KEYWORDS, LOCK_VERBS, MANTLE_BIND_KEYWORD, RESERVED_ENTRY_COLUMNS, RESERVED_PROCEDURE_INPUT_NAMES, type SchemaManifest } from "../model/ManifestGrammar.js";
-import { ManifestParseError, V01_LIFECYCLE_MODES, escapeJsonPointerSegment, rejectUnknownKeys, validateLocalizedText } from "./ManifestFieldChecks.js";
+import {
+  INPUT_RULE_KEYWORDS,
+  LOCK_VERBS,
+  MANTLE_BIND_KEYWORD,
+  RESERVED_ENTRY_COLUMNS,
+  RESERVED_PROCEDURE_INPUT_NAMES,
+  type JsonSchema,
+  type SchemaManifest,
+} from "../model/ManifestGrammar.js";
+import {
+  ManifestParseError,
+  V01_LIFECYCLE_MODES,
+  escapeJsonPointerSegment,
+  rejectUnknownKeys,
+  validateLocalizedText,
+} from "./ManifestFieldChecks.js";
 import { checkSchemaAdminUi } from "./SchemaAdminUiChecker.js";
 import { checkSchemaIndexes, schemaIndexDiagnosticCode } from "./SchemaIndexChecker.js";
 import { checkSchemaSearchableFields } from "./SchemaSearchChecker.js";
 import { MAX_TTL_SECONDS, isTtlSeconds } from "./SqlTypes.js";
-import { parseRowTemplate } from "../model/UserFields.js";
+import { parseRestrict, parseRowTemplate } from "../model/UserFields.js";
 
 export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManifest {
   const s = m.spec as unknown as Record<string, unknown>;
@@ -34,20 +48,8 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   if (typeof s["schema"] !== "object" || s["schema"] === null) {
     throw new ManifestParseError("Schema.spec.schema is required", idx, "/spec/schema");
   }
-  validateLocalizedText(
-    s["title"],
-    idx,
-    "/spec/title",
-    "Schema.spec.title",
-    true,
-  );
-  validateLocalizedText(
-    s["description"],
-    idx,
-    "/spec/description",
-    "Schema.spec.description",
-    false,
-  );
+  validateLocalizedText(s["title"], idx, "/spec/title", "Schema.spec.title", true);
+  validateLocalizedText(s["description"], idx, "/spec/description", "Schema.spec.description", false);
   const indexProblem = checkSchemaIndexes(m).problems[0];
   if (indexProblem) {
     throw new ManifestParseError(
@@ -70,16 +72,11 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
           : "SCHEMA_SEARCH_INVALID",
     );
   }
-  const adminUiProblem = checkSchemaAdminUi(m).problems[0];
+  const adminUiProblem = checkSchemaAdminUi(m).problem;
   if (adminUiProblem) {
-    throw new ManifestParseError(
-      adminUiProblem.message,
-      idx,
-      adminUiProblem.pointer,
-      "SCHEMA_UI_INVALID",
-    );
+    throw new ManifestParseError(adminUiProblem.message, idx, adminUiProblem.pointer, "SCHEMA_UI_INVALID");
   }
-  if ("checks" in s && (!Array.isArray(s["checks"]) || s["checks"].some((c) => typeof c !== "string" || !c.trim()))) {
+  if ("checks" in s && (!Array.isArray(s["checks"]) || s["checks"].some(c => typeof c !== "string" || !c.trim()))) {
     throw new ManifestParseError("Schema.spec.checks must be a list of SQL boolean expressions", idx, "/spec/checks");
   }
   if (s["lock"] !== undefined) validateLocks(s["lock"], idx);
@@ -101,36 +98,85 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
     rejectUnknownKeys(policy, ["field", "expireAfterSeconds"], idx, "/spec/ttl");
     const field = policy["field"];
     const seconds = policy["expireAfterSeconds"];
-    const property = typeof field === "string" && properties && typeof properties === "object" && !Array.isArray(properties)
-      ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
+    const property =
+      typeof field === "string" && properties && typeof properties === "object" && !Array.isArray(properties)
+        ? (properties as Record<string, Record<string, unknown>>)[field]
+        : undefined;
     const types = property && (typeof property["type"] === "string" ? [property["type"]] : property["type"]);
-    if (typeof field !== "string" || !field || !property || property["format"] !== "date-time" ||
-      !Array.isArray(types) || !types.includes("string") || types.some((type) => type !== "string" && type !== "null") ||
-      !isTtlSeconds(seconds)) {
-      throw new ManifestParseError(`Schema.spec.ttl requires a top-level date-time string field and expireAfterSeconds a whole number from 0 to ${MAX_TTL_SECONDS}`, idx, "/spec/ttl", "SCHEMA_TTL_INVALID");
+    if (
+      typeof field !== "string" ||
+      !field ||
+      !property ||
+      property["format"] !== "date-time" ||
+      !Array.isArray(types) ||
+      !types.includes("string") ||
+      types.some(type => type !== "string" && type !== "null") ||
+      !isTtlSeconds(seconds)
+    ) {
+      throw new ManifestParseError(
+        `Schema.spec.ttl requires a top-level date-time string field and expireAfterSeconds a whole number from 0 to ${MAX_TTL_SECONDS}`,
+        idx,
+        "/spec/ttl",
+        "SCHEMA_TTL_INVALID",
+      );
     }
   }
-  const propertyNames = properties && typeof properties === "object" && !Array.isArray(properties)
-    ? Object.keys(properties)
-    : [];
+  const propertyNames =
+    properties && typeof properties === "object" && !Array.isArray(properties) ? Object.keys(properties) : [];
   if (s["scope"] !== undefined) {
     const template = parseRowTemplate(s["scope"]);
-    if (typeof template === "string") throw new ManifestParseError(`Schema.spec.scope: ${template}`, idx, "/spec/scope");
+    if (typeof template === "string")
+      throw new ManifestParseError(
+        `Schema.spec.scope: ${
+          // OR would break insert auto-fill, never-SET scoped columns and partitioned uniqueness (ADR-0046, #2105).
+          typeof parseRestrict(s["scope"]) === "object"
+            ? "scope is AND-only; OR and parentheses are accepted only in a View or Procedure restrict"
+            : template
+        }`,
+        idx,
+        "/spec/scope",
+      );
     const columns = [...(template.owner ? [template.owner] : []), ...template.terms.map(t => t.column)];
     for (const field of columns) {
-      const property = properties && typeof properties === "object" && !Array.isArray(properties)
-        ? (properties as Record<string, Record<string, unknown>>)[field] : undefined;
+      const property =
+        properties && typeof properties === "object" && !Array.isArray(properties)
+          ? (properties as Record<string, Record<string, unknown>>)[field]
+          : undefined;
       const owner = field === template.owner;
-      if (!property || (owner ? property["type"] !== "string" : !["string", "integer", "number"].includes(property["type"] as string)) || property["nullable"] === true || property["oneOf"] !== undefined ||
-        !Array.isArray(schema["required"]) || !schema["required"].includes(field)) {
-        throw new ManifestParseError(`Schema.spec.scope column '${field}' must be a required, non-nullable ${owner ? "string" : "string or number"} property`, idx, "/spec/scope");
+      if (
+        !property ||
+        (owner
+          ? property["type"] !== "string"
+          : !["string", "integer", "number"].includes(property["type"] as string)) ||
+        property["nullable"] === true ||
+        property["oneOf"] !== undefined ||
+        !Array.isArray(schema["required"]) ||
+        !schema["required"].includes(field)
+      ) {
+        throw new ManifestParseError(
+          `Schema.spec.scope column '${field}' must be a required, non-nullable ${owner ? "string" : "string or number"} property`,
+          idx,
+          "/spec/scope",
+        );
       }
     }
-    if (![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some((index) => columns.every((field, i) => index[i] === field))) {
-      throw new ManifestParseError(`Schema.spec.scope needs an index beginning with its scoped columns [${columns.join(", ")}]`, idx, "/spec/scope");
+    if (
+      ![...(m.spec.uniqueIndexes ?? []), ...(m.spec.indexes ?? [])].some(index =>
+        columns.every((field, i) => index[i] === field),
+      )
+    ) {
+      throw new ManifestParseError(
+        `Schema.spec.scope needs an index beginning with its scoped columns [${columns.join(", ")}]`,
+        idx,
+        "/spec/scope",
+      );
     }
-    if (!template.terms.length && (m.spec.uniqueIndexes ?? []).some((index) => index[0] !== columns[0])) {
-      throw new ManifestParseError("Scoped Schema unique indexes must begin with the scope field", idx, "/spec/uniqueIndexes");
+    if (!template.terms.length && (m.spec.uniqueIndexes ?? []).some(index => index[0] !== columns[0])) {
+      throw new ManifestParseError(
+        "Scoped Schema unique indexes must begin with the scope field",
+        idx,
+        "/spec/uniqueIndexes",
+      );
     }
   }
   if (s["localized"] !== true && propertyNames.includes("locale")) {
@@ -158,9 +204,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   }
   const required = schema["required"];
   if (Array.isArray(required)) {
-    const unknownIndex = required.findIndex((field) =>
-      typeof field === "string" && !propertyNames.includes(field)
-    );
+    const unknownIndex = required.findIndex(field => typeof field === "string" && !propertyNames.includes(field));
     if (unknownIndex >= 0) {
       const field = required[unknownIndex];
       throw new ManifestParseError(
@@ -202,19 +246,33 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
   }
   if ("publishing" in s) {
     const p = s["publishing"];
-    if (!p || typeof p !== "object" || Array.isArray(p)) throw new ManifestParseError("Schema.spec.publishing must be a mapping { liveEdits }", idx, "/spec/publishing", "SCHEMA_PUBLISHING_INVALID");
+    if (!p || typeof p !== "object" || Array.isArray(p))
+      throw new ManifestParseError(
+        "Schema.spec.publishing must be a mapping { liveEdits }",
+        idx,
+        "/spec/publishing",
+        "SCHEMA_PUBLISHING_INVALID",
+      );
     rejectUnknownKeys(p as Record<string, unknown>, ["liveEdits"], idx, "/spec/publishing");
-    if ("liveEdits" in p && typeof (p as Record<string, unknown>)["liveEdits"] !== "boolean") throw new ManifestParseError("Schema.spec.publishing.liveEdits must be a boolean", idx, "/spec/publishing/liveEdits", "SCHEMA_PUBLISHING_INVALID");
-    if (s["lifecycle"] !== "publishing") throw new ManifestParseError("Schema.spec.publishing applies only to lifecycle: publishing; an operational Schema already edits rows in place", idx, "/spec/publishing", "SCHEMA_PUBLISHING_INVALID");
+    if ("liveEdits" in p && typeof (p as Record<string, unknown>)["liveEdits"] !== "boolean")
+      throw new ManifestParseError(
+        "Schema.spec.publishing.liveEdits must be a boolean",
+        idx,
+        "/spec/publishing/liveEdits",
+        "SCHEMA_PUBLISHING_INVALID",
+      );
+    if (s["lifecycle"] !== "publishing")
+      throw new ManifestParseError(
+        "Schema.spec.publishing applies only to lifecycle: publishing; an operational Schema already edits rows in place",
+        idx,
+        "/spec/publishing",
+        "SCHEMA_PUBLISHING_INVALID",
+      );
   }
   if ("translates" in s && s["translates"] != null) {
     const t = s["translates"];
     if (typeof t !== "object" || Array.isArray(t)) {
-      throw new ManifestParseError(
-        "Schema.spec.translates must be an object { parent, on }",
-        idx,
-        "/spec/translates",
-      );
+      throw new ManifestParseError("Schema.spec.translates must be an object { parent, on }", idx, "/spec/translates");
     }
     const tr = t as Record<string, unknown>;
     rejectUnknownKeys(tr, ["parent", "on"], idx, "/spec/translates");
@@ -240,7 +298,7 @@ export function validateSchemaSpec(m: SchemaManifest, idx: number): SchemaManife
         "TRANSLATES_REQUIRES_LOCALIZED",
       );
     }
-    if (!propertyNames.some((name) => name !== "locale" && name !== tr["on"])) {
+    if (!propertyNames.some(name => name !== "locale" && name !== tr["on"])) {
       throw new ManifestParseError(
         "Schema.spec.translates requires at least one locale-specific field besides 'locale' and the join field",
         idx,
@@ -276,7 +334,6 @@ const UNSUPPORTED_JSON_SCHEMA_KEYWORDS = new Set([
   "prefixItems",
   "contains",
   "dependentSchemas",
-  "propertyNames",
   "unevaluatedProperties",
 ]);
 
@@ -318,17 +375,23 @@ export function validateJsonSchema(
       }
     }
     // Generated input validation checks these rules (their shapes are checked at generate); nothing checks them elsewhere.
-    if (basePointer !== "/spec/input") for (const keyword of INPUT_RULE_KEYWORDS) {
-      if (keyword in value) {
-        throw new ManifestParseError(
-          `${kind} '${name}' uses JSON Schema keyword '${keyword}', which is supported only in View and Procedure input`,
-          idx,
-          `${pointer}/${escapeJsonPointerSegment(keyword)}`,
-          "JSON_SCHEMA_UNSUPPORTED",
-        );
+    if (basePointer !== "/spec/input")
+      for (const keyword of INPUT_RULE_KEYWORDS) {
+        if (keyword in value) {
+          throw new ManifestParseError(
+            `${kind} '${name}' uses JSON Schema keyword '${keyword}', which is supported only in View and Procedure input`,
+            idx,
+            `${pointer}/${escapeJsonPointerSegment(keyword)}`,
+            "JSON_SCHEMA_UNSUPPORTED",
+          );
+        }
       }
-    }
-    if ("$ref" in value) refs.push([`${pointer}/$ref`, value["$ref"] as string, validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`)]);
+    if ("$ref" in value)
+      refs.push([
+        `${pointer}/$ref`,
+        value["$ref"] as string,
+        validateLocalSchemaRef(value["$ref"], rootObject, idx, kind, name, `${pointer}/$ref`),
+      ]);
     if (value["enum"] !== undefined && (!Array.isArray(value["enum"]) || value["enum"].length > MAX_JSON_SCHEMA_ENUM)) {
       throw new ManifestParseError(
         `${kind} '${name}' enum must be a list of at most ${MAX_JSON_SCHEMA_ENUM} values`,
@@ -337,6 +400,18 @@ export function validateJsonSchema(
         "JSON_SCHEMA_LIMIT_EXCEEDED",
       );
     }
+    const maxBytes = value["x-mantle-maxBytes"];
+    if (
+      maxBytes !== undefined &&
+      (!Number.isSafeInteger(maxBytes) || (maxBytes as number) < 1 || ![value["type"]].flat().includes("string"))
+    )
+      throw new ManifestParseError(
+        `${kind} '${name}' x-mantle-maxBytes at ${pointer} must be a positive integer on a string schema (type: string)`,
+        idx,
+        `${pointer}/x-mantle-maxBytes`,
+        "JSON_SCHEMA_UNSUPPORTED",
+        { value: maxBytes, expected: "a positive integer, the most UTF-8 bytes the string may encode to" },
+      );
     if (value["pattern"] !== undefined) {
       const problem = typeof value["pattern"] === "string" ? unsafePattern(value["pattern"]) : "a pattern is a string";
       if (problem) {
@@ -345,7 +420,10 @@ export function validateJsonSchema(
           idx,
           `${pointer}/pattern`,
           "INVALID_PATTERN",
-          { value: value["pattern"], expected: `a regular expression of at most ${MAX_JSON_SCHEMA_PATTERN} characters with no repeated group that itself repeats or alternates` },
+          {
+            value: value["pattern"],
+            expected: `a regular expression of at most ${MAX_JSON_SCHEMA_PATTERN} characters with no repeated group that itself repeats or alternates`,
+          },
         );
       }
       try {
@@ -364,19 +442,31 @@ export function validateJsonSchema(
       }
       // Adjacent variable quantifiers (`a*a*a*`), the unanchored retry at every start offset and chained alternations backtrack
       const { exponent, branches } = patternCost(value["pattern"] as string);
-      const maxLength = value["maxLength"];
-      const bounded = typeof maxLength === "number" && Number.isInteger(maxLength) && maxLength >= 0;
+      // A string of n UTF-8 bytes has at most n UTF-16 code units, so x-mantle-maxBytes bounds it as maxLength does.
+      const bounds = [value["maxLength"], maxBytes].filter(
+        (n): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0,
+      );
+      const maxLength = bounds.length ? Math.min(...bounds) : undefined;
+      const bounded = maxLength !== undefined;
       if (branches * (exponent === 0 ? 1 : bounded ? maxLength ** exponent : Infinity) > MAX_PATTERN_WORK) {
         const limit = maxPatternLength(exponent, branches);
         const cost = `${branches === 1 ? "" : `${branches} alternative paths × `}maxLength^${exponent}`;
         throw new ManifestParseError(
           `${kind} '${name}' has a regex pattern at ${pointer} that could cost ${cost} backtracking steps on one string (${exponent} = its variable quantifiers *, +, ?, {m,}, {m,n}, plus 1 unless it starts with ^), over the ${MAX_PATTERN_WORK} limit. ${
-            limit > 0 ? `Declare maxLength of at most ${limit}, anchor it with ^, or use fewer variable quantifiers or alternatives.` : "Use fewer alternatives, or an enum."
+            limit > 0
+              ? `Declare maxLength of at most ${limit}, anchor it with ^, or use fewer variable quantifiers or alternatives.`
+              : "Use fewer alternatives, or an enum."
           }`,
           idx,
           `${pointer}/pattern`,
           "INVALID_PATTERN",
-          { value: value["pattern"], expected: limit > 0 ? `a string with maxLength of at most ${limit}` : `at most ${MAX_PATTERN_WORK} alternative paths` },
+          {
+            value: value["pattern"],
+            expected:
+              limit > 0
+                ? `a string with maxLength of at most ${limit}`
+                : `at most ${MAX_PATTERN_WORK} alternative paths`,
+          },
         );
       }
     }
@@ -390,12 +480,46 @@ export function validateJsonSchema(
       }
     }
     if (value["items"] !== undefined) visit(value["items"], `${pointer}/items`, depth + 1);
+    const names = value["propertyNames"];
+    if (names !== undefined) {
+      const at = `${pointer}/propertyNames`;
+      const keySchema = names as NonNullable<JsonSchema["propertyNames"]>;
+      if (
+        !keySchema ||
+        typeof keySchema !== "object" ||
+        Array.isArray(keySchema) ||
+        Object.keys(keySchema).some(key => !["pattern", "maxLength", "not"].includes(key)) ||
+        (keySchema.pattern === undefined && keySchema.not === undefined)
+      )
+        throw new ManifestParseError(
+          `${kind} '${name}' propertyNames requires pattern or not.enum, with optional maxLength`,
+          idx,
+          at,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      const { not, ...pattern } = keySchema;
+      if (
+        not !== undefined &&
+        (!not ||
+          typeof not !== "object" ||
+          Array.isArray(not) ||
+          Object.keys(not).join() !== "enum" ||
+          !Array.isArray(not.enum) ||
+          not.enum.length === 0 ||
+          not.enum.some(key => typeof key !== "string"))
+      )
+        throw new ManifestParseError(
+          `${kind} '${name}' propertyNames.not supports a non-empty string enum`,
+          idx,
+          `${at}/not`,
+          "JSON_SCHEMA_UNSUPPORTED",
+        );
+      if (not) visit(not, `${at}/not`, depth + 1);
+      visit(pattern, at, depth + 1);
+    }
     if (typeof value["additionalProperties"] === "object" && value["additionalProperties"] !== null) {
       visit(value["additionalProperties"], `${pointer}/additionalProperties`, depth + 1);
-    } else if (
-      value["additionalProperties"] !== undefined &&
-      typeof value["additionalProperties"] !== "boolean"
-    ) {
+    } else if (value["additionalProperties"] !== undefined && typeof value["additionalProperties"] !== "boolean") {
       throw new ManifestParseError(
         `${kind} '${name}' additionalProperties must be a boolean or schema`,
         idx,
@@ -424,10 +548,15 @@ export function validateJsonSchema(
   // stack overflows on every call. A cycle through `properties`, `items` or `additionalProperties` reads one level of the value
   // each turn, so it ends with the value.
   const target = new Map(refs.map(([, ref, node]) => [ref, node]));
-  const next = (node: unknown): unknown[] => !node || typeof node !== "object" ? [] : [
-    ...("$ref" in node ? [(node as Record<string, unknown>)["$ref"]] : []),
-    ...(Array.isArray((node as Record<string, unknown>)["oneOf"]) ? ((node as Record<string, unknown>)["oneOf"] as unknown[]).flatMap(next) : []),
-  ];
+  const next = (node: unknown): unknown[] =>
+    !node || typeof node !== "object"
+      ? []
+      : [
+          ...("$ref" in node ? [(node as Record<string, unknown>)["$ref"]] : []),
+          ...(Array.isArray((node as Record<string, unknown>)["oneOf"])
+            ? ((node as Record<string, unknown>)["oneOf"] as unknown[]).flatMap(next)
+            : []),
+        ];
   const done = new Set<unknown>();
   const onPath = new Set<unknown>();
   let at = basePointer;
@@ -436,7 +565,10 @@ export function validateJsonSchema(
     if (done.has(ref)) return false;
     onPath.add(ref);
     // a target outside the schemas visited above (a `$ref` into an `enum` value) is resolved by the same rule
-    const node = typeof ref === "string" && target.has(ref) ? target.get(ref) : validateLocalSchemaRef(ref, rootObject, idx, kind, name, at);
+    const node =
+      typeof ref === "string" && target.has(ref)
+        ? target.get(ref)
+        : validateLocalSchemaRef(ref, rootObject, idx, kind, name, at);
     const found = next(node).some(cycle);
     onPath.delete(ref);
     done.add(ref);
@@ -501,7 +633,8 @@ function scanPattern(pattern: string): { problem?: string; variable: number; bra
   let variable = 0;
   let branches = 1;
   const anchored = pattern.startsWith("^");
-  if (pattern.length > MAX_JSON_SCHEMA_PATTERN) return { problem: `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`, variable, branches, anchored };
+  if (pattern.length > MAX_JSON_SCHEMA_PATTERN)
+    return { problem: `longer than ${MAX_JSON_SCHEMA_PATTERN} characters`, variable, branches, anchored };
   type Frame = { quantified: boolean; alternates: boolean; branches: number };
   const stack: Frame[] = [{ quantified: false, alternates: false, branches: 1 }];
   let group: Frame | undefined; // the group just closed, when it is the atom a quantifier would apply to
@@ -516,8 +649,10 @@ function scanPattern(pattern: string): { problem?: string; variable: number; bra
       const max = brace ? (brace[2] === undefined ? min : brace[3] ? +brace[3] : Infinity) : c === "?" ? 1 : Infinity;
       if (brace) i += brace[0].length - 1;
       if (pattern[i + 1] === "?") i++; // lazy
-      if (group && max > 1 && group.quantified) return { problem: "a repeated group whose body repeats (nested quantifiers)", variable, branches, anchored };
-      if (group && max > 1 && group.alternates) return { problem: "a repeated group whose body alternates", variable, branches, anchored };
+      if (group && max > 1 && group.quantified)
+        return { problem: "a repeated group whose body repeats (nested quantifiers)", variable, branches, anchored };
+      if (group && max > 1 && group.alternates)
+        return { problem: "a repeated group whose body alternates", variable, branches, anchored };
       if (max !== min) {
         top.quantified = true;
         variable++;
@@ -530,7 +665,8 @@ function scanPattern(pattern: string): { problem?: string; variable: number; bra
     atom = true;
     if (c === "\\") {
       const e = pattern[i + 1];
-      if (e !== undefined && (/[1-9]/.test(e) || e === "k")) return { problem: "a backreference", variable, branches, anchored };
+      if (e !== undefined && (/[1-9]/.test(e) || e === "k"))
+        return { problem: "a backreference", variable, branches, anchored };
       i++;
     } else if (c === "[") {
       let j = i + 1;
@@ -610,20 +746,32 @@ function validateLocalSchemaRef(
 
 /** `Schema.spec.lock` shape (#1822); its `when` SQL is checked when the plan compiles. */
 function validateLocks(value: unknown, idx: number): void {
-  const fail = (message: string, pointer = "/spec/lock") => { throw new ManifestParseError(`Schema.spec.lock${message}`, idx, pointer, "SCHEMA_LOCK_INVALID"); };
+  const fail = (message: string, pointer = "/spec/lock") => {
+    throw new ManifestParseError(`Schema.spec.lock${message}`, idx, pointer, "SCHEMA_LOCK_INVALID");
+  };
   if (!Array.isArray(value) || !value.length) fail(" must be a non-empty list of { name, on, when, message }");
   const names = new Set<string>();
   (value as unknown[]).forEach((entry, i) => {
     const at = `/spec/lock/${i}`;
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return fail(`[${i}] must be a mapping { name, on, when, message }`, at);
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      return fail(`[${i}] must be a mapping { name, on, when, message }`, at);
     const lock = entry as Record<string, unknown>;
     rejectUnknownKeys(lock, ["name", "on", "when", "message"], idx, at);
-    const name = lock["name"], on = lock["on"];
-    if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) fail(`[${i}].name must be an identifier`, `${at}/name`);
+    const name = lock["name"],
+      on = lock["on"];
+    if (typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name))
+      fail(`[${i}].name must be an identifier`, `${at}/name`);
     if (names.has(String(name).toLowerCase())) fail(`[${i}].name '${name}' is declared twice`, `${at}/name`);
     names.add(String(name).toLowerCase());
-    if (!Array.isArray(on) || !on.length || on.some((v) => !(LOCK_VERBS as readonly unknown[]).includes(v)) || new Set(on).size !== on.length)
+    if (
+      !Array.isArray(on) ||
+      !on.length ||
+      on.some(v => !(LOCK_VERBS as readonly unknown[]).includes(v)) ||
+      new Set(on).size !== on.length
+    )
       fail(`[${i}].on must be a non-empty list of distinct verbs from ${LOCK_VERBS.join(", ")}`, `${at}/on`);
-    for (const key of ["when", "message"]) if (typeof lock[key] !== "string" || !(lock[key] as string).trim()) fail(`[${i}].${key} must be a non-empty string`, `${at}/${key}`);
+    for (const key of ["when", "message"])
+      if (typeof lock[key] !== "string" || !(lock[key] as string).trim())
+        fail(`[${i}].${key} must be a non-empty string`, `${at}/${key}`);
   });
 }

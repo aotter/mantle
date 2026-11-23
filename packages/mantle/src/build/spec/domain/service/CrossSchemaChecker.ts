@@ -1,33 +1,22 @@
 import type { SchemaManifest } from "../model/ManifestGrammar.js";
-import {
-  bestMatch,
-  manifestPath,
-  type ManifestFilePaths,
-} from "./ManifestPathDiagnoser.js";
-import {
-  bootDiagnostic,
-  validateDiagnostic,
-  type Diagnostic,
-  type Phase,
-} from "../../kernel/diagnostic.js";
+import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
+import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
 
 /** Cross-Schema translation references. Atom-local translation shape lives in the parser. */
 export function checkTranslatesReferences(
   schemas: readonly SchemaManifest[],
-  phase: Extract<Phase, "validate" | "boot">,
   filePaths?: ManifestFilePaths,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
-  const schemasByName = new Map(schemas.map((schema) => [schema.metadata.name, schema]));
+  const schemasByName = new Map(schemas.map(schema => [schema.metadata.name, schema]));
   for (const s of schemas) {
     const translates = s.spec.translates;
     if (!translates) continue;
-    const path = (jsonPointer: string) =>
-      manifestPath("Schema", s.metadata.name, jsonPointer, filePaths);
+    const path = (jsonPointer: string) => manifestPath("Schema", s.metadata.name, jsonPointer, filePaths);
     const parent = schemasByName.get(translates.parent);
     if (!parent) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_PARENT_UNKNOWN",
           severity: "error",
           path: path("/spec/translates/parent"),
@@ -41,22 +30,25 @@ export function checkTranslatesReferences(
       continue;
     }
     if (s.spec.ttl || parent.spec.ttl) {
-      out.push(emit(phase, {
-        code: "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
-        severity: "error",
-        path: path("/spec/translates"),
-        message: `Schema '${s.metadata.name}' cannot translate TTL Schema '${parent.metadata.name}' or declare TTL itself; joined translations cannot guarantee expiry across both Schemas.`,
-        expected: "TTL only on Schemas outside a translation relationship",
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
+          severity: "error",
+          path: path("/spec/translates"),
+          message: `Schema '${s.metadata.name}' cannot translate TTL Schema '${parent.metadata.name}' or declare TTL itself; joined translations cannot guarantee expiry across both Schemas.`,
+          expected: "TTL only on Schemas outside a translation relationship",
+        }),
+      );
     }
     if (parent.spec.localized === true) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_PARENT_IS_LOCALIZED",
           severity: "error",
           path: path("/spec/translates/parent"),
           value: translates.parent,
-          expected: "parent Schema must NOT be localized (it carries the non-translatable facts; translation rows are this Schema)",
+          expected:
+            "parent Schema must NOT be localized (it carries the non-translatable facts; translation rows are this Schema)",
           message: `Schema '${s.metadata.name}' translates.parent '${translates.parent}' is itself localized. The parent should hold non-translatable facts (e.g. sku, price); the localized child holds the translatable fields.`,
         }),
       );
@@ -64,7 +56,7 @@ export function checkTranslatesReferences(
     const parentProps = propertyKeys(parent);
     if (!parentProps.has(translates.on)) {
       out.push(
-        emit(phase, {
+        validateDiagnostic({
           code: "TRANSLATES_FIELD_NOT_IN_PARENT",
           severity: "error",
           path: path("/spec/translates/on"),
@@ -78,13 +70,6 @@ export function checkTranslatesReferences(
     }
   }
   return out;
-}
-
-function emit(
-  phase: Extract<Phase, "validate" | "boot">,
-  payload: Parameters<typeof validateDiagnostic>[0],
-): Diagnostic {
-  return phase === "validate" ? validateDiagnostic(payload) : bootDiagnostic(payload);
 }
 
 function propertyKeys(s: SchemaManifest): Set<string> {

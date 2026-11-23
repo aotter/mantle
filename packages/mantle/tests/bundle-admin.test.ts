@@ -12,26 +12,49 @@ async function app() {
   const pkg = join(dir, "node_modules/@aotter/mantle-admin");
   await mkdir(join(pkg, "dist/server"), { recursive: true });
   await mkdir(join(dir, "src"));
-  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@aotter/mantle-admin", version: "1.0.0", type: "module", dependencies: { vite: "^8.0.0" },
-    exports: { "./server": "./dist/server/index.js", "./mcp": "./dist/server/mcp.js", "./build": { default: "./dist/build.js" }, "./package.json": "./package.json" } }));
+  await writeFile(
+    join(pkg, "package.json"),
+    JSON.stringify({
+      name: "@aotter/mantle-admin",
+      version: "1.0.0",
+      type: "module",
+      dependencies: { vite: "^8.0.0" },
+      exports: {
+        "./server": "./dist/server/index.js",
+        "./mcp": "./dist/server/mcp.js",
+        "./build": { default: "./dist/build.js" },
+        "./package.json": "./package.json",
+      },
+    }),
+  );
   await writeFile(join(pkg, "dist/server/index.js"), 'export const shell = "admin";\n');
   await writeFile(join(pkg, "dist/server/mcp.js"), 'export const tools = "mcp";\n');
   // an Admin dependency whose `exports` hide its package.json
   await mkdir(join(dir, "node_modules/vite"), { recursive: true });
-  await writeFile(join(dir, "node_modules/vite/package.json"), JSON.stringify({ name: "vite", version: "8.0.0", exports: { ".": "./index.js" } }));
-  await writeFile(join(pkg, "dist/build.js"), [
-    'import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";',
-    'import { join } from "node:path";',
-    "export async function buildAdmin({ entry, mcpEntry, outDir }) {",
-    "  mkdirSync(outDir, { recursive: true });",
-    '  writeFileSync(join(outDir, "index.html"), String(entry));',
-    // the real build writes the MCP App beside the page
-    '  writeFileSync(join(outDir, "mcp-app.html"), String(mcpEntry));',
-    `  appendFileSync(${JSON.stringify(join(dir, "builds.log"))}, String(entry) + "\\n");`,
-    "}",
-  ].join("\n"));
-  await writeFile(join(dir, "src/worker.ts"), 'import { shell } from "@aotter/mantle-admin/server";\nexport default { fetch: () => new Response(shell) };\n');
-  const builds = async () => (await readFile(join(dir, "builds.log"), "utf8").catch(() => "")).split("\n").filter(Boolean);
+  await writeFile(
+    join(dir, "node_modules/vite/package.json"),
+    JSON.stringify({ name: "vite", version: "8.0.0", exports: { ".": "./index.js" } }),
+  );
+  await writeFile(
+    join(pkg, "dist/build.js"),
+    [
+      'import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";',
+      'import { join } from "node:path";',
+      "export async function buildAdmin({ entry, mcpEntry, outDir }) {",
+      "  mkdirSync(outDir, { recursive: true });",
+      '  writeFileSync(join(outDir, "index.html"), String(entry));',
+      // the real build writes the MCP App beside the page
+      '  writeFileSync(join(outDir, "mcp-app.html"), String(mcpEntry));',
+      `  appendFileSync(${JSON.stringify(join(dir, "builds.log"))}, String(entry) + "\\n");`,
+      "}",
+    ].join("\n"),
+  );
+  await writeFile(
+    join(dir, "src/worker.ts"),
+    'import { shell } from "@aotter/mantle-admin/server";\nexport default { fetch: () => new Response(shell) };\n',
+  );
+  const builds = async () =>
+    (await readFile(join(dir, "builds.log"), "utf8").catch(() => "")).split("\n").filter(Boolean);
   return { dir, entry: join(dir, "src/worker.ts"), builds };
 }
 
@@ -41,8 +64,17 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     const dist = join(dir, "dist");
     await bundleApp(entry, dist);
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
-    expect(readdirSync(join(dist, "client"))).toEqual(["admin"]);
+    expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin"]);
+    // Admin chunks are answered by the edge: their headers live in _headers.
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toContain(
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable",
+    );
     expect(await readFile(join(dist, "client/admin/index.html"), "utf8")).toBe("undefined"); // the built-in entry
+    // An earlier build's own _headers, which no build removes, is replaced: it carried the one-year rule.
+    const day = await readFile(join(dist, "client/_headers"), "utf8");
+    await writeFile(join(dist, "client/_headers"), day.replace("86400", "31536000"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(day);
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(1);
     // an app file changes nothing in the built-in entry
@@ -50,7 +82,10 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(1);
     // an upgraded Admin dependency does
-    await writeFile(join(dir, "node_modules/vite/package.json"), JSON.stringify({ name: "vite", version: "8.1.0", exports: { ".": "./index.js" } }));
+    await writeFile(
+      join(dir, "node_modules/vite/package.json"),
+      JSON.stringify({ name: "vite", version: "8.1.0", exports: { ".": "./index.js" } }),
+    );
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(2);
     await rm(join(dist, "client/admin"), { recursive: true });
@@ -65,17 +100,32 @@ test("mantle bundle: the Worker into <outdir>/worker, Admin into <assets>/admin;
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(5);
 
-    await bundleApp(entry, dist, join(dir, "public"));
+    // An app's own _headers is never edited: as the assets directory itself, it is only told the rule.
+    await mkdir(join(dir, "public"), { recursive: true });
+    await writeFile(join(dir, "public/_headers"), "/assets/*\n  Cache-Control: no-cache\n");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, dist, join(dir, "public"));
+      expect(warn.mock.calls.flat().join("\n")).toContain("has no /admin/assets/* rule; add:");
+    } finally {
+      warn.mockRestore();
+    }
     expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe("/assets/*\n  Cache-Control: no-cache\n");
     await expect(bundleApp(entry, dist, dist)).rejects.toThrow("must not overlap the Worker directory");
-    await expect(bundleApp(entry, dist, join(dist, "worker/static"))).rejects.toThrow("must not overlap the Worker directory");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+    await expect(bundleApp(entry, dist, join(dist, "worker/static"))).rejects.toThrow(
+      "must not overlap the Worker directory",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle selects a sibling admin.mcp.tsx and rebuilds it even with the built-in browser entry", async () => {
   const { dir, entry, builds } = await app();
   try {
-    const dist = join(dir, "dist"), mcpEntry = join(dir, "src/admin.mcp.tsx");
+    const dist = join(dir, "dist"),
+      mcpEntry = join(dir, "src/admin.mcp.tsx");
     await bundleApp(entry, dist);
     expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe("undefined");
     await writeFile(mcpEntry, "export default {};\n");
@@ -91,7 +141,9 @@ test("mantle bundle selects a sibling admin.mcp.tsx and rebuilds it even with th
     await rm(mcpEntry);
     await bundleApp(entry, dist);
     expect(await readFile(join(dist, "client/admin/mcp-app.html"), "utf8")).toBe("undefined");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle does not keep an Admin output that has no MCP App, as one built before the App was part of it", async () => {
@@ -105,7 +157,9 @@ test("mantle bundle does not keep an Admin output that has no MCP App, as one bu
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(2);
     expect(existsSync(join(dist, "client/admin/mcp-app.html"))).toBe(true);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle builds no Admin for a Worker that does not serve it", async () => {
@@ -116,11 +170,16 @@ test("mantle bundle builds no Admin for a Worker that does not serve it", async 
     expect(existsSync(join(dir, "dist/worker/worker.js"))).toBe(true);
     expect(existsSync(join(dir, "dist/client"))).toBe(false);
     // Admin's MCP tools without the Admin server
-    await writeFile(entry, 'import { tools } from "@aotter/mantle-admin/mcp";\nexport default { fetch: () => new Response(tools) };\n');
+    await writeFile(
+      entry,
+      'import { tools } from "@aotter/mantle-admin/mcp";\nexport default { fetch: () => new Response(tools) };\n',
+    );
     await bundleApp(entry, join(dir, "dist"));
     expect(existsSync(join(dir, "dist/client"))).toBe(false);
     expect(await builds()).toEqual([]);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle refuses an outdir or assets directory that is the working directory or holds the source", async () => {
@@ -135,20 +194,38 @@ test("mantle bundle refuses an outdir or assets directory that is the working di
     process.chdir(real);
     await symlink(real, join(real, "alias"));
     await expect(bundleApp(entry, real)).rejects.toThrow("Bundle outdir must not be the working directory");
-    await expect(bundleApp(entry, join(real, "src"))).rejects.toThrow("Bundle outdir must not contain the source entry");
-    await expect(bundleApp(entry, join(real, "alias"))).rejects.toThrow("Bundle outdir must not be the working directory");
-    await expect(bundleApp(entry, join(real, "alias/src"))).rejects.toThrow("Bundle outdir must not contain the source entry");
-    await expect(bundleApp(entry, join(real, "dist"), join(real, "src"))).rejects.toThrow("The assets directory must not contain the source entry");
-    await expect(bundleApp(entry, join(real, "dist"), real)).rejects.toThrow("The assets directory must not be the working directory");
-    expect([existsSync(join(dir, "worker/keep.ts")), existsSync(join(dir, "src/keep.ts")), existsSync(join(dir, "dist"))]).toEqual([true, true, false]);
-  } finally { process.chdir(cwd); await rm(dir, { recursive: true, force: true }); }
+    await expect(bundleApp(entry, join(real, "src"))).rejects.toThrow(
+      "Bundle outdir must not contain the source entry",
+    );
+    await expect(bundleApp(entry, join(real, "alias"))).rejects.toThrow(
+      "Bundle outdir must not be the working directory",
+    );
+    await expect(bundleApp(entry, join(real, "alias/src"))).rejects.toThrow(
+      "Bundle outdir must not contain the source entry",
+    );
+    await expect(bundleApp(entry, join(real, "dist"), join(real, "src"))).rejects.toThrow(
+      "The assets directory must not contain the source entry",
+    );
+    await expect(bundleApp(entry, join(real, "dist"), real)).rejects.toThrow(
+      "The assets directory must not be the working directory",
+    );
+    expect([
+      existsSync(join(dir, "worker/keep.ts")),
+      existsSync(join(dir, "src/keep.ts")),
+      existsSync(join(dir, "dist")),
+    ]).toEqual([true, true, false]);
+  } finally {
+    process.chdir(cwd);
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle rebuilds the built-in entry when the installed Admin moves at the same version (a patch or a link)", async () => {
   const { dir, entry, builds } = await app();
   try {
     // pnpm's layout: node_modules/@aotter/mantle-admin links into the store, whose directory names a patch by its hash
-    const pkg = join(dir, "node_modules/@aotter/mantle-admin"), dist = join(dir, "dist");
+    const pkg = join(dir, "node_modules/@aotter/mantle-admin"),
+      dist = join(dir, "dist");
     const store = (name: string) => join(dir, `node_modules/.pnpm/${name}/node_modules/@aotter/mantle-admin`);
     await mkdir(join(store("orig"), ".."), { recursive: true });
     await rename(pkg, store("orig"));
@@ -161,18 +238,25 @@ test("mantle bundle rebuilds the built-in entry when the installed Admin moves a
     await symlink(store("patched"), pkg, "dir");
     await bundleApp(entry, dist);
     expect(await builds()).toHaveLength(2);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as TypeScript", async () => {
   const { dir, builds } = await app();
   try {
-    const entry = join(dir, "src/server.ts"), generated = join(dir, "generated"), manifest = join(dir, "app.yaml");
+    const entry = join(dir, "src/server.ts"),
+      generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml");
     await mkdir(generated);
     await writeFile(manifest, "kind: Schema\n");
     await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
     await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-sqlite"));
-    await writeFile(entry, 'import { Database } from "bun:sqlite";\nimport { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(shell + store + new Database()) });\n');
+    await writeFile(
+      entry,
+      'import { Database } from "bun:sqlite";\nimport { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(shell + store + new Database()) });\n',
+    );
     await bundleApp(entry, join(dir, "dist"));
     expect(existsSync(join(dir, "dist/worker"))).toBe(false);
     expect(await readFile(join(dir, "dist/client/admin/index.html"), "utf8")).toBe("undefined");
@@ -182,35 +266,62 @@ test("mantle bundle for a bun-* target builds only Admin: Bun runs the server as
     await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-postgres"));
     // a Bun server without the Admin server builds nothing
     await rm(join(dir, "dist"), { recursive: true });
-    await writeFile(entry, 'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n');
+    await writeFile(
+      entry,
+      'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n',
+    );
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     let warned = "";
-    try { await bundleApp(entry, join(dir, "dist")); warned = warn.mock.calls.flat().join("\n"); } finally { warn.mockRestore(); }
+    try {
+      await bundleApp(entry, join(dir, "dist"));
+      warned = warn.mock.calls.flat().join("\n");
+    } finally {
+      warn.mockRestore();
+    }
     expect(warned).toContain("no Admin built");
     expect(existsSync(join(dir, "dist"))).toBe(false);
     expect(await builds()).toHaveLength(1);
     // a subpath of the Admin server counts as importing it
-    await writeFile(entry, 'import { x } from "@aotter/mantle-admin/server/extra";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(x + store)) });\n');
+    await writeFile(
+      entry,
+      'import { x } from "@aotter/mantle-admin/server/extra";\nimport { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(x + store)) });\n',
+    );
     await bundleApp(entry, join(dir, "dist"));
     expect(await builds()).toHaveLength(2);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("mantle bundle keeps Admin's UI and hooks, which the generated Admin client imports, out of the Worker's startup graph", async () => {
   const { dir, entry } = await app();
   try {
     const pkg = join(dir, "node_modules/@aotter/mantle-admin");
-    const manifestFile = join(pkg, "package.json"), manifest = JSON.parse(await readFile(manifestFile, "utf8"));
+    const manifestFile = join(pkg, "package.json"),
+      manifest = JSON.parse(await readFile(manifestFile, "utf8"));
     manifest.exports["./hooks"] = "./dist/admin-app/hooks.js";
     await writeFile(manifestFile, JSON.stringify(manifest));
     await mkdir(join(pkg, "dist/admin-app"), { recursive: true });
-    await writeFile(join(pkg, "dist/admin-app/hooks.js"), "export const createAdminHooks = () => ({ useView: () => 1 });\n");
+    await writeFile(
+      join(pkg, "dist/admin-app/hooks.js"),
+      "export const createAdminHooks = () => ({ useView: () => 1 });\n",
+    );
     await mkdir(join(dir, "node_modules/react"), { recursive: true });
-    await writeFile(join(dir, "node_modules/react/package.json"), JSON.stringify({ name: "react", version: "19.0.0", main: "index.js" }));
+    await writeFile(
+      join(dir, "node_modules/react/package.json"),
+      JSON.stringify({ name: "react", version: "19.0.0", main: "index.js" }),
+    );
     await writeFile(join(dir, "node_modules/react/index.js"), "module.exports = { createElement: () => 1 };\n");
     // the generated client calls createAdminHooks at the top level, so it cannot be dropped from the graph
-    await writeFile(join(dir, "admin-client.ts"), 'import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const { useView } = createAdminHooks();\n');
-    const worker = (imports: string) => writeFile(entry, `import { shell } from "@aotter/mantle-admin/server";\n${imports}\nexport default { fetch: () => new Response(shell) };\n`);
+    await writeFile(
+      join(dir, "admin-client.ts"),
+      'import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const { useView } = createAdminHooks();\n',
+    );
+    const worker = (imports: string) =>
+      writeFile(
+        entry,
+        `import { shell } from "@aotter/mantle-admin/server";\n${imports}\nexport default { fetch: () => new Response(shell) };\n`,
+      );
     const dist = join(dir, "dist");
 
     await worker('import { createAdminHooks } from "@aotter/mantle-admin/hooks";\nexport const x = createAdminHooks;');
@@ -223,30 +334,46 @@ test("mantle bundle keeps Admin's UI and hooks, which the generated Admin client
     // only the startup graph counts: a request-time import is its own module
     await worker('export const x = () => import("../admin-client.js");');
     await bundleApp(entry, dist);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("stale generated output under wrangler dev: one line and no Worker output instead of a failed build", async () => {
   const { dir, entry } = await app();
   try {
-    const generated = join(dir, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist");
+    const generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml"),
+      dist = join(dir, "dist");
     await mkdir(generated);
     await writeFile(manifest, "kind: Schema\n");
     await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
     await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
-    await writeFile(entry, 'import { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(shell + store) };\n');
+    await writeFile(
+      entry,
+      'import { shell } from "@aotter/mantle-admin/server";\nimport { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(shell + store) };\n',
+    );
     await bundleApp(entry, dist, undefined, { watch: true });
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
     await writeFile(manifest, "kind: View\n");
     // without a watcher (deploy, types, a build by hand) the build fails as before and writes nothing
     await expect(bundleApp(entry, dist)).rejects.toBeInstanceOf(StaleGeneratedError);
-    await expect(bundleApp(entry, dist)).rejects.toThrow(/is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\) and rebuild\./);
+    await expect(bundleApp(entry, dist)).rejects.toThrow(
+      /is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\) and rebuild\./,
+    );
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
     const error = spyOn(console, "error").mockImplementation(() => {});
     let printed: unknown[][] = [];
-    try { await bundleApp(entry, dist, undefined, { watch: true }); printed = error.mock.calls; } finally { error.mockRestore(); }
+    try {
+      await bundleApp(entry, dist, undefined, { watch: true });
+      printed = error.mock.calls;
+    } finally {
+      error.mockRestore();
+    }
     expect(printed).toHaveLength(1);
-    expect(String(printed[0]![0])).toMatch(/is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\)\. \S+ is removed, so Wrangler reports its entry missing; a running wrangler dev holds requests and rebuilds when \S*generated changes\.$/);
+    expect(String(printed[0]![0])).toMatch(
+      /is stale \(\S*app\.yaml changed\)\. Run your generate script \(mantle generate \.\.\.\)\. \S+ is removed, so Wrangler reports its entry missing; a running wrangler dev holds requests and rebuilds when \S*generated changes\.$/,
+    );
     // refused: nothing old or stale is left for Wrangler to load; Admin's assets are untouched
     expect(existsSync(join(dist, "worker"))).toBe(false);
     expect(existsSync(join(dist, "client/admin/index.html"))).toBe(true);
@@ -255,49 +382,211 @@ test("stale generated output under wrangler dev: one line and no Worker output i
     await bundleApp(entry, dist, undefined, { watch: true });
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
     // any other failure still fails under a watcher
-    await writeFile(entry, 'import { missing } from "../generated/missing.js";\nexport default { fetch: () => new Response(missing) };\n');
+    await writeFile(
+      entry,
+      'import { missing } from "../generated/missing.js";\nexport default { fetch: () => new Response(missing) };\n',
+    );
     await expect(bundleApp(entry, dist, undefined, { watch: true })).rejects.toThrow();
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("stale generated output reached through a package under wrangler dev: one line and no Worker output", async () => {
   const { dir, entry } = await app();
   try {
     // a workspace package that ships the app's generated output; the app imports it by name
-    const pkg = join(dir, "node_modules/app-generated"), generated = join(pkg, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist");
+    const pkg = join(dir, "node_modules/app-generated"),
+      generated = join(pkg, "generated"),
+      manifest = join(dir, "app.yaml"),
+      dist = join(dir, "dist");
     await mkdir(generated, { recursive: true });
-    await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "app-generated", version: "1.0.0", type: "module", exports: { ".": "./generated/generated.js" } }));
+    await writeFile(
+      join(pkg, "package.json"),
+      JSON.stringify({
+        name: "app-generated",
+        version: "1.0.0",
+        type: "module",
+        exports: { ".": "./generated/generated.js" },
+      }),
+    );
     await writeFile(manifest, "kind: Schema\n");
     await writeFile(join(generated, "generated.js"), "export const store = 1;\n");
     await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
-    await writeFile(entry, 'import { store } from "app-generated";\nexport default { fetch: () => new Response(String(store)) };\n');
+    await writeFile(
+      entry,
+      'import { store } from "app-generated";\nexport default { fetch: () => new Response(String(store)) };\n',
+    );
     await bundleApp(entry, dist, undefined, { watch: true });
     expect(existsSync(join(dist, "worker/worker.js"))).toBe(true);
     await writeFile(manifest, "kind: View\n");
     await expect(bundleApp(entry, dist)).rejects.toBeInstanceOf(StaleGeneratedError);
     const error = spyOn(console, "error").mockImplementation(() => {});
     let printed: unknown[][] = [];
-    try { await bundleApp(entry, dist, undefined, { watch: true }); printed = error.mock.calls; } finally { error.mockRestore(); }
+    try {
+      await bundleApp(entry, dist, undefined, { watch: true });
+      printed = error.mock.calls;
+    } finally {
+      error.mockRestore();
+    }
     expect(printed).toHaveLength(1);
-    expect(String(printed[0]![0])).toMatch(/is stale \(\S*app\.yaml changed\)\..* is removed, so Wrangler reports its entry missing/);
+    expect(String(printed[0]![0])).toMatch(
+      /is stale \(\S*app\.yaml changed\)\..* is removed, so Wrangler reports its entry missing/,
+    );
     // the full build had already written the stale Worker; the refusal removes it
     expect(existsSync(join(dist, "worker"))).toBe(false);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);
 
 test("under wrangler dev a stale refusal still rejects assets inside the Worker directory before removing anything", async () => {
   const { dir, entry } = await app();
   try {
-    const generated = join(dir, "generated"), manifest = join(dir, "app.yaml"), dist = join(dir, "dist"), assets = join(dist, "worker/client");
+    const generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml"),
+      dist = join(dir, "dist"),
+      assets = join(dist, "worker/client");
     await mkdir(generated);
     await writeFile(manifest, "kind: Schema\n");
     await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
     await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "cloudflare-d1"));
-    await writeFile(entry, 'import { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(String(store)) };\n');
+    await writeFile(
+      entry,
+      'import { store } from "../generated/generated.js";\nexport default { fetch: () => new Response(String(store)) };\n',
+    );
     await writeFile(manifest, "kind: View\n");
     await mkdir(assets, { recursive: true });
     await writeFile(join(assets, "keep.txt"), "keep\n");
-    await expect(bundleApp(entry, dist, assets, { watch: true })).rejects.toThrow(/must not overlap the Worker directory/);
+    await expect(bundleApp(entry, dist, assets, { watch: true })).rejects.toThrow(
+      /must not overlap the Worker directory/,
+    );
     expect(existsSync(join(assets, "keep.txt"))).toBe(true);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("mantle bundle: public/ is copied into the assets directory; files it copied last time are removed, others kept", async () => {
+  const { dir, entry } = await app();
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    const dist = join(dir, "dist"),
+      client = join(dist, "client");
+    await mkdir(join(dir, "public/assets"), { recursive: true });
+    await writeFile(join(dir, "public/assets/logo.svg"), "<svg/>");
+    await writeFile(join(dir, "public/robots.txt"), "User-agent: *\n");
+    await mkdir(client, { recursive: true });
+    await writeFile(join(client, "frontend.js"), "another build step's file");
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "assets/logo.svg"), "utf8")).toBe("<svg/>");
+    expect(await readFile(join(client, "robots.txt"), "utf8")).toBe("User-agent: *\n");
+    expect(existsSync(join(client, "admin/index.html"))).toBe(true);
+    // the record lives outside the uploaded assets
+    expect(existsSync(join(client, ".mantle-public"))).toBe(false);
+    await rm(join(dir, "public/robots.txt"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "robots.txt"))).toBe(false);
+    expect(existsSync(join(client, "assets/logo.svg"))).toBe(true);
+    expect(await readFile(join(client, "frontend.js"), "utf8")).toBe("another build step's file");
+    // a public _headers without the Admin rule: the rule is appended to the copy, once per build, never to public/
+    const rule =
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n";
+    await writeFile(join(dir, "public/_headers"), "/assets/*\n  X-Content-Type-Options: nosniff");
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await bundleApp(entry, dist);
+      expect(log.mock.calls.flat().join("\n")).toContain("Appended the /admin/assets/* rule");
+    } finally {
+      log.mockRestore();
+    }
+    const appended = `/assets/*\n  X-Content-Type-Options: nosniff\n\n${rule}`;
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    expect(await readFile(join(dir, "public/_headers"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff");
+    // a symlinked public _headers is replaced in the copy, not written through
+    await rename(join(dir, "public/_headers"), join(dir, "headers.txt"));
+    await symlink(join(dir, "headers.txt"), join(dir, "public/_headers"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(appended);
+    expect(await readFile(join(dir, "headers.txt"), "utf8")).toBe("/assets/*\n  X-Content-Type-Options: nosniff");
+    await rm(join(dir, "public/_headers"));
+    // one with its own /admin/assets/* rule is the app's choice: copied as it is
+    const own = "/admin/assets/*\n  Cache-Control: no-cache\n";
+    await writeFile(join(dir, "public/_headers"), own);
+    await bundleApp(entry, dist);
+    expect(await readFile(join(client, "_headers"), "utf8")).toBe(own);
+    // a symlink copied last time is removed like a file
+    await symlink(join(dir, "public/assets/logo.svg"), join(dir, "public/assets/alias.svg"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "assets/alias.svg"))).toBe(true);
+    await rm(join(dir, "public/assets/alias.svg"));
+    await bundleApp(entry, dist);
+    expect(existsSync(join(client, "assets/alias.svg"))).toBe(false);
+    // a changed assets directory keeps its own files that share a name with last time's copies
+    const site = join(dist, "site");
+    await mkdir(site, { recursive: true });
+    await writeFile(join(site, "_headers"), "the site's own");
+    await rm(join(dir, "public/_headers"));
+    await bundleApp(entry, dist, site);
+    expect(await readFile(join(site, "_headers"), "utf8")).toBe("the site's own");
+    // --assets public: public/ already is the assets directory (Admin writes public/admin); nothing to copy, twice over
+    await bundleApp(entry, dist, join(dir, "public"));
+    await bundleApp(entry, dist, join(dir, "public"));
+    expect(await readFile(join(dir, "public/assets/logo.svg"), "utf8")).toBe("<svg/>");
+    expect(existsSync(join(dir, "public/admin/index.html"))).toBe(true);
+    await rm(join(dir, "public/admin"), { recursive: true });
+    await mkdir(join(dir, "public/admin"));
+    await expect(bundleApp(entry, dist)).rejects.toThrow("public/admin is reserved");
+  } finally {
+    process.chdir(cwd);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("mantle bundle builds client entries beside Admin, and for a bun-* target too, without touching Admin's output", async () => {
+  const { dir, entry } = await app();
+  const cwd = process.cwd();
+  try {
+    process.chdir(dir);
+    await mkdir(join(dir, "src/client"));
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log('spa');\n");
+    const dist = join(dir, "dist");
+    await bundleApp(entry, dist);
+    expect(readdirSync(join(dist, "client")).sort()).toEqual(["_headers", "admin", "assets"]);
+    // one file of the build's own rules: Admin's, then the hashed browser entries'
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n\n" +
+        "/assets/client/h/*\n  ! Cache-Control\n  Cache-Control: public, max-age=86400, immutable\n",
+    );
+    expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+    // without the entry, the build's own file is rewritten with Admin's rule alone
+    await rm(join(dir, "src/client/spa.ts"));
+    await bundleApp(entry, dist);
+    expect(await readFile(join(dist, "client/_headers"), "utf8")).toBe(
+      "/admin/assets/*\n  X-Content-Type-Options: nosniff\n  Cache-Control: public, max-age=86400, immutable\n",
+    );
+    await writeFile(join(dir, "src/client/spa.ts"), "console.log('spa');\n");
+    expect(existsSync(join(dist, "client/admin/index.html"))).toBe(true);
+    const generated = join(dir, "generated"),
+      manifest = join(dir, "app.yaml");
+    await mkdir(generated);
+    await writeFile(manifest, "kind: Schema\n");
+    await writeFile(join(generated, "generated.ts"), "export const store = 1;\n");
+    await writeFile(join(generated, INPUTS_FILE), inputsFingerprint(generated, [manifest], "bun-sqlite"));
+    await writeFile(
+      join(dir, "src/server.ts"),
+      'import { store } from "../generated/generated.js";\nBun.serve({ fetch: () => new Response(String(store)) });\n',
+    );
+    await rm(dist, { recursive: true });
+    await bundleApp(join(dir, "src/server.ts"), dist);
+    expect(existsSync(join(dist, "worker"))).toBe(false);
+    expect(existsSync(join(dist, "client/assets/client/spa.js"))).toBe(true);
+    expect(existsSync(join(dist, "client/assets/client/h"))).toBe(false);
+  } finally {
+    process.chdir(cwd);
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 30_000);

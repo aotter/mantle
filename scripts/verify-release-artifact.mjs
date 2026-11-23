@@ -20,7 +20,7 @@ if (process.argv[2] === "--self-test") {
   process.exit(0);
 }
 
-const [expected, actual] = process.argv.slice(2).map((path) => path && resolve(path));
+const [expected, actual] = process.argv.slice(2).map(path => path && resolve(path));
 if (!expected || !actual) {
   throw new Error("usage: verify-release-artifact.mjs <expected.tgz> <actual.tgz>");
 }
@@ -43,10 +43,8 @@ function verify(expectedTarball, actualTarball) {
 }
 
 function extract(tarball, destination) {
-  const entries = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" })
-    .split("\n")
-    .filter(Boolean);
-  if (entries.some((path) => path.startsWith("/") || path.split("/").includes(".."))) {
+  const entries = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" }).split("\n").filter(Boolean);
+  if (entries.some(path => path.startsWith("/") || path.split("/").includes(".."))) {
     throw new Error(`${tarball} contains an unsafe path`);
   }
   execFileSync("tar", ["-xzf", tarball, "-C", destination]);
@@ -78,7 +76,7 @@ function compareTrees(expectedRoot, actualRoot) {
 
 function list(root, directory = root) {
   return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
+    .flatMap(entry => {
       const path = join(directory, entry.name);
       const name = relative(root, path);
       return entry.isDirectory() ? [name, ...list(root, path)] : [name];
@@ -100,7 +98,11 @@ function json(path) {
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalize(value[key])]));
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map(key => [key, canonicalize(value[key])]),
+  );
 }
 
 function selfTest() {
@@ -113,7 +115,12 @@ function selfTest() {
     const changedJson = fixture(temp, "changed-json", '{"name":"fixture","dependencies":{"a":"1","b":"3"}}');
     assert.throws(() => verify(expected, changedJson), /package.json differs/);
 
-    const changedFile = fixture(temp, "changed-file", '{"name":"fixture","dependencies":{"a":"1","b":"2"}}', "changed\n");
+    const changedFile = fixture(
+      temp,
+      "changed-file",
+      '{"name":"fixture","dependencies":{"a":"1","b":"2"}}',
+      "changed\n",
+    );
     assert.throws(() => verify(expected, changedFile), /content differs/);
   } finally {
     rmSync(temp, { recursive: true, force: true });

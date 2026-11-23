@@ -14,6 +14,7 @@ import { t, type I18nKey } from "../../app/i18n";
 import { propertyLabel } from "../../lib/field-label";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { JsonSchema, AdminOperation } from "../../lib/types";
+import { IdValue } from "../../ui/id-value";
 import { SchemaFields } from "../content/entry-edit-view";
 import { renderDataValue } from "../../lib/render-data-value";
 import { invalidateAfterWrite } from "../../lib/after-write";
@@ -49,18 +50,41 @@ const LABEL_KEYS: Record<keyof InteractionLabels, I18nKey> = {
 };
 
 export function interactionLabels(language: AdminLanguage): InteractionLabels {
-  return Object.fromEntries(Object.entries(LABEL_KEYS).map(([key, i18n]) => [key, t(language, i18n)])) as unknown as InteractionLabels;
+  return Object.fromEntries(
+    Object.entries(LABEL_KEYS).map(([key, i18n]) => [key, t(language, i18n)]),
+  ) as unknown as InteractionLabels;
 }
 
-export function OperationDiagnostic({ diagnostic, language, summary = true }: { diagnostic: InteractionDiagnostic; language: AdminLanguage; summary?: boolean }): React.ReactNode {
+export function OperationDiagnostic({
+  diagnostic,
+  language,
+  summary = true,
+}: {
+  diagnostic: InteractionDiagnostic;
+  language: AdminLanguage;
+  summary?: boolean;
+}): React.ReactNode {
   // a Schema lock (#1822): the record is frozen by a rule, and its message says why; re-reading does not help
-  if (diagnostic.code === "CONFLICT" && diagnostic.kind === "lock") return t(language, "ops.lockConflict", { message: diagnostic.message });
-  const key = diagnostic.code !== "CONFLICT" ? undefined
-    : diagnostic.kind === "row" ? "ops.conditionConflict"
-    : diagnostic.kind === "unique" ? "ops.uniqueConflict"
-    : undefined;
+  if (diagnostic.code === "CONFLICT" && diagnostic.kind === "lock")
+    return t(language, "ops.lockConflict", { message: diagnostic.message });
+  const key =
+    diagnostic.code !== "CONFLICT"
+      ? undefined
+      : diagnostic.kind === "row"
+        ? "ops.conditionConflict"
+        : diagnostic.kind === "unique"
+          ? "ops.uniqueConflict"
+          : undefined;
   if (!key) return diagnostic.message;
-  return <>{summary ? <p>{t(language, key)}</p> : null}<details><summary>{t(language, "ops.details")}</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(diagnostic, null, 2)}</pre></details></>;
+  return (
+    <>
+      {summary ? <p>{t(language, key)}</p> : null}
+      <details>
+        <summary>{t(language, "ops.details")}</summary>
+        <pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(diagnostic, null, 2)}</pre>
+      </details>
+    </>
+  );
 }
 
 export { idempotencyFields, operationFormSchema } from "./interaction-schema";
@@ -72,10 +96,26 @@ import { operationFormSchema, type RefScope } from "./interaction-schema";
  * conflicts and uncertain writes behave the same everywhere. The caller
  * decides how the controller reads and invokes.
  */
-export function InteractionDialog({ create, operation, hidden, automatic, refScopes, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult }: {
+export function InteractionDialog({
+  create,
+  operation,
+  boundIdInputs,
+  hidden,
+  automatic,
+  refScopes,
+  language,
+  canonical,
+  sourceSchema,
+  previewFields,
+  onClose,
+  onCloseAutoFocus,
+  onDone,
+  renderResult,
+}: {
   /** Called once when the dialog opens; a binding that cannot be met is shown, not thrown. */
   create: () => InteractionController;
   operation: AdminOperation;
+  boundIdInputs?: readonly string[];
   /** Inputs the form does not render: row bindings, the version, idempotency keys. */
   hidden: readonly string[];
   /** Idempotency keys, renewed when a payload is refused or conflicts. */
@@ -87,10 +127,9 @@ export function InteractionDialog({ create, operation, hidden, automatic, refSco
   sourceSchema?: JsonSchema;
   previewFields?: readonly string[];
   onClose: () => void;
+  onCloseAutoFocus: (event: Event) => void;
   /** Called once when a write landed or may have landed. */
   onDone: () => void;
-  /** Called once when the write is known to have landed. */
-  onSucceeded?: () => void;
   renderResult?: (result: unknown) => React.ReactNode;
 }): React.ReactElement {
   const [created] = React.useState((): { controller: InteractionController } | { error: unknown } => {
@@ -114,8 +153,14 @@ export function InteractionDialog({ create, operation, hidden, automatic, refSco
   const title = resolveLocalizedText(operation.title, language, canonical) || operation.name;
   const description = resolveLocalizedText(operation.description, language, canonical) || undefined;
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) closeRef.current(); }}>
+    <Dialog
+      open
+      onOpenChange={next => {
+        if (!next) closeRef.current();
+      }}
+    >
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         className="max-h-[90vh] overflow-y-auto sm:max-w-lg"
         closeLabel={t(language, "interaction.close")}
         {...(description ? {} : { "aria-describedby": undefined })}
@@ -126,6 +171,7 @@ export function InteractionDialog({ create, operation, hidden, automatic, refSco
           <InteractionDialogPanel
             controller={created.controller}
             operation={operation}
+            boundIdInputs={boundIdInputs}
             hidden={hidden}
             automatic={automatic}
             refScopes={refScopes}
@@ -137,21 +183,40 @@ export function InteractionDialog({ create, operation, hidden, automatic, refSco
             previewFields={previewFields}
             onClose={onClose}
             onDone={refreshed}
-            onSucceeded={onSucceeded}
             renderResult={renderResult}
             closeRef={closeRef}
           />
         ) : (
-          <p role="alert" className="text-destructive text-sm">{String(created.error)}</p>
+          <p role="alert" className="text-destructive text-sm">
+            {String(created.error)}
+          </p>
         )}
       </DialogContent>
     </Dialog>
   );
 }
 
-function InteractionDialogPanel({ controller, operation, hidden, automatic, refScopes, title, description, language, canonical, sourceSchema, previewFields, onClose, onDone, onSucceeded, renderResult, closeRef }: {
+function InteractionDialogPanel({
+  controller,
+  operation,
+  boundIdInputs,
+  hidden,
+  automatic,
+  refScopes,
+  title,
+  description,
+  language,
+  canonical,
+  sourceSchema,
+  previewFields,
+  onClose,
+  onDone,
+  renderResult,
+  closeRef,
+}: {
   controller: InteractionController;
   operation: AdminOperation;
+  boundIdInputs?: readonly string[];
   hidden: readonly string[];
   automatic: readonly string[];
   refScopes: Readonly<Record<string, RefScope>> | undefined;
@@ -164,7 +229,6 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, refS
   onClose: () => void;
   /** Refreshes the page; resolves once the shown reads have refetched. */
   onDone: () => Promise<void>;
-  onSucceeded?: () => void;
   renderResult?: (result: unknown) => React.ReactNode;
   closeRef: React.MutableRefObject<() => void>;
 }): React.ReactElement {
@@ -175,13 +239,14 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, refS
   // reopen reviews the row as written, not the list's earlier copy.
   const rereading = React.useRef<Promise<void> | null>(null);
   const closing = React.useRef(false);
-  React.useEffect(() => { void controller.open(); }, [controller]);
+  React.useEffect(() => {
+    void controller.open();
+  }, [controller]);
   React.useEffect(() => {
     if (state.phase === "submitting") submitted.current = true;
     // The page is refreshed once, when the write is known to have landed.
     if (state.phase === "succeeded" && !refreshed.current) {
       refreshed.current = true;
-      onSucceeded?.();
       rereading.current = onDone();
     }
     // A refused or conflicting payload gets a fresh idempotency key: the
@@ -204,34 +269,63 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, refS
     if (closing.current) return;
     closing.current = true;
     // a slow read never traps the dialog: it closes after a few seconds regardless
-    void Promise.race([reading.catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 5_000))]).then(onClose);
+    void Promise.race([reading.catch(() => undefined), new Promise(resolve => setTimeout(resolve, 5_000))]).then(
+      onClose,
+    );
   };
   closeRef.current = close;
-  const schema = operationFormSchema(operation.input, hidden);
+  const schema = operationFormSchema(
+    operation.input,
+    hidden,
+    hidden.some(name => !automatic.includes(name)),
+  );
   const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
   const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
-  const fieldValue = (field: string, value: unknown) => renderDataValue(fieldSchema(field), value, language, canonical);
+  const fieldValue = (field: string, value: unknown) =>
+    typeof value === "string" && boundIdInputs?.includes(field) ? (
+      <IdValue value={value} language={language} />
+    ) : (
+      renderDataValue(fieldSchema(field), value, language, canonical)
+    );
   return (
     <OperationPanel
       controller={controller}
       title={title}
       description={description}
-      labels={{ ...interactionLabels(language), conflict: t(language, "ops.conditionConflict"), conflictReopen: t(language, "ops.conditionConflict") }}
-      renderDiagnostic={diagnostic => <OperationDiagnostic diagnostic={diagnostic} language={language} summary={state.phase !== "conflict" || diagnostic.kind !== "row"} />}
+      labels={{
+        ...interactionLabels(language),
+        conflict: t(language, "ops.conditionConflict"),
+        conflictReopen: t(language, "ops.conditionConflict"),
+      }}
+      renderDiagnostic={diagnostic => (
+        <OperationDiagnostic
+          diagnostic={diagnostic}
+          language={language}
+          summary={state.phase !== "conflict" || diagnostic.kind !== "row"}
+        />
+      )}
       fieldLabel={fieldLabel}
       fieldValue={fieldValue}
       onClose={close}
       onCancel={close}
       {...(renderResult ? { renderResult } : {})}
     >
-      {previewFields?.length && sourceSchema && state.reviewed ? <EntityPreview entry={state.reviewed} fields={previewFields} labels={interactionLabels(language)} fieldLabel={(field) => propertyLabel(field, sourceSchema.properties?.[field], language, canonical)} fieldValue={(field, value) => renderDataValue(sourceSchema.properties?.[field], value, language, canonical)} /> : null}
+      {previewFields?.length && sourceSchema && state.reviewed ? (
+        <EntityPreview
+          entry={state.reviewed}
+          fields={previewFields}
+          labels={interactionLabels(language)}
+          fieldLabel={field => propertyLabel(field, sourceSchema.properties?.[field], language, canonical)}
+          fieldValue={(field, value) => renderDataValue(sourceSchema.properties?.[field], value, language, canonical)}
+        />
+      ) : null}
       {Object.keys(schema.properties ?? {}).length > 0 ? (
         <SchemaFields
           schema={schema}
           uiSchema={operation.uiSchema}
           value={state.draft}
           path={[]}
-          onChange={(next) => applyFieldEdits(controller, state.draft, next)}
+          onChange={next => applyFieldEdits(controller, state.draft, next)}
           language={language}
           canonical={canonical}
           collectionName={operation.name}
@@ -242,4 +336,3 @@ function InteractionDialogPanel({ controller, operation, hidden, automatic, refS
     </OperationPanel>
   );
 }
-

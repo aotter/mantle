@@ -12,8 +12,13 @@
 - MCP retains public `POST /mcp`, admin `POST /mcp/admin`,
   snake-cased View names on each declared surface, and snake-cased Procedure
   names per MCP Trigger. Its SDK loads only through a request-time dynamic import.
-- HTTP/MCP Triggers declare exposure only. `mantle generate` refuses schedule
-  and lifecycle Triggers; host scheduling is a separate capability.
+- HTTP/MCP Triggers declare exposure only; they are the only Trigger sources.
+  Host scheduling is a separate capability.
+- On PostgreSQL and bun:sqlite, generated `store(db, caller).transaction(fn, { isolation? })` calls
+  `fn(tx, db)` with the transaction's native handle as `db`, typed as the handle passed to `store` (`Postgres` from
+  `@aotter/mantle/contracts`, or the bun:sqlite `Handle`). It is the supported way to run application SQL in the same
+  transaction as generated Procedures; no driver module is imported for it
+  ([your own SQL in a Store transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction)).
 - Native Admin retains selected 0.2 paths and the console contracts; see
   [Native Admin](../guides/native-admin.md) for app-mounted
   `adminBindings()` and `entries(bindings.schemas, bindings.adapter)`.
@@ -29,11 +34,21 @@ Procedure surface selection follows the [HTTP/MCP pairing default and deliberate
 
 The generated `validation/views/<name>.ts` and
 `validation/procedures/<name>.ts` export `validate(unknown)`. View validators
-also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`.
+also export `query(URLSearchParams)` returning `{ input, limit?, cursor? }`. Each declared Procedure's validator, with or
+without a surface, also exports `input(raw: unknown)`: it validates `raw`, applies the surfaces' input conversion
+(`convertInput`, below) to a shallow copy and returns it, typed as what the Procedure's bare function
+(`procedures/<name>.ts`) or, for a ref Procedure, its Store procedure takes. A JSON-bound field is then `JsonText` (from
+`@aotter/mantle/contracts`), a branded string the bare function accepts beside the structured value; its `Input` type is
+unchanged, and that function's `Converted` type is the converted form.
 REST and MCP use the same generated checks, with no runtime schema interpreter.
 Supported checks are types/unions and nullable, required/properties/additionalProperties,
 arrays/items and length bounds, enum, `const`, local `$defs`/`$ref`, string length/pattern,
-numeric bounds/`multipleOf`, and the formats `date`, `date-time`, `email` and `uri`. The deliberately permissive
+numeric bounds/`multipleOf`, and the formats `date`, `date-time`, `email` and `uri`. `minLength` and `maxLength`
+count code points, so 200 four-byte characters pass `maxLength: 256`; `x-mantle-maxBytes: <positive integer>` on a
+string bounds its UTF-8 length instead, or as well (a `pattern`'s backtracking bound also accepts it). Every string
+input, at any depth, must be well-formed text without NUL (U+0000): a NUL or an unpaired surrogate fails with
+`INPUT_VALIDATION_FAILED` at its path on every dialect, since PostgreSQL `text` cannot store NUL. An `enum` or `const`
+compares as written. Stored rows and outputs are not checked. The deliberately permissive
 email check requires exactly one `@`, non-empty local and domain parts, and no
 whitespace; it does not require a dot, verify deliverability, or implement full
 RFC mailbox syntax. `uri` means an absolute `http:` or `https:` URL, stricter than
@@ -54,8 +69,17 @@ error whose message names the rule:
   'undo' is true.", at the missing field. `if` must list its field in `required`:
   otherwise an absent field would satisfy it.
 
-Any other `anyOf`/`if`/`then`/`else`, `oneOf`, `uniqueItems`, object property-count
-bounds and other keywords and formats are refused at generation. The rules only
+Input objects also support `minProperties` and `maxProperties` as non-negative
+safe integers. `propertyNames` accepts a `pattern`, a `not: { enum: […] }` of
+strings, or both, with optional `maxLength` to bound the keys and the regex
+work. For example, `propertyNames: { pattern: "^[a-z]+$", maxLength: 32, not: { enum: [private] } }`
+checks each key, including keys handled by `additionalProperties`. Name errors
+identify the offending key and count errors identify the object.
+For a View's HTTP query, these rules check the input assembled from declared
+query fields. Paging parameters and other URL parameters are outside that input.
+
+Other shapes of `anyOf`/`if`/`then`/`else`, general `not`, `oneOf` and
+`uniqueItems` are refused at generation. The rules only
 validate: types, SQL binds and Admin forms keep the declared fields, and Admin
 shows the server's error at its field. `describe` keeps them as written; MCP and
 WebMCP tools advertise the schema without them and append each rule's sentence to
@@ -81,11 +105,14 @@ driver-native rows. Internal paging creates no public route/tool.
 Authored SQL `LIMIT` bounds the complete ordered row set, including across cursor pages.
 Use `limit` in the paging options to choose each page size (up to 500); it does not expand the View's declared result set.
 An MCP View page keeps the `limit` of 1 to 500 but holds only as many of those rows
-as fit 60,000 characters of JSON, so a result stays under host truncation limits. It
+as fit 60,000 characters of JSON, so a result, which carries its rows twice, stays
+under the size above which claude.ai and Claude Desktop, with code execution
+active, do not pass a result to its App (about 150,000 characters; see
+[Result size](../guides/mcp-apps.md#result-size)). It
 is cut before the first row that overflows and its next cursor resumes at that row.
 A single row over the budget is returned alone with the cursor, and a View without an
-order stays one whole page; a page still over the budget carries a notice that hosts
-may truncate it.
+order stays one whole page; a page still over the budget carries a notice that a host
+may truncate it or not render its App.
 A pageable Schema View has a complete NOT NULL scalar tuple ending in the
 compiler's `id` tiebreak. Its ordered columns must match an index after fixed
 equality prefixes; a user-field `IN` scope or restrict is not one (see
@@ -130,7 +157,10 @@ use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
 Known paths with another method return 405 with an `Allow` header. All responses use
 `cache-control: private, no-store`. JSON bodies and decoded path parameters
 are validated together, with path parameters taking precedence. Bodies larger
-than 1,000,000 bytes are refused; `content-length` is checked before reading.
+than 1,000,000 bytes are refused; `content-length` is checked before reading. `body(request, limit?, refuse?)` from `@aotter/mantle/rest` is
+that reader: it answers the JSON object body (empty is `{}`) and refuses a body over `limit`, text that is not JSON and
+JSON that is not an object by calling `refuse(message)`; without `refuse`, or when it returns, the refusal is
+`INPUT_VALIDATION_FAILED` at `rest`. A `limit` that is not a positive safe integer throws a `TypeError`.
 A resolver's `ContractError` keeps its status (an expired token is 401 with its challenge); any other resolver exception returns a redacted 500. Cookie-origin refusals retain
 `path: "request:origin"`; REST and MCP share the kernel check.
 
@@ -143,7 +173,7 @@ filter. The app retains ownership of authentication and its other routes.
 ## Optional web output
 
 `web.ts` exports `web({ db, caller, origin, title, description, locales?, pages,
-cacheControl? })`. `db` is the application-owned native handle, including callable
+sitemap?, cacheControl? })`. `db` is the application-owned native handle, including callable
 PostgreSQL handles. `caller` is a verified Caller or the app's
 `(request, env, { readOnly }) => Caller | Promise<Caller>` resolver, evaluated once per request.
 Generated REST/MCP/web callbacks classify reads; forward the third argument to
@@ -155,10 +185,12 @@ The module dispatches public Views only; it never invokes Procedures or needs ha
 import { web } from './generated/web.js';
 const site = web({ db, caller, origin: 'https://example.com', title: 'Blog',
   description: 'Articles', locales: ['en'],
-  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body' } }
+  sitemap: ['/', '/posts'],
+  pages: { '/posts/{slug}': { view: 'post-by-slug', list: 'posts', markdown: 'body', lastmod: 'updated_at' } }
 });
 const response = await site.fetch(request, env); // Response | undefined
 const tags = await site.head(request, env); // HTML string, empty for unknown/missing pages
+const same = await site.head(request, env, ctx, { row }); // the row the app already read: no View query
 ```
 
 Page parameter names must exactly match the View's declared input properties.
@@ -166,20 +198,34 @@ Page and list Views must return the page parameters; list Views must accept empt
 `required`, no root `anyOf`, `enum` or `const`, no `else` rule, and a root `type`, when given, that includes `object`.
 These conditions also apply to each schema a root `$ref` chain reaches, and an unresolved or cyclic chain fails them.
 `web()` throws a `TypeError` for any other list View. Markdown
-must name a textual output column. HTML remains application-owned.
+must name a textual output column: a text field, or text the View composes with `||` or
+`COALESCE` from them (`title || E'\n\n' || coalesce(body, '')`; see [View outputs](view.md)).
+`lastmod` names a text or timestamp column of the
+page's list View (every target returns timestamps as UTC ISO text); the sitemap
+emits it as `<lastmod>` when it is a W3C datetime and omits the element otherwise.
+`sitemap` lists static paths (home, list pages) that the sitemap names before the
+pages' rows, resolved against `origin`; like page templates, each must be absolute
+without a query, fragment or `{name}` parameter, or `web()` throws a `TypeError`. HTML remains application-owned.
 
 `/llms.txt` and `/sitemap.xml` traverse each list's `nextCursor`; `.md` and head
-read the current page View. SQL alone controls visibility, including publication.
+read the current page View. `llms.txt` links `<url>.md` for a page that declares
+`markdown`; a list View need not select that column (it is the page's body), and one that
+does and returns NULL for a row gets the HTML URL for it, since `<url>.md` answers 404 there; the sitemap
+lists the HTML URLs. Head tags name the Markdown alternate only for a row whose column is non-null. SQL alone controls visibility, including publication.
 GET/HEAD responses include content-derived SHA-256 ETags. Anonymous responses use
 `cacheControl` or `public, max-age=60`; authenticated responses use
 `private, no-store`. `If-None-Match` returns 304 only after current content is read.
 Canonical URLs use the configured origin, independently of the request host.
-The current implementation adds hreflang only for `locales[0]`; translation-aware
-indexes and head tags are a follow-up below. Importing another generated entry
-does not import web output.
+A `.md` answer (200, 304 and HEAD alike, anonymous or signed in) names its HTML page with
+`Link: <url>; rel="canonical"`, the URL of the canonical head tag for the same row (a template's literal
+characters outside RFC 3986 percent-encoded); a locale's `.md` names that locale's page. `llms.txt` and
+`sitemap.xml` carry no `Link`.
+Head tags add an hreflang alternate only when exactly one locale is configured; with
+several, the page is one translation and its per-language hreflang alternates are
+the application's. Importing another generated entry does not import web output.
 
 Web indexes scan at most 50,000 rows for one sitemap and 5,000 for `llms.txt`,
-across all configured lists. Skipped `.`/`..` path segments consume the scan
+across all configured lists; `sitemap` paths count towards the sitemap's scan and byte limits. Skipped `.`/`..` path segments consume the scan
 budget too. Output stops before exceeding 50 MiB of UTF-8 sitemap XML (including
 its closing tag) or 1 MiB of `llms.txt`; a sitemap index can be added separately.
 Each request also stops after 100 sitemap queries or 10 `llms.txt` queries,
@@ -188,7 +234,10 @@ output sooner. A sitemap index remains separate future work.
 
 `head` normalizes URLs from the queried row's page parameters, matching sitemap
 URLs; malformed paths, failed validation and unavailable rows return an empty
-string. A NULL Markdown field answers 404. Errors and missing Markdown responses
+string. Given `{ row }` (typed as a row of one of the pages' Views), `head` builds
+the tags from that row and runs no query, caller resolution, `authorize` or gateway
+decision: the application read the row with its own caller, so its visibility is the
+application's responsibility. A NULL Markdown field answers 404. Errors and missing Markdown responses
 use `cache-control: no-store`. A matching HTML page takes precedence over a `.md`
 alternate, including slugs ending in `.md`; a Markdown alternate may read the
 exact HTML candidate first and therefore performs at most two View queries.
@@ -212,8 +261,22 @@ Discovery is caller-independent by default (ADR-0014); listing a tool grants no
 execution authority. Configure `authorize` to filter `tools/list` and the tool
 names supplied to resource HTML loaders: that mode also excludes tools refused
 by declared identity, scope and `check` requirements. Without `authorize`, the
-complete endpoint catalogue is not a permission-filtered catalogue. Operation
+complete endpoint catalogue is not a permission-filtered catalogue, except that
+a service credential (`resolveCredential`) always lists only the tools whose
+`requires` names a scope. Operation
 validation, guards and credential checks still apply to calls.
+
+With `authorize`, `discovery: "all"` keeps the caller-independent list: every
+caller of the endpoint except a service credential gets the same `tools/list` and the same tool names in
+resource HTML, and `authorize` (with `requires`, scopes and `check`) decides at
+call time. Prefer it when a caller's grant can change during a conversation, for
+example a role switched in a directory: a host keeps the tool list it saved, and a
+filtered list would leave it naming tools that are gone or missing ones the caller
+now has. An `authorize` that rejects with `new ContractError("AUTH_DENIED", message)`
+returns that message, so a refusal can name the role that may call the tool; one
+with `status: 429` is answered 429 with its own code, message and `retryAfter`
+([limits and authorize](authorization.md#limits-and-authorize)); a plain `false` or
+any other rejection answers "Target is not authorized."
 
 `toolsPageSize` pages `tools/list`: each page holds at most that many tools and
 carries an opaque `nextCursor` while more remain; pass it back as `cursor`. A
@@ -222,8 +285,11 @@ stale cursor is answered with JSON-RPC error `-32602`, and the client lists
 again from the first page. Without the option, one page lists every tool and
 carries no `nextCursor`.
 
-A hand-built tool's `meta` and a `run` returning `withResultMeta(data, meta)`
-add listed and result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
+A hand-built tool's `meta` and a `run` returning `withResult(data, { content, _meta })`
+or `withResultMeta(data, meta)` add listed `_meta`, result content blocks and
+result `_meta`; see [MCP Apps](../guides/mcp-apps.md#tool-metadata-and-result-_meta).
+A hand-built tool may also set `icons` (`McpIcon[]`) and `annotations.title`;
+generated tools set neither.
 
 The app resolves bearer tokens with `resolveCaller(request, auth, { audience:
 new URL('/mcp', request.url).href })` (both surfaces use `<origin>/mcp`). The app
@@ -231,15 +297,14 @@ must also mount Better Auth's `/.well-known/oauth-protected-resource/mcp`
 metadata route. Auth challenges point to that route. Presented bearer credentials
 need the `mcp` scope; cookie sessions use the same-origin mutation checks.
 
-Generation emits `mcp.ts` only for a non-internal View or MCP Trigger. Omitting
+Generation always emits `mcp.ts`; its `tools` table holds each non-internal View, each MCP Trigger's Procedure and the
+publishing transitions, and is empty without them, so an entry that imports it builds either way. Omitting
 MCP remains a deliberate asymmetric choice; an HTTP-only Procedure still generates
 successfully with the warning described in [Trigger](trigger.md). These
 surfaces typecheck without the optional `@modelcontextprotocol/server` peer;
 install the exact version declared in the installed SDK's `peerDependencies`.
 The peer loads by dynamic import on the first matching `/mcp` request; if
-missing, that request fails at runtime. Publishing alone does not select MCP;
-on a selected
-surface its generated `publish_<schema>`, `unpublish_<schema>` and
+missing, that request fails at runtime. A publishing Schema's generated `publish_<schema>`, `unpublish_<schema>` and
 `archive_<schema>` tools use the same snake-case naming rule, are admin-only
 and take `{ id, expectedVersion }` through the shared generated validation.
 
@@ -266,12 +331,41 @@ as an explicit option.
 ### MCP catalogue and callbacks
 
 `mcp({ db, caller, handlers?, locale?, instructions?, serverInfo?, requiredScopes?,
-resourceMetadata?, allowedOrigins?, onObservation?, onRefusal? })` keeps the SDK behind its first
+resourceMetadata?, allowedOrigins?, onObservation? })` keeps the SDK behind its first
 request. Locale defaults to `en`; localized titles/descriptions fall back to
-English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by initialize.
+English, then their first entry. Tools carry the [tool hints](procedure.md#mcp-tool-hints). `instructions` is returned by
+the connect step (`initialize` or `server/discover`).
+`serverInfo` takes `name`, `title`, `version`, `description`, `websiteUrl` and
+`icons`, returned as given by `initialize` and, on 2026-07-28, in every result's
+`_meta["io.modelcontextprotocol/serverInfo"]`; `name` defaults to `aotter.mantle` and
+`version` to the catalogue version. The connect step advertises
+`tools: { listChanged: false }`, and `resources: { listChanged: false }` when the
+endpoint registers App resources for the request: a stateless server sends no
+list-change notifications.
 The scope floor defaults to `["mcp"]` for every credential except cookie sessions;
 `requiredScopes: []` disables that floor. An anonymous closed surface challenges
-from initialize, and every call in a batch is checked before any call runs.
+from the connect step of either era, and every call in a batch is checked before any call runs.
+
+**Protocol revisions:** both endpoints serve both MCP protocol eras with the official SDK 2.4.0, which
+classifies each request.
+
+- **2026-07-28.** Every request is one JSON-RPC message (no batches) whose `params._meta` carries
+  `io.modelcontextprotocol/protocolVersion` (`2026-07-28`) and
+  `io.modelcontextprotocol/clientCapabilities`, with the `MCP-Protocol-Version`, `Mcp-Method` and, for
+  `tools/call` and `resources/read`, `Mcp-Name` headers stating the same. There is no handshake:
+  `server/discover` describes the server. The official TypeScript client connects in this mode with
+  `versionNegotiation: { mode: { pin: "2026-07-28" } }` (or `"auto"`).
+- **2025 revisions** (2025-11-25 and earlier), served statelessly: `initialize` negotiates the revision,
+  `notifications/initialized` is accepted with 202, and every later request stands alone (no session; the
+  `MCP-Protocol-Version` header names the revision). 2025-03-26 and earlier allow JSON-RPC batches. The official
+  TypeScript client's default mode, and clients that open with `initialize`, connect this way.
+
+In both eras `GET` and `DELETE` are 405 with `Allow: POST`. A request that names a revision neither era serves is
+refused with HTTP 400 (an envelope that claims another revision gets JSON-RPC `-32022`, "Unsupported protocol
+version", whose `data.supported` is `["2026-07-28"]`), as are a batch with a 2026-07-28 message and an `initialize`
+sent with a 2026-07-28 header. Per-era differences: non-object structured content (**Tool results** below), batches
+(each call is authorized before any runs), [MCP Apps support](../guides/mcp-apps.md#mcp-apps-support-per-protocol-era) and
+[cancellation](../guides/mcp-apps.md#progress-and-cancellation).
 `resourceMetadata` overrides the challenge URL for reverse proxies.
 
 Both endpoints answer a request without `Origin`, which is what server-side MCP
@@ -280,7 +374,7 @@ clients send; a bearer credential needs none. A cookie session is ambient author
 `Origin` and `Sec-Fetch-Site` must be present and every present one must agree (`Origin` equal
 to the request's own origin; `Sec-Fetch-Site` `same-origin` or `none`), else `AUTH_DENIED` at
 `request:origin`. On MCP it runs only for a tool call that executes (not a read-only call from an
-App host), not for initialize or `tools/list`; `allowedOrigins` does not lift it. A present `Origin` marks a browser: it must name a loopback host
+App host), not for the connect step or `tools/list`; `allowedOrigins` does not lift it. A present `Origin` marks a browser: it must name a loopback host
 (`localhost`, `127.0.0.1`, `[::1]`, any port) or an `allowedOrigins` entry, else
 403 before authentication on every credential; `Origin: null` is refused. The
 site's own origin is not implied, because a DNS-rebinding page sends an `Origin`
@@ -304,19 +398,87 @@ the route and `dev.host` hosts out of `allowedOrigins` in local development.
 
 `onObservation` receives request refusals and invocation attempt/completion
 metadata, including duration and outcome. Its Caller and scopes are frozen copies.
-`onRefusal` receives credential/origin refusals. Neither callback receives request
-headers, bodies or tokens; delivery failures never change the business response
-and promises are not awaited. The application owns callback delivery.
+A `request-refused` event carries its `status` and `reason`: `credential`, or
+`origin` for a browser Origin refused by the endpoint or, on a tool call, by the
+session Origin rule, or status 400 and reason `protocol-version` for a request that names a
+protocol revision neither era serves, which is not logged as a failure. An
+`invocation` event carries `protocolVersion`, the revision the call was served on (`2026-07-28`, or
+the 2025-era `MCP-Protocol-Version` header, `2025-03-26` when the client sent none), from which an
+operator measures how much traffic still uses the 2025 revisions, and `client`, the `clientInfo`
+`{ name, version }` the request's `_meta` declares (2026-07-28; a stateless 2025-era call carries
+none). Each invocation has one `attempt` and one
+`completion`. A call whose client goes away before the tool settles is observed as
+`code: "REQUEST_CANCELLED"` in the abort event itself, so a Worker records it too; a tool that
+ignores the signal and finishes later does not change it (see
+[Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation)). Other refusals the
+client causes (a batch with a 2026-07-28 message, an invalid `_meta` envelope, headers that contradict
+the body, 405, 415) are neither observed nor logged as failures. The callback
+receives no request headers, bodies or tokens;
+delivery failures never change the business response and promises are not
+awaited. The application owns callback delivery.
+
+**Tool results:** a successful `tools/call` result's `content` is, in order, the
+JSON text of the data (always `content[0]`), the `tool version` line, the page
+notice of an oversized View page, then the blocks a `withResult` return adds
+(from a hand-written tool's `run` or `page`, or from a ref Procedure's handler).
+`structuredContent` is the data: on 2026-07-28 any JSON value but `undefined`; on a 2025 revision,
+whose structured content is an object, only an object (other data is its JSON text block alone, and
+a tool whose `outputSchema` root is not an object, or also admits `null` or another type, lists none there, so the SDK never wraps either as
+`{ result }`). The tool version is the same in both eras. Core owns the first
+three, `structuredContent`, `isError` and the error envelope; the application's
+blocks are checked by the installed SDK, and one it refuses fails the call as
+`INTERNAL_ERROR`. A failure and a thrown error carry Core's blocks only.
 
 **Procedure output:** SQL Procedures retain the native `{ results }`
 contract rather than 0.2's authored output projection/validation; MCP advertises
 that object envelope, not the incompatible authored schema. Ref Procedures expose
-the application's typed return value and advertise their authored object output
-schema. The application owns ref output validation. MCP does not decode or
+the application's typed return value and advertise their authored output schema
+when its root declares a `type` (an object, array, string, number, integer, boolean or
+null, `nullable` or a type list). A root without `type` (`$ref`, `anyOf`) is not advertised. A handler may return `withResult(output, { content, _meta })`: its
+generated MCP tool sends the blocks and `_meta`, while Store callers
+(`store(...).procedures`, `ctx.store.procedures`), REST and Admin operations get
+`output` alone, and `structuredContent` and the advertised output schema describe
+`output`, never the wrapper. The application owns ref output validation. MCP does not decode or
 revalidate native database rows. Business failures carry diagnostics in text;
 with an output schema they omit `structuredContent` to avoid validating an error
 against a success schema. Without one they also expose diagnostic structured
 content. MCP adds no prompts or non-UI resources.
+
+### Standard MCP fields and who sets them
+
+The official SDK does all wire handling (ADR-0029). "App" is the application;
+"not exposed" fields cannot be set through Mantle.
+
+| Field | Who sets it |
+|---|---|
+| `CallToolResult.content` | Core's blocks first (data JSON, version line, page notice); App appends any block the installed SDK accepts (`image`, `audio`, `resource_link`, `resource`, `text`, each with its own `annotations` and `_meta`) with `withResult`, from a hand-written tool or a ref Procedure handler |
+| `CallToolResult.structuredContent` | Core: the data beside its JSON text block; on 2026-07-28 any JSON value but `undefined` (SEP-2106), on a 2025 revision an object only. A success whose data the listed `outputSchema`'s root `type` does not admit (`undefined` included) fails as `INTERNAL_ERROR` before it is recorded |
+| non-object `outputSchema` (SEP-2106) | App: a ref Procedure's output schema, or `Tool.outputSchema`, with any root `type`; listed as given on 2026-07-28, not listed on a 2025 revision |
+| `CallToolResult.isError` | Core: the diagnostic envelope of a refusal or failure |
+| `CallToolResult._meta` | App: `withResult`/`withResultMeta`; Core sets `net.aotter.mantle/tool`, which wins |
+| `Tool.name`, `title`, `description` | App: `Tool` fields, or the manifest for generated tools; Core appends a generated tool's version |
+| `Tool.inputSchema` | App: `Tool.inputSchema`; Core adds a View's `limit` and `cursor` and localizes labels |
+| `Tool.outputSchema` | App: `Tool.outputSchema` (localized as listed), any root `type` |
+| `Tool.annotations` | App: `Tool.annotations`, including `title` |
+| `Tool.icons` | App: `Tool.icons` on a hand-built tool |
+| `Tool._meta` | App: `Tool.meta`, merged with what App links produce |
+| `Tool.execution` | Not exposed: SDK 2.4.0 has no task runtime |
+| Resource `title`, `description`, `icons`, `annotations` | App: `McpAppResource` fields |
+| Resource `mimeType`, text body | Core: `text/html;profile=mcp-app`, the HTML as text; no blob |
+| Resource `size` | Not exposed: the HTML is produced on read |
+| Resource list `_meta` | Core: `ui` from `csp`, `permissions`, `domain`, `prefersBorder` |
+| Resource read `_meta` | App: `McpAppResource.meta`, merged under the typed fields |
+| Resource templates, non-UI resources | Not exposed yet |
+| `resources/subscribe`, `listChanged` | Core: `listChanged: false`; no subscriptions on a stateless server |
+| `instructions` | App: `instructions` option |
+| `serverInfo` | App: `serverInfo` (`name`, `title`, `version`, `description`, `websiteUrl`, `icons`) |
+| Server capabilities | Core: decided by what the endpoint serves |
+| Prompts, completions | Not exposed yet; completions need prompts or templates |
+| Progress | App: `ToolCall.progress(progress, total?, message?)`, present when the request carries a `progressToken`; the call's result then streams as SSE |
+| Cancellation | Core: `ToolCall.signal` aborts while the tool runs if the client closes the request (how a 2026-07-28 client cancels) or the connection drops: on Bun.serve, and on Workers from compatibility date 2026-11-17 or with `enable_request_signal` (before that, only while the result streams as SSE). A 2025-era `notifications/cancelled` arrives as its own request, which a stateless server cannot relate to the call. Observed as `code: "REQUEST_CANCELLED"`. Hand-written tools only: a ref handler gets neither. See [Progress and cancellation](../guides/mcp-apps.md#progress-and-cancellation) |
+| Logging, sampling, roots | Not exposed: deprecated in the 2026-07-28 revision (SEP-2577) |
+| Elicitation | Not exposed: a stateless 2025-era server cannot send a server-to-client request, and `ToolCall` does not offer the 2026-07-28 `input_required` round trip |
+| Tasks | Not exposed: SDK 2.4.0 has no task runtime |
 
 ### Tool versions
 
@@ -348,7 +510,9 @@ per-caller filtering, so `/mcp` and `/mcp/admin` each report their own catalogue
 version, and it changes when a generated tool's definition changes or a tool is
 added or removed, however the tools are wired.
 
-`POST /admin/api/webmcp/{tool}` returns `{ output, version }`. A refusal's
+`POST /admin/api/webmcp/{tool}` returns `{ output, version }`, and `content`
+when the tool returned `withResult` blocks; `output` is the wrapper's `data`
+and its `_meta` is never sent. A refusal's
 diagnostic adds `toolVersion`, and `inputSchema` unless it is an authorization
 refusal; internal errors and refusals before the call carry neither. Admin's
 WebMCP results repeat these as the same text block MCP adds. The navigation
@@ -369,6 +533,13 @@ is a JSON value on every target. Other expressions without declared column linea
 Malformed persisted JSON becomes a redacted internal failure. The conversion
 adds no database operations and does not mutate native query rows.
 
+A generated route or tool carries `convert`, a table of `[field, type]`; the surface applies it to validated input
+before calling the generated function: a missing or null field becomes `null`, a `json` field is stringified and a
+`bool` field becomes 0/1 on SQLite and D1. `convertInput(input, convert)` from `@aotter/mantle/contracts` is that
+function. `callTool(tool, input, db, caller, handlers)` from `@aotter/mantle/mcp` validates, converts and runs one tool.
+It returns what the tool returned, a `withResult` wrapper included (a generated ref Procedure tool returns what its
+handler returned); `resultData(value)` returns a wrapper's `data` and any other value as it is.
+
 Bare Views, Store rows, native SQL Procedure `{ results }` and application-owned
 ref outputs retain their native contracts, except that a Store row's `version` is a
 number on every target, so a ref handler returning it outputs the same type
@@ -385,20 +556,78 @@ Unexpected surface failures log only a stable wire classification.
 
 MCP locale fallback reads only own locale entries, then English, then the first
 own entry; inherited property names never become titles or descriptions.
+Localized `title` and `description` keywords inside a tool's input and output
+schemas, at any depth, are listed resolved the same way, so MCP and WebMCP
+clients receive valid JSON Schema; Admin still reads the locale maps.
+`localizedSchema(schema, locale)` and `localizedText(value, locale)` from
+`@aotter/mantle/mcp/labels` apply the same rule to schemas an application publishes outside `mcp(...)`,
+such as its own WebMCP catalogue; the subpath also exports the `LocalizedText` type.
 
 ### Admin media MCP tools
 
 With generated site configuration, `mcp({ db, caller, media: env => storage })`
-loads the media module only on a configured admin MCP request and
-adds `get_media_upload_policy`, `create_media_upload`, `commit_media_upload`,
-`list_media_assets`, `get_media_asset`, `update_media_asset` and
-`delete_media_asset` to `/mcp/admin` only. `storage` is the same `MediaStorage`
-used by the Admin media library. Omitting `media` omits all seven tools.
-Admins can invoke them; cookie writes retain the origin check.
-Generated boundary code checks each input and advertises the 0.2 schemas and
-read-only/destructive/open-world hints. Image bytes are PUT directly to the
-returned short-lived URLs with their required headers, then committed; bytes
-never enter MCP. Store permanent asset ids, never upload URLs.
+loads the media module only on a configured admin MCP request and adds five
+tools to `/mcp/admin` only. `storage` is the same `MediaStorage` used by the
+Admin media library. Omitting `media` omits every media tool. Admins can invoke
+them; cookie writes retain the origin check. Generated boundary code checks each
+input and advertises read-only/destructive/open-world hints.
+
+| Tool | Does |
+|---|---|
+| `upload_media` | Upload one file directly, in two calls (below). |
+| `open_media_upload` | Manual upload-card fallback; the same prepare/commit arguments as `upload_media`. |
+| `find_media` | Committed assets by `ids` (ids not found come back in `missing`), or newest first with `limit`, `cursor` and `search` (the exact id, or text in alt or caption; a search longer than 48 characters matches the id alone). Read-only. |
+| `update_media` | Set `alt` or `caption` of `id`; an omitted field is unchanged, an empty string clears it. |
+| `delete_media` | Delete `id`'s objects and record (`destructiveHint`, so hosts confirm). A partial failure is retried with the same id. |
+
+`upload_media` takes one mode per call:
+
+1. `{ purpose, filename, variants: [{ mimeType, byteSize, role }], alt?, caption? }`
+   returns `{ uploadId, expiresAt, targets: [{ role, mimeType, method, url, headers }] }`.
+   PUT each variant's bytes to its `url` with its `headers`. Targets expire in
+   15 minutes and serve this one upload. The default `mediaUploadCard()` renders
+   `open_media_upload`, leaving direct `upload_media` targets model-visible. If
+   an application explicitly links a resource to `upload_media` and the request declares MCP Apps
+   support,
+   `targets` is left out of the result and sent only in the result
+   `_meta["net.aotter.mantle/upload"]`, which hosts give the App and not the
+   model; an agent without MCP Apps (a CLI agent such as Claude Code) reads them
+   in the result.
+2. `{ uploadId, purpose?, alt?, caption? }` commits and returns the asset.
+   Store its id in fields that reference `media_assets.id`, never an upload URL.
+   An unknown or expired `uploadId` is `MEDIA_UPLOAD_EXPIRED` (make a new first
+   call); before the commit, a `purpose` other than the upload's is
+   `MEDIA_UPLOAD_MISMATCH`; a committed `uploadId` returns the same asset again
+   (the asset records no purpose).
+
+`{ purpose? }` alone returns the purposes' policy, `{ purposes: [{ name, required, maxBytes }] }`
+(each `required` slot lists its accepted MIME types, comma-separated); the
+generated input schema also names the purposes and their caps, and policy
+failures say what was expected. With the [upload card](../guides/mcp-apps.md#the-upload-card)
+registered, an MCP Apps host shows it for this call.
+
+`{ purpose, sourceUrl }` and `{ purpose, file: { download_url, file_id } }` have the
+server fetch one file and run both steps in one call. `file` is the tool's
+`openai/fileParams` argument, so a host that hands the tool a chat attachment
+passes its download URL. Either takes a purpose with one variant slot. The fetch
+accepts only `https` on the default port, without credentials, to a public host:
+IPv6 literals, private, loopback, link-local, shared, reserved and multicast
+IPv4 addresses, single-label names and names such as `localhost`, `*.local` and
+`*.internal` are `MEDIA_SOURCE_REJECTED`, as is each redirect target (at most
+three). The body is capped at the purpose's byte cap
+(`MEDIA_VARIANT_SIZE_EXCEEDED`). A PNG, JPEG, GIF, WebP or AVIF image is typed
+by its bytes; any other file by the response Content-Type without its parameters,
+which must be a valid type the purpose takes (`MEDIA_MIME_REJECTED`) and passes
+the same [safe-delivery](../cloudflare/media-r2.md#safe-delivery) checks as an upload.
+The request asks for `image/*` when the purpose takes only images, else `*/*`; an unreachable source is `MEDIA_SOURCE_FAILED` and a
+storage PUT failure `MEDIA_STORAGE_FAILED`. Names are checked, not resolved:
+Workers cannot reach private addresses, and on another runtime restrict the
+server's egress to the public internet. File content is never accepted as base64.
+
+The 0.1 names `get_media_upload_policy`, `create_media_upload`,
+`commit_media_upload`, `list_media_assets`, `get_media_asset`,
+`update_media_asset` and `delete_media_asset` still work in 0.2, after the four,
+with descriptions marked deprecated; they are removed in 0.3.
 
 Generation always emits a `Handlers` type (empty when no Procedure uses `handler: { ref }`), so every app wires the
 same way: `const handlers: Handlers = {...}`, then `store(db, caller, { handlers })`, `adminBindings({ handlers })`,

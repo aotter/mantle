@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  parseManifestSources,
-  sourceLocationAt,
-} from "../../src/build/spec/domain/service/ManifestParser.js";
+import { parseManifestSources, sourceLocationAt } from "../../src/build/spec/domain/service/ManifestParser.js";
 
 const schema = (name: string): string => `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -22,13 +19,15 @@ describe("parseManifestSources", () => {
     });
 
     if (!result.ok) throw new Error("expected valid sources");
-    expect(result.value.entries.map(({ manifest, source }) => ({
-      name: manifest.metadata.name,
-      sourceId: source.sourceId,
-      documentIndex: source.documentIndex,
-      path: source.path,
-      hasSpan: source.span !== undefined,
-    }))).toEqual([
+    expect(
+      result.value.entries.map(({ manifest, source }) => ({
+        name: manifest.metadata.name,
+        sourceId: source.sourceId,
+        documentIndex: source.documentIndex,
+        path: source.path,
+        hasSpan: source.span !== undefined,
+      })),
+    ).toEqual([
       { name: "first", sourceId: "memory:first", documentIndex: 0, path: "/", hasSpan: true },
       { name: "third", sourceId: "memory:first", documentIndex: 2, path: "/", hasSpan: true },
       { name: "second", sourceId: "memory:second", documentIndex: 0, path: "/", hasSpan: true },

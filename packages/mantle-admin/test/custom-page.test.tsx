@@ -5,7 +5,8 @@ import { CustomPage } from "../admin/src/app/custom-page";
 import type { AdminPage } from "../admin/src/app/define-admin";
 
 const page: AdminPage = { path: "queue", title: { en: "Queue", "zh-TW": "待辦" }, element: <p>Rows</p> };
-const render = (surface: "browser" | "mcp-app", extra: Partial<AdminPage> = {}) => renderToStaticMarkup(<CustomPage page={{ ...page, ...extra }} surface={surface} language="zh-TW" />);
+const render = (surface: "browser" | "mcp-app", extra: Partial<AdminPage> = {}) =>
+  renderToStaticMarkup(<CustomPage page={{ ...page, ...extra }} surface={surface} language="zh-TW" />);
 
 it("preserves existing default headings on each surface", () => {
   expect(render("browser")).toContain("<h1");

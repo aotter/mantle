@@ -35,23 +35,23 @@ export async function uploadMediaAsset(args: {
   if (!purpose) {
     throw new Error(t(language, "media.noPurpose"));
   }
-  const variants = await prepareImageVariants(args.file, purpose, language);
+  const variants = await prepareVariants(args.file, purpose, language);
+  // alt text describes an image; another file has none unless one is given
+  const alt = args.alt ?? (args.file.type.startsWith("image/") ? defaultAlt(args.file) : undefined);
   const created = await api.post<MediaUploadResponse>("/media/uploads", {
     filename: args.file.name,
     purpose: purpose.name,
-    variants: variants.map((variant) => ({
+    variants: variants.map(variant => ({
       mimeType: variant.mimeType,
       byteSize: variant.blob.size,
       role: variant.role,
     })),
-    alt: args.alt ?? defaultAlt(args.file),
+    alt,
     caption: args.caption,
   });
 
   for (const variant of variants) {
-    const capability = created.capabilities.find(
-      (cap) => cap.mimeType === variant.mimeType && cap.role === variant.role,
-    );
+    const capability = created.capabilities.find(cap => cap.mimeType === variant.mimeType && cap.role === variant.role);
     if (!capability) {
       throw new Error(t(language, "media.capabilityMissing", { mime: variant.mimeType }));
     }
@@ -65,13 +65,10 @@ export async function uploadMediaAsset(args: {
     }
   }
 
-  return api.post<CommittedMediaAsset>(
-    `/media/uploads/${encodeURIComponent(created.uploadGroupId)}/commit`,
-    {
-      alt: args.alt ?? defaultAlt(args.file),
-      caption: args.caption,
-    },
-  );
+  return api.post<CommittedMediaAsset>(`/media/uploads/${encodeURIComponent(created.uploadGroupId)}/commit`, {
+    alt,
+    caption: args.caption,
+  });
 }
 
 export function selectPurpose(
@@ -79,10 +76,11 @@ export function selectPurpose(
   preferredPurpose?: string,
 ): MediaPurposePolicy | null {
   if (preferredPurpose !== undefined) {
-    return purposes.find((purpose) => purpose.name === preferredPurpose) ?? null;
+    return purposes.find(purpose => purpose.name === preferredPurpose) ?? null;
   }
-  const content = purposes.find((purpose) => purpose.name === "content");
-  return content ?? purposes[0] ?? null;
+  const content = purposes.find(purpose => purpose.name === "content");
+  // a guess never lands in private storage: it would leave the image without a public URL
+  return content ?? purposes.find(purpose => purpose.visibility !== "private") ?? null;
 }
 
 export function purposeForMediaField(
@@ -100,14 +98,59 @@ export function purposeForMediaField(
   }
   candidates.push("content");
   for (const candidate of candidates) {
-    if (purposes.some((purpose) => purpose.name === candidate)) return candidate;
+    if (purposes.some(purpose => purpose.name === candidate)) return candidate;
   }
-  return purposes[0]?.name;
+  return purposes.find(purpose => purpose.visibility !== "private")?.name;
 }
 
 export function primaryPublicUrl(asset: CommittedMediaAsset): string | null {
-  const variant = asset.variants.find((item) => item.role === "primary") ?? asset.variants[0];
+  const variant = asset.variants.find(item => item.role === "primary") ?? asset.variants[0];
   return variant?.publicUrl ?? null;
+}
+
+/** A purpose whose slots all name concrete image types: an image is re-encoded into them. */
+const imagePurpose = (policy: MediaPurposePolicy) =>
+  expandRequired(policy.required)
+    .flat()
+    .every(mime => mime.startsWith("image/") && !mime.endsWith("/*"));
+
+/** The token of `slot` that takes `mimeType`: the type itself, else its `type/*`, else `*\/*`. */
+const acceptedBy = (slot: readonly string[], mimeType: string) =>
+  [mimeType, mimeType.replace(/\/.*/, "/*"), "*/*"].find(token => slot.includes(token));
+
+/**
+ * The file input's `accept` for uploads to `policy`: any image for an image purpose (it is re-encoded), else the types
+ * of its one slot, or anything when that slot takes any type.
+ */
+export function acceptFor(policy: MediaPurposePolicy | null | undefined): string {
+  if (!policy) return "";
+  if (imagePurpose(policy)) return "image/*";
+  const slots = expandRequired(policy.required);
+  return slots.length === 1 && !slots[0]!.includes("*/*") ? slots[0]!.join(",") : "";
+}
+
+/** An image purpose gets the image re-encoded into its slots; any other takes the file as it is, as its one variant. */
+async function prepareVariants(
+  file: File,
+  policy: MediaPurposePolicy,
+  language: AdminLanguage,
+): Promise<PreparedVariant[]> {
+  if (imagePurpose(policy)) return prepareImageVariants(file, policy, language);
+  const mimeType = file.type || "application/octet-stream",
+    slots = expandRequired(policy.required);
+  const token = slots.length === 1 ? acceptedBy(slots[0]!, mimeType) : undefined;
+  if (!token)
+    throw new Error(
+      t(language, "media.typeRejected", {
+        name: file.name,
+        mime: mimeType,
+        purpose: policy.name,
+        types: slots.flat().join(", "),
+      }),
+    );
+  if (file.size > (policy.maxBytes[token] ?? 0))
+    throw new Error(t(language, "media.tooLarge", { purpose: policy.name, max: String(policy.maxBytes[token] ?? 0) }));
+  return [{ mimeType, role: "primary", blob: file }];
 }
 
 async function prepareImageVariants(
@@ -116,7 +159,7 @@ async function prepareImageVariants(
   language: AdminLanguage,
 ): Promise<PreparedVariant[]> {
   if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
-    throw new Error(t(language, "media.rasterOnly"));
+    throw new Error(t(language, "media.rasterOnly", { name: file.name, mime: file.type || "?", purpose: policy.name }));
   }
   const slots = expandRequired(policy.required);
   if (slots.length === 0) {
@@ -124,7 +167,7 @@ async function prepareImageVariants(
   }
   const bitmap = await createImageBitmap(file);
   try {
-    const selected = await Promise.all(slots.map((slot) => chooseMime(slot, policy, language)));
+    const selected = await Promise.all(slots.map(slot => chooseMime(slot, policy, language)));
     const primaryMime = selected.find(isClassicFallbackMime) ?? selected[0]!;
     const variants: PreparedVariant[] = [];
     for (const mimeType of selected) {
@@ -143,8 +186,13 @@ async function prepareImageVariants(
 
 function expandRequired(required: readonly string[]): string[][] {
   return required
-    .map((slot) => slot.split(",").map(normalizeMime).filter((mime): mime is string => Boolean(mime)))
-    .filter((slot) => slot.length > 0);
+    .map(slot =>
+      slot
+        .split(",")
+        .map(normalizeMime)
+        .filter((mime): mime is string => Boolean(mime)),
+    )
+    .filter(slot => slot.length > 0);
 }
 
 function normalizeMime(raw: string): string | null {
@@ -174,9 +222,7 @@ function probeEncoderSupport(mimeType: string): Promise<boolean> {
         const canvas = document.createElement("canvas");
         canvas.width = 1;
         canvas.height = 1;
-        const blob = await new Promise<Blob | null>((resolve) =>
-          canvas.toBlob(resolve, mimeType),
-        );
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType));
         return blob?.type === mimeType;
       } catch {
         // Non-browser / unavailable canvas: probing is impossible, so
@@ -201,7 +247,7 @@ export async function chooseMime(
     if (!(await probeEncoderSupport(mime))) continue;
     return mime;
   }
-  const attempted = slot.find((mime) => mime.startsWith("image/") && policy.maxBytes[mime] != null);
+  const attempted = slot.find(mime => mime.startsWith("image/") && policy.maxBytes[mime] != null);
   throw new Error(t(language, "media.encoderUnsupported", { mime: attempted ?? slot[0] ?? "?" }));
 }
 
@@ -212,9 +258,7 @@ export async function encodeBitmap(
   language: AdminLanguage,
 ): Promise<Blob> {
   let scale = 1;
-  const qualitySteps = mimeType === "image/jpeg"
-    ? [0.88, 0.78, 0.68, 0.58]
-    : [0.78, 0.68, 0.58, 0.48];
+  const qualitySteps = mimeType === "image/jpeg" ? [0.88, 0.78, 0.68, 0.58] : [0.78, 0.68, 0.58, 0.48];
   let best: Blob | null = null;
   for (let attempt = 0; attempt < 6; attempt += 1) {
     for (const quality of qualitySteps) {
@@ -251,7 +295,7 @@ async function drawAndEncode(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error(t(language, "media.prepareFailed"));
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, quality));
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, mimeType, quality));
   if (!blob) throw new Error(t(language, "media.encoderUnsupported", { mime: mimeType }));
   return blob;
 }

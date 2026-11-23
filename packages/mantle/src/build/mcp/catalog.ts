@@ -3,7 +3,14 @@
  * fields they read, and the Procedure tools that act on one of its rows. It is built from the plan alone, carries no SQL and
  * no caller data, and is embedded in the App's HTML, so the App reads it without a tool call.
  */
-import { NATIVE_OUTPUT_TYPES, mcpTools, type JsonSchema, type LocalizedText, type PlanView, type RuntimePlan } from "../spec/domain/index.js";
+import {
+  NATIVE_OUTPUT_TYPES,
+  mcpTools,
+  type JsonSchema,
+  type LocalizedText,
+  type PlanView,
+  type RuntimePlan,
+} from "../spec/domain/index.js";
 
 /** A Procedure tool that acts on one row: `bind` feeds its id input from the row, `version` locks the row's version. */
 export interface AppRowAction {
@@ -36,7 +43,11 @@ export interface AppCatalog {
 
 /** System columns follow their declared scalar metadata. */
 const nativeSchema = (field: string): JsonSchema | undefined =>
-  Object.hasOwn(NATIVE_OUTPUT_TYPES, field) ? NATIVE_OUTPUT_TYPES[field] === "integer" ? { type: "integer" } : { type: "string", format: "date-time" } : undefined;
+  Object.hasOwn(NATIVE_OUTPUT_TYPES, field)
+    ? NATIVE_OUTPUT_TYPES[field] === "integer"
+      ? { type: "integer" }
+      : { type: "string", format: "date-time" }
+    : undefined;
 
 type Target = { ResTarget: { name?: string; val?: { ColumnRef?: { fields?: { String?: { sval?: string } }[] } } } };
 
@@ -63,7 +74,15 @@ export function appCatalog(plan: RuntimePlan, surface: "public" | "admin"): AppC
   for (const t of tools) {
     const p = t.kind === "procedure" ? plan.procedures[t.source]! : undefined;
     if (!p?.target) continue;
-    actions[t.name] = { capability: t.name, ...(p.title !== undefined ? { title: p.title } : {}), inputSchema: p.input, ...(p.uiSchema ? { uiSchema: p.uiSchema } : {}), bind: [{ input: p.target.id, field: "id" }], ...(p.target.version ? { version: p.target.version } : {}), mutates: true };
+    actions[t.name] = {
+      capability: t.name,
+      ...(p.title !== undefined ? { title: p.title } : {}),
+      inputSchema: p.input,
+      ...(p.uiSchema ? { uiSchema: p.uiSchema } : {}),
+      bind: [{ input: p.target.id, field: "id" }],
+      ...(p.target.version ? { version: p.target.version } : {}),
+      mutates: true,
+    };
     const key = p.target.schema.toLowerCase();
     targets.set(key, [...(targets.get(key) ?? []), t.name]);
   }
@@ -75,13 +94,19 @@ export function appCatalog(plan: RuntimePlan, surface: "public" | "admin"): AppC
     for (const [k, c] of Object.entries(v.columns ?? {})) {
       const s = plan.schemas[c.schema]!;
       const field = s.names?.[c.field] ?? c.field;
-      const property = (s.schema.properties as Record<string, JsonSchema> | undefined)?.[field] ?? nativeSchema(c.field);
+      const property =
+        (s.schema.properties as Record<string, JsonSchema> | undefined)?.[field] ?? nativeSchema(c.field);
       // named as the rows name it: a field read unchanged keeps its declared spelling
       if (property) columns[k === c.field ? field : k] = property;
     }
     const list = (v.uiSchema?.["list"] ?? {}) as { columns?: string[] };
     const entry = entrySchema(plan, v);
-    views[tool.name] = { ...(v.title !== undefined ? { title: v.title } : {}), columns, list: { columns: list.columns ?? [] }, actions: entry ? targets.get(entry) ?? [] : [] };
+    views[tool.name] = {
+      ...(v.title !== undefined ? { title: v.title } : {}),
+      columns,
+      list: { columns: list.columns ?? [] },
+      actions: entry ? (targets.get(entry) ?? []) : [],
+    };
   }
   return { views, actions };
 }

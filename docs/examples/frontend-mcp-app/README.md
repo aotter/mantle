@@ -1,6 +1,6 @@
 # Application-owned frontend MCP App
 
-This small React entry uses the official ext-apps `useApp` and optional `mantle-ui` presentation. It imports no `mantle-admin`, Provider, Admin hooks or Admin API. The application owns its build and domain page. Keep React and React DOM pinned to one exact version; install the version-matched Core, optional UI, official ext-apps and its peers. Bundle `app.tsx` into a single-file HTML document containing `<div id="root"></div>` with your browser build tool.
+This small React entry uses the official ext-apps `useApp` and ordinary HTML elements. It imports no `mantle-admin`, Provider, Admin hooks or Admin API. The application owns its build and domain page. Keep React and React DOM pinned to one exact version; install the version-matched Core, official ext-apps and its peers. Bundle `app.tsx` into a single-file HTML document containing `<div id="root"></div>` with your browser build tool.
 
 Generate the accompanying manifest with `mantle generate <target> generated manifest.yaml`. Register the built HTML through the existing Core contributor, on the frontend endpoint:
 
@@ -18,6 +18,19 @@ const handle = mcp({
 
 `verifiedCaller` is the application's real authentication integration; never derive authority from tool arguments, page state or a user-supplied owner ID. There are no credentials in the HTML. Change the resource URI for a new UI build and update registration consistently. Core owns resource/tool registration and caller enforcement; it neither builds this UI nor imports React. Official ext-apps owns the connection. UI only renders data and invokes callbacks.
 
-`public` names the frontend surface, **not anonymous permission**. `my-tasks` requires a verified user, and the Schema scope limits SQL rows to `auth.uid()`. Admin tools are a separate surface. UI visibility grants no access. The example's load-more calls the same declared View through the host; it does not fetch `/admin/api`. Opening it performs no write. The application reads its consumed row fields and cursor from structured output or a JSON text result; malformed results show an error, a fresh valid result restores the page, and a pending older page cannot append to a newer result. Protocol metadata remains the official client’s responsibility.
+`public` names the frontend surface, **not anonymous permission**. `my-tasks` requires a verified user, and the Schema scope limits SQL rows to `auth.uid()`. Admin tools are a separate surface. UI visibility grants no access. The example's load-more calls the same declared View through the host; it does not fetch `/admin/api`. Opening it performs no write. The application reads its consumed row fields and cursor from structured output or a JSON text result; malformed results show an error, a fresh valid result restores the page, and a pending older page cannot append to a newer result. A failed later page keeps the loaded rows and can be retried. Protocol metadata remains the official client’s responsibility.
 
-Repository acceptance: `bun test packages/mantle/tests/frontend-mcp-app.test.ts` checks generated SQL scope, anonymous/member denials, owner paging and resource linkage. `MANTLE_BROWSER_TESTS=1 MANTLE_TEST_CHROMIUM=/path/to/chrome pnpm --filter @aotter/mantle-admin exec vitest run test/frontend-mcp-app-browser.test.ts` builds this entry without Admin runtime code and renders it in the official AppBridge. The latter command reuses repository browser tooling only; Admin is not an application dependency. This is not an independently installed packed consumer or a real ChatGPT/Claude acceptance result; those remain separate deployment checks.
+To let a host list the App so people open it without asking for it, mark `my_tasks` as an entry point. Give the generated tool `meta` in place before calling the generated `mcp`, so its access targets, user fields and read catalogue still apply:
+
+```ts
+import { mcp, tools } from "./generated/mcp.js";
+const entry = tools.find(tool => tool.name === "my_tasks")!;
+Object.assign(entry, { meta: { ...entry.meta, "openai/ui": { entrypoints: [{ type: "global" }] } } });
+const handle = mcp({ db: env => env.DB, caller: request => verifiedCaller(request), apps: { public: { resources: [{
+  uri: "ui://my-tasks/build-1", name: "my-tasks", renders: ["my_tasks"], html: builtHtml,
+}] } } });
+```
+
+The host opens it by calling `my_tasks` with `{}`, which returns the caller's first page. The key is a host extension outside the MCP Apps specification; see [Open an App from a host's entry point](../../handbook/guides/mcp-apps.md#open-an-app-from-a-hosts-entry-point) for the host's requirements.
+
+Repository acceptance: `bun test packages/mantle/tests/frontend-mcp-app.test.ts` checks generated SQL scope, anonymous/member denials, owner paging and resource linkage, and the entry-point mark: both `_meta` keys listed, a `{}` call returning the caller's first page, denials unchanged, a text result for a client without MCP Apps, and a gateway call pinned to the View's generated target hash. `MANTLE_BROWSER_TESTS=1 MANTLE_TEST_CHROMIUM=/path/to/chrome pnpm --filter @aotter/mantle-admin exec vitest run test/frontend-mcp-app-browser.test.ts` builds this entry without Admin runtime code and renders it in the official AppBridge. The latter command reuses repository browser tooling only; Admin is not an application dependency. This is not an independently installed packed consumer or a real ChatGPT/Claude acceptance result; those remain separate deployment checks.

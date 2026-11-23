@@ -1,11 +1,14 @@
 import { fixtureCaller } from "./apps/fixtures.js";
 import { beforeAll, expect, test } from "bun:test";
+import { SQL } from "bun";
 import { Database } from "bun:sqlite";
 import ts from "typescript";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import postgres from "postgres";
 import { generateOrThrow, loadGenerated, writeGenerated } from "./apps/link.js";
 import { user } from "./apps/fixtures.js";
+import { handlerTransaction } from "../src/kernel/store.js";
 
 const schema = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
@@ -37,46 +40,64 @@ spec:
   output: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}
   handler: {ref: app.createNote}
 `;
+const nativeRef = ref.replace("  handler:", "  db: native\n  handler:");
 beforeAll(() => mkdir(resolve(import.meta.dir, "apps/.generated"), { recursive: true }));
 const targets = ["bun-sqlite", "bun-postgres", "cloudflare-d1", "cloudflare-postgres"] as const;
 const caller = fixtureCaller({ ...user("writer"), role: "admin" as const, admin: true, scopes: ["notes:write"] });
-const files = (target: typeof targets[number], text = schema + ref) => generateOrThrow(target, [{ sourceId: "handlers.yaml", text }]);
+const files = (target: (typeof targets)[number], text = schema + ref) =>
+  generateOrThrow(target, [{ sourceId: "handlers.yaml", text }]);
 
-for (const target of ["bun-sqlite"] as const) test(`${target} caller-owned handlers gate dispatch and preserve context/errors`, async () => {
-  const generated = await files(target);
-  const app = await loadGenerated(generated["generated.ts"]!);
-  const db = {};
-  for (const denied of [{ kind: "anonymous" }, { kind: "system", reason: "test" }, user("admin"), fixtureCaller({ ...caller, scopes: [] })]) {
-    await expect(app.store(db, denied, { handlers: {} }).procedures["app-note"]({ title: "t" })).rejects.toMatchObject({ code: denied.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED" });
-  }
-  for (const options of [undefined, { handlers: {} }]) {
-    await expect(app.store(db, caller, options).procedures["app-note"]({ title: "t" })).rejects.toMatchObject({ code: "HANDLER_NOT_REGISTERED", path: "procedures/app-note" });
-  }
-  let called = 0;
-  const error = new Error("application failure");
-  const handlers = { "app-note": async (ctx: any, input: { title: string }) => {
-    called++;
-    expect(ctx.caller).toBe(caller);
-    expect(ctx.db).toBe(db);
-    expect(ctx.store).toBe(data);
-    expect(typeof ctx.store.collection).toBe("function");
-    expect(typeof ctx.store.views["notes-list"]).toBe("function");
-    expect(typeof ctx.store.procedures["app-note"]).toBe("function");
-    if (input.title === "throw") throw error;
-    return input;
-  } };
-  const data = app.store(db, caller, { handlers });
-  expect(Object.hasOwn(app.procedures, "app-note")).toBe(false);
-  expect(app.bindHandlers).toBeUndefined();
-  const other = app.store(db, caller, { handlers: { "app-note": async () => ({ title: "other" }) } });
-  expect(await other.procedures["app-note"]({ title: "t" })).toEqual({ title: "other" });
-  const result = { title: "t" };
-  expect(await data.procedures["app-note"](result)).toBe(result);
-  expect(await data.procedures["app-note"](result)).toBe(result);
-  await expect(data.procedures["app-note"]({ title: "throw" })).rejects.toBe(error);
-  await expect(app.store(db, fixtureCaller({ ...caller, scopes: [] }), { handlers }).procedures["app-note"](result)).rejects.toMatchObject({ code: "AUTH_DENIED" });
-  expect(called).toBe(3);
-});
+for (const target of ["bun-sqlite"] as const)
+  test(`${target} caller-owned handlers gate dispatch and preserve context/errors`, async () => {
+    const generated = await files(target);
+    const app = await loadGenerated(generated["generated.ts"]!);
+    const db = {};
+    for (const denied of [
+      { kind: "anonymous" },
+      { kind: "system", reason: "test" },
+      user("admin"),
+      fixtureCaller({ ...caller, scopes: [] }),
+    ]) {
+      await expect(
+        app.store(db, denied, { handlers: {} }).procedures["app-note"]({ title: "t" }),
+      ).rejects.toMatchObject({ code: denied.kind === "user" ? "AUTH_DENIED" : "UNAUTHENTICATED" });
+    }
+    for (const options of [undefined, { handlers: {} }]) {
+      await expect(app.store(db, caller, options).procedures["app-note"]({ title: "t" })).rejects.toMatchObject({
+        code: "HANDLER_NOT_REGISTERED",
+        path: "procedures/app-note",
+      });
+    }
+    let called = 0;
+    const error = new Error("application failure");
+    const handlers = {
+      "app-note": async (ctx: any, input: { title: string }) => {
+        called++;
+        expect(ctx.caller).toBe(caller);
+        expect(ctx).not.toHaveProperty("db");
+        expect(ctx.store).not.toHaveProperty("transaction");
+        expect(ctx.store.collection).toBe(data.collection);
+        expect(typeof ctx.store.collection).toBe("function");
+        expect(typeof ctx.store.views["notes-list"]).toBe("function");
+        expect(typeof ctx.store.procedures["app-note"]).toBe("function");
+        if (input.title === "throw") throw error;
+        return input;
+      },
+    };
+    const data = app.store(db, caller, { handlers });
+    expect(Object.hasOwn(app.procedures, "app-note")).toBe(false);
+    expect(app.bindHandlers).toBeUndefined();
+    const other = app.store(db, caller, { handlers: { "app-note": async () => ({ title: "other" }) } });
+    expect(await other.procedures["app-note"]({ title: "t" })).toEqual({ title: "other" });
+    const result = { title: "t" };
+    expect(await data.procedures["app-note"](result)).toBe(result);
+    expect(await data.procedures["app-note"](result)).toBe(result);
+    await expect(data.procedures["app-note"]({ title: "throw" })).rejects.toBe(error);
+    await expect(
+      app.store(db, fixtureCaller({ ...caller, scopes: [] }), { handlers }).procedures["app-note"](result),
+    ).rejects.toMatchObject({ code: "AUTH_DENIED" });
+    expect(called).toBe(3);
+  });
 
 test("ref context Store applies the same caller's scope on a real SQLite handle", async () => {
   const generated = await files("bun-sqlite");
@@ -85,64 +106,98 @@ test("ref context Store applies the same caller's scope on a real SQLite handle"
   try {
     db.exec(generated["schema.sql"]!);
     await app.store(db, user("other"), { handlers: {} }).collection("notes").insert({ title: "private" });
-    const handlers = { "app-note": async ({ store }: any, input: { title: string }) => {
-      expect(await store.collection("notes").count()).toBe(0);
-      const row = await store.collection("notes").insert(input);
-      expect(await store.views["notes-list"]({})).toEqual([{ title: input.title }]);
-      return { title: row.title };
-    } };
+    const handlers = {
+      "app-note": async ({ store }: any, input: { title: string }) => {
+        expect(await store.collection("notes").count()).toBe(0);
+        const row = await store.collection("notes").insert(input);
+        expect(await store.views["notes-list"]({})).toEqual([{ title: input.title }]);
+        return { title: row.title };
+      },
+    };
     const data = app.store(db, caller, { handlers });
     expect(await data.procedures["app-note"]({ title: "mine" })).toEqual({ title: "mine" });
-    expect(db.query("SELECT owner, title FROM notes ORDER BY title").all()).toEqual([{ owner: "writer", title: "mine" }, { owner: "other", title: "private" }]);
-  } finally { db.close(); }
+    expect(db.query("SELECT owner, title FROM notes ORDER BY title").all()).toEqual([
+      { owner: "writer", title: "mine" },
+      { owner: "other", title: "private" },
+    ]);
+  } finally {
+    db.close();
+  }
 });
 
 test("transaction ref context is the tx Store and handle, and both write paths roll back", async () => {
-  const generated = await files("bun-sqlite");
+  const generated = await files("bun-sqlite", schema + nativeRef);
   const app = await loadGenerated(generated["generated.ts"]!);
   const db = new Database(":memory:");
   let txStore: any;
   try {
     db.exec(generated["schema.sql"]!);
-    const data = app.store(db, caller, { handlers: { "app-note": async (ctx: any, input: { title: string }) => {
-      expect(ctx.store).toBe(txStore);
-      expect(ctx.db).not.toBe(db);
-      expect(ctx.caller).toBe(caller);
-      await ctx.store.collection("notes").insert(input);
-      ctx.db.query("UPDATE notes SET title = 'raw tx write' WHERE title = 'before'").run();
-      expect(await ctx.store.collection("notes").count()).toBe(2);
-      return input;
-    } } });
+    const data = app.store(db, caller, {
+      handlers: {
+        "app-note": async (ctx: any, input: { title: string }) => {
+          expect(ctx.store.collection).toBe(txStore.collection);
+          expect(ctx.store).not.toHaveProperty("transaction");
+          expect(ctx.db).not.toBe(db);
+          expect(ctx.caller).toBe(caller);
+          await ctx.store.collection("notes").insert(input);
+          ctx.db.query("UPDATE notes SET title = 'raw tx write' WHERE title = 'before'").run();
+          expect(await ctx.store.collection("notes").count()).toBe(2);
+          return input;
+        },
+      },
+    });
     await data.collection("notes").insert({ title: "before" });
     const failure = new Error("rollback callback");
-    await expect(data.transaction(async (tx: any) => {
-      txStore = tx;
-      expect(await tx.procedures["app-note"]({ title: "ref tx write" })).toEqual({ title: "ref tx write" });
-      expect((await tx.views["notes-list"]({})).map((row: any) => row.title).sort()).toEqual(["raw tx write", "ref tx write"]);
-      throw failure;
-    })).rejects.toBe(failure);
+    await expect(
+      data.transaction(async (tx: any) => {
+        txStore = tx;
+        expect(await tx.procedures["app-note"]({ title: "ref tx write" })).toEqual({ title: "ref tx write" });
+        expect((await tx.views["notes-list"]({})).map((row: any) => row.title).sort()).toEqual([
+          "raw tx write",
+          "ref tx write",
+        ]);
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
     expect(db.query("SELECT title FROM notes").all()).toEqual([{ title: "before" }]);
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 });
 
 test("ref-only manifests need no Schema or SQL, and direct SQL reads shake handlers out", async () => {
   const app = await loadGenerated((await files("cloudflare-d1", ref))["generated.ts"]!);
-  const handlers = { "app-note": async ({ caller: same }: any, input: unknown) => { expect(same).toBe(caller); return input; } };
+  const handlers = {
+    "app-note": async ({ caller: same }: any, input: unknown) => {
+      expect(same).toBe(caller);
+      return input;
+    },
+  };
   expect(await app.store({}, caller, { handlers }).procedures["app-note"]({ title: "t" })).toEqual({ title: "t" });
   const dir = await mkdtemp(resolve(import.meta.dir, "apps/.generated/handlers-bundle-"));
   try {
     await writeGenerated(dir, await files("cloudflare-d1"), false);
-    const bundle = await Bun.build({ entrypoints: [resolve(dir, "views/notes-list.ts")], target: "browser", minify: true });
+    const bundle = await Bun.build({
+      entrypoints: [resolve(dir, "views/notes-list.ts")],
+      target: "browser",
+      minify: true,
+    });
     expect(bundle.success).toBe(true);
     const code = await bundle.outputs[0]!.text();
     expect(code).not.toMatch(/HANDLER_NOT_REGISTERED|app-note|createStore|app\.createNote/);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("an inherited object member is never a registered handler", async () => {
-  const app = await loadGenerated((await files("bun-sqlite", ref.replace("name: app-note", "name: constructor")))["generated.ts"]!);
+  const app = await loadGenerated(
+    (await files("bun-sqlite", ref.replace("name: app-note", "name: constructor")))["generated.ts"]!,
+  );
   for (const handlers of [{}, Object.create({ constructor: async () => ({ title: "wrong" }) })]) {
-    await expect(app.store({}, caller, { handlers }).procedures.constructor({ title: "t" })).rejects.toMatchObject({ code: "HANDLER_NOT_REGISTERED" });
+    await expect(app.store({}, caller, { handlers }).procedures.constructor({ title: "t" })).rejects.toMatchObject({
+      code: "HANDLER_NOT_REGISTERED",
+    });
   }
 });
 
@@ -152,17 +207,52 @@ test("all four Store wiring points reject missing, extra and wrong handlers", as
     const roots: string[] = [];
     for (const target of targets) {
       const destination = resolve(dir, target);
-      await writeGenerated(destination, await files(target), false);
+      await writeGenerated(
+        destination,
+        await files(target, schema + ref + "---\n" + nativeRef.replace("name: app-note", "name: native-note")),
+        false,
+      );
       const consumer = resolve(destination, "consumer.ts");
-      await writeFile(consumer, `import { type Handlers, procedures, store } from "./generated.js";
+      await writeFile(
+        consumer,
+        `import { type Handlers, procedures, store } from "./generated.js";
+import { input } from "./validation/procedures/app-note.js";
+import { withResult } from "@aotter/mantle/mcp";
 const good: Handlers = { "app-note": async (ctx, input) => {
+  // @ts-expect-error undeclared handler has no raw handle
+  ctx.db;
+  // @ts-expect-error handler Store exposes no root transaction method
+  ctx.store.transaction;
+  ${
+    target === "cloudflare-d1"
+      ? ""
+      : `await ctx.transaction(async tx => {
+    // @ts-expect-error undeclared transaction callback has no raw handle
+    tx.db;
+    // @ts-expect-error callback Store exposes no root transaction method
+    tx.store.transaction;
+  });`
+  }
   await ctx.store.views["notes-list"]({});
   const [row] = await ctx.store.batch([ctx.store.collection("notes").insert(input)]);
   const title: string = row.title;
   return { title };
+}, "native-note": async (ctx, input) => {
+  const db: Parameters<typeof store>[0] = ctx.db;
+  ${
+    target === "cloudflare-d1"
+      ? ""
+      : `await ctx.transaction(async tx => {
+    const txDb: typeof db = tx.db;
+    return txDb;
+  });`
+  }
+  return input;
 } };
 async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   const title: string = (await store(db, caller, { handlers: good }).procedures["app-note"]({ title: "t" })).title;
+  // a ref Procedure's validated input needs no cast
+  await store(db, caller, { handlers: good }).procedures["app-note"](input({ title: "t" }));
   // @ts-expect-error handlers required at wiring point
   store(db, caller);
   // @ts-expect-error options must supply handlers
@@ -175,32 +265,59 @@ async function check(db: Parameters<typeof store>[0], caller: Parameters<typeof 
   // @ts-expect-error excess variable implementation
   store(db, caller, { handlers: extra });
   // @ts-expect-error wrong input
-  store(db, caller, { handlers: { "app-note": async (ctx, input: { title: number }) => ({ title: "t" }) } });
+  store(db, caller, { handlers: { ...good, "app-note": async (ctx, input: { title: number }) => ({ title: "t" }) } });
   // @ts-expect-error wrong output
-  store(db, caller, { handlers: { "app-note": async () => ({ title: 1 }) } });
+  store(db, caller, { handlers: { ...good, "app-note": async () => ({ title: 1 }) } });
+  // a handler may return its output in a withResult wrapper; the Store still returns the output alone
+  const wrapped = { ...good, "app-note": async () => withResult({ title: "t" }, { content: [{ type: "text", text: "card" }] }) };
+  const fromWrapped: string = (await store(db, caller, { handlers: wrapped }).procedures["app-note"]({ title: "t" })).title;
+  // @ts-expect-error wrong output inside the wrapper
+  store(db, caller, { handlers: { ...good, "app-note": async () => withResult({ title: 1 }, {}) } });
+  // @ts-expect-error only withResult makes a wrapper: a plain { data } is neither the output nor one
+  store(db, caller, { handlers: { ...good, "app-note": async () => ({ data: { title: "t" } }) } });
   // @ts-expect-error handler must return Promise
-  store(db, caller, { handlers: { "app-note": () => ({ title: "t" }) } });
+  store(db, caller, { handlers: { ...good, "app-note": () => ({ title: "t" }) } });
   // @ts-expect-error ref Procedures only in Store map
   procedures["app-note"];
   // @ts-expect-error title required
   await store(db, caller, { handlers: good }).procedures["app-note"]({});
 }
-`);
+`,
+      );
       roots.push(consumer);
     }
     const plain = resolve(dir, "plain");
     await writeGenerated(plain, await files("bun-sqlite", schema.slice(0, -4)), false);
     const consumer = resolve(plain, "consumer.ts");
-    await writeFile(consumer, `import { store } from "./generated.js";
+    await writeFile(
+      consumer,
+      `import { store } from "./generated.js";
 function check(db: Parameters<typeof store>[0], caller: Parameters<typeof store>[1]) {
   store(db, caller);
   // App wiring is the same with or without ref Procedures: an empty Handlers object is accepted.
   store(db, caller, { handlers: {} });
-}`);
+}`,
+    );
     roots.push(consumer);
-    const program = ts.createProgram(roots, { strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, skipLibCheck: true, types: ["node", "bun-types"], typeRoots: [resolve(import.meta.dir, "../node_modules/@types"), resolve(import.meta.dir, "../node_modules")] });
-    expect(ts.getPreEmitDiagnostics(program).map(d => `${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`).join("\n")).toBe("");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+    const program = ts.createProgram(roots, {
+      strict: true,
+      noEmit: true,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.NodeNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeNext,
+      skipLibCheck: true,
+      types: ["node", "bun-types"],
+      typeRoots: [resolve(import.meta.dir, "../node_modules/@types"), resolve(import.meta.dir, "../node_modules")],
+    });
+    expect(
+      ts
+        .getPreEmitDiagnostics(program)
+        .map(d => `${d.file?.fileName} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, " ")}`)
+        .join("\n"),
+    ).toBe("");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }, 15_000);
 
 test("ctx.transaction makes a handler's writes atomic, joins an outer transaction, and is absent on D1", async () => {
@@ -208,17 +325,23 @@ test("ctx.transaction makes a handler's writes atomic, joins an outer transactio
   const app = await loadGenerated(generated["generated.ts"]!);
   const db = new Database(":memory:");
   const failure = new Error("second write failed");
-  const titles = () => db.query("SELECT title FROM notes ORDER BY title").all().map((r: any) => r.title);
+  const titles = () =>
+    db
+      .query("SELECT title FROM notes ORDER BY title")
+      .all()
+      .map((r: any) => r.title);
   try {
     db.exec(generated["schema.sql"]!);
-    const handlers = { "app-note": async (ctx: any, input: { title: string }) => {
-      const write = async ({ store }: { store: any }) => {
-        await store.collection("notes").insert(input);
-        if (input.title.startsWith("fail")) throw failure;
-        return input;
-      };
-      return input.title.endsWith("plain") ? write(ctx) : ctx.transaction(write);
-    } };
+    const handlers = {
+      "app-note": async (ctx: any, input: { title: string }) => {
+        const write = async ({ store }: { store: any }) => {
+          await store.collection("notes").insert(input);
+          if (input.title.startsWith("fail")) throw failure;
+          return input;
+        };
+        return input.title.endsWith("plain") ? write(ctx) : ctx.transaction(write);
+      },
+    };
     const data = app.store(db, caller, { handlers });
     // Without ctx.transaction a handler's writes are not atomic: the first one stays.
     await expect(data.procedures["app-note"]({ title: "fail plain" })).rejects.toBe(failure);
@@ -226,12 +349,26 @@ test("ctx.transaction makes a handler's writes atomic, joins an outer transactio
     expect(await data.procedures["app-note"]({ title: "ok tx" })).toEqual({ title: "ok tx" });
     expect(titles()).toEqual(["fail plain", "ok tx"]);
     // Called inside a caller's transaction, ctx.transaction joins it instead of refusing a nested one.
-    await expect(data.transaction(async (tx: any) => { await tx.procedures["app-note"]({ title: "joined" }); throw failure; })).rejects.toBe(failure);
+    await expect(
+      data.transaction(async (tx: any) => {
+        await tx.procedures["app-note"]({ title: "joined" });
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
     expect(titles()).toEqual(["fail plain", "ok tx"]);
-  } finally { db.close(); }
+    // So does a handler reached through a Store given the transaction's own handle.
+    await expect(
+      data.transaction(async (_tx: any, raw: unknown) => {
+        await app.store(raw, caller, { handlers }).procedures["app-note"]({ title: "joined raw" });
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    expect(titles()).toEqual(["fail plain", "ok tx"]);
+  } finally {
+    db.close();
+  }
   expect((await files("cloudflare-d1"))["generated.ts"]).not.toContain("readonly transaction");
 });
-
 
 test("ctx.store.batch joins the caller transaction and a caught failure still rolls it back", async () => {
   const generated = await files("bun-sqlite");
@@ -240,30 +377,44 @@ test("ctx.store.batch joins the caller transaction and a caught failure still ro
   let failure: unknown;
   try {
     db.exec(generated["schema.sql"]!);
-    const handlers = { "app-note": async ({ store, transaction }: any, input: { title: string }) => {
-      const write = async ({ store }: any) => {
-        const notes = store.collection("notes");
-        const [row] = await store.batch([
-          notes.insert(input),
-          input.title.startsWith("fail") ? notes.update("missing", input, { lock: 1 }) : notes.insert({ title: input.title + " second" }),
-        ]);
-        return { title: row.title };
-      };
-      return input.title.endsWith("joined") ? transaction(write) : write({ store });
-    } };
+    const handlers = {
+      "app-note": async ({ store, transaction }: any, input: { title: string }) => {
+        const write = async ({ store }: any) => {
+          const notes = store.collection("notes");
+          const [row] = await store.batch([
+            notes.insert(input),
+            input.title.startsWith("fail")
+              ? notes.update("missing", input, { lock: 1 })
+              : notes.insert({ title: input.title + " second" }),
+          ]);
+          return { title: row.title };
+        };
+        return input.title.endsWith("joined") ? transaction(write) : write({ store });
+      },
+    };
     const data = app.store(db, caller, { handlers });
-    const titles = () => db.query("SELECT title FROM notes ORDER BY title").all().map((r: any) => r.title);
+    const titles = () =>
+      db
+        .query("SELECT title FROM notes ORDER BY title")
+        .all()
+        .map((r: any) => r.title);
     await expect(data.procedures["app-note"]({ title: "fail standalone" })).rejects.toMatchObject({ code: "CONFLICT" });
     expect(titles()).toEqual([]);
     expect(await data.procedures["app-note"]({ title: "ok standalone" })).toEqual({ title: "ok standalone" });
     const before = titles();
     for (const title of ["fail outer", "fail joined"]) {
-      const result = await data.transaction(async (tx: any) => {
-        await tx.collection("notes").insert({ title: "outer write" });
-        try { await tx.procedures["app-note"]({ title }); } catch (error) { failure = error; }
-        // A successful batch after the failure does not clear rollback-only state.
-        await tx.batch([tx.collection("notes").insert({ title: "after caught failure" })]);
-      }).catch((error: unknown) => error);
+      const result = await data
+        .transaction(async (tx: any) => {
+          await tx.collection("notes").insert({ title: "outer write" });
+          try {
+            await tx.procedures["app-note"]({ title });
+          } catch (error) {
+            failure = error;
+          }
+          // A successful batch after the failure does not clear rollback-only state.
+          await tx.batch([tx.collection("notes").insert({ title: "after caught failure" })]);
+        })
+        .catch((error: unknown) => error);
       expect(failure).toMatchObject({ code: "CONFLICT" });
       expect(result).toBe(failure);
       expect(titles()).toEqual(before);
@@ -272,32 +423,190 @@ test("ctx.store.batch joins the caller transaction and a caught failure still ro
       expect(await tx.procedures["app-note"]({ title: "ok joined" })).toEqual({ title: "ok joined" });
     });
     expect(titles()).toEqual([...before, "ok joined", "ok joined second"].sort());
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
 });
 
 test("a caught batch rejection with undefined still rejects and rolls back its outer transaction", async () => {
-  const generated = await files("bun-sqlite"), app = await loadGenerated(generated["generated.ts"]!);
+  const generated = await files("bun-sqlite"),
+    app = await loadGenerated(generated["generated.ts"]!);
   const db = new Database(":memory:");
   try {
     db.exec(generated["schema.sql"]!);
     // Fault only this fixture's native execution, retaining a real SQLite transaction underneath.
-    const handle = { exec: db.exec.bind(db), transaction: db.transaction.bind(db), query(sql: string) {
-      const statement = db.query(sql);
-      return { columnNames: statement.columnNames, run: statement.run.bind(statement), all(...values: any[]) {
-        if (values.includes("throw undefined")) throw undefined;
-        return statement.all(...values);
-      } };
-    } };
+    const handle = {
+      exec: db.exec.bind(db),
+      transaction: db.transaction.bind(db),
+      query(sql: string) {
+        const statement = db.query(sql);
+        return {
+          columnNames: statement.columnNames,
+          run: statement.run.bind(statement),
+          all(...values: any[]) {
+            if (values.includes("throw undefined")) throw undefined;
+            return statement.all(...values);
+          },
+        };
+      },
+    };
     const data = app.store(handle, caller, { handlers: {} });
     let caught = false;
-    const outcome = await data.transaction(async (tx: any) => {
-      const notes = tx.collection("notes");
-      await notes.insert({ title: "before" });
-      await tx.batch([notes.insert({ title: "throw undefined" })]).catch((error: unknown) => { caught = true; expect(error).toBeUndefined(); });
-      await tx.batch([notes.insert({ title: "after" })]);
-    }).then(() => ({ resolved: true }), (error: unknown) => ({ rejected: true, error }));
+    const outcome = await data
+      .transaction(async (tx: any) => {
+        const notes = tx.collection("notes");
+        await notes.insert({ title: "before" });
+        await tx.batch([notes.insert({ title: "throw undefined" })]).catch((error: unknown) => {
+          caught = true;
+          expect(error).toBeUndefined();
+        });
+        await tx.batch([notes.insert({ title: "after" })]);
+      })
+      .then(
+        () => ({ resolved: true }),
+        (error: unknown) => ({ rejected: true, error }),
+      );
     expect(caught).toBe(true);
     expect(outcome).toEqual({ rejected: true, error: undefined });
     expect(db.query("SELECT * FROM notes").all()).toEqual([]);
-  } finally { db.close(); }
+  } finally {
+    db.close();
+  }
+});
+
+test("native database declaration validates and changes the access descriptor", async () => {
+  const { compilePlan, d1Dialect } = await import("../src/build/compiler.js");
+  const { describeApp, diffApp } = await import("../src/domain/describe/index.js");
+  const compile = async (text: string) =>
+    compilePlan({ sources: [{ sourceId: "native.yaml", text }] }, d1Dialect, "operational");
+  for (const text of [
+    ref.replace("  handler:", "  db: true\n  handler:"),
+    nativeRef.replace("{ref: app.createNote}", "{sql: 'SELECT 1'}"),
+  ]) {
+    const result = await compile(text);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some(d => d.path.endsWith("/spec/db"))).toBe(true);
+  }
+  const trigger = `---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: call-note}
+spec:
+  source: {kind: http, method: POST, path: /api/note}
+  target: {procedure: app-note}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: admin-note}
+spec:
+  source: {kind: mcp, surface: admin}
+  target: {procedure: app-note}
+`;
+  const before = await compile(ref + trigger),
+    after = await compile(nativeRef + trigger);
+  if (!before.ok || !after.ok) throw Error("compile failed");
+  const old = await describeApp(before.plan),
+    next = await describeApp(after.plan);
+  const legacy = JSON.parse(JSON.stringify(old));
+  for (const t of legacy.targets) {
+    delete t._meta.nativeDatabase;
+    for (const v of t._meta.variants) delete v.nativeDatabase;
+  }
+  expect(diffApp(legacy, old)).toEqual([]);
+  expect(old.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(false);
+  expect(next.targets.find(t => t._meta.id === "procedure:app-note")!._meta.nativeDatabase).toBe(true);
+  expect(diffApp(old, next)).toContainEqual(
+    expect.objectContaining({ id: "procedure:app-note", field: "nativeDatabase", direction: "widened" }),
+  );
+  for (const id of ["rest:POST /api/note", "admin:POST /operations/:name"]) {
+    const oldRoute = old.targets.find(t => t._meta.id === id)!._meta;
+    const newRoute = next.targets.find(t => t._meta.id === id)!._meta;
+    expect(newRoute.nativeDatabase).toBe(true);
+    expect(newRoute.variants.find(v => v.id === "procedure:app-note")!.nativeDatabase).toBe(true);
+    expect(newRoute.targetHash).not.toBe(oldRoute.targetHash);
+  }
+});
+
+for (const target of targets) {
+  const pgUrl =
+    target === "bun-postgres"
+      ? process.env.MANTLE_NEXT_BUN_PG_URL
+      : target === "cloudflare-postgres"
+        ? process.env.MANTLE_NEXT_WORKER_PG_URL
+        : undefined;
+  test.skipIf(target.endsWith("postgres") && !pgUrl)(
+    `${target}: native handles are present only for declared ref handlers and callbacks`,
+    async () => {
+      for (const native of [false, true]) {
+        const app = await loadGenerated((await files(target, schema + (native ? nativeRef : ref)))["generated.ts"]!);
+        const db =
+          target === "bun-postgres"
+            ? new SQL(pgUrl!)
+            : target === "cloudflare-postgres"
+              ? postgres(pgUrl!)
+              : new Database(":memory:");
+        try {
+          const assertContext = (ctx: any) => {
+            expect("db" in ctx).toBe(native);
+            expect("transaction" in ctx.store).toBe(false);
+          };
+          const root = app.store(db, caller, {
+            handlers: {
+              "app-note": async (ctx: any, input: { title: string }) => {
+                assertContext(ctx);
+                if (native) expect(ctx.db).toBeDefined();
+                if (target === "cloudflare-d1") {
+                  expect("transaction" in ctx).toBe(false);
+                  return input;
+                }
+                return ctx.transaction(async (tx: any) => {
+                  assertContext(tx);
+                  if (native) expect(tx.db).toBeDefined();
+                  return input;
+                });
+              },
+            },
+          });
+          const input = { title: "test" };
+          expect(await root.procedures["app-note"](input)).toEqual(input);
+          if (target !== "cloudflare-d1")
+            expect(await root.transaction((tx: any) => tx.procedures["app-note"](input))).toEqual(input);
+        } finally {
+          if (db instanceof Database) db.close();
+          else await db.end();
+        }
+      }
+    },
+  );
+}
+
+test("warning-phase generated code keeps its transaction callback contract", async () => {
+  const app = await loadGenerated((await files("bun-sqlite"))["generated.ts"]!);
+  const db = new Database(":memory:");
+  try {
+    const root = app.store(db, caller, { handlers: {} });
+    const verify = async (store: object, handle: unknown) => {
+      let warnings = 0;
+      await handlerTransaction(
+        store,
+        handle,
+        () => warnings++,
+      )(async ctx => {
+        expect(warnings).toBe(0);
+        expect(ctx.db).toBeDefined();
+        expect(warnings).toBe(1);
+        expect(typeof ctx.store.transaction).toBe("function");
+      });
+      await handlerTransaction(
+        store,
+        handle,
+      )(async ctx => {
+        expect(ctx.db).toBeDefined();
+      });
+    };
+    await verify(root, db);
+    await root.transaction(verify);
+  } finally {
+    db.close();
+  }
 });

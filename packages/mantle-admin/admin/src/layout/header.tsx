@@ -19,10 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@aotter/mantle-ui/kit";
 import { fieldLabel } from "@/lib/field-label";
 import type { HeaderProps } from "../app/slot-props";
 import { useShell } from "./shell-context";
-import {
-  LanguagePreferenceDropdown,
-  ThemePreferenceDropdown,
-} from "./preference-controls";
+import { LanguagePreferenceDropdown, ThemePreferenceDropdown } from "./preference-controls";
 
 export function Header({ title, actions }: HeaderProps): React.ReactElement {
   const { pathname } = useAdminLocation();
@@ -36,10 +33,15 @@ export function Header({ title, actions }: HeaderProps): React.ReactElement {
       className="group/header absolute inset-x-0 top-0 z-30 flex h-14 shrink-0 items-center gap-1 border-b px-2 sm:gap-2 sm:px-4"
     >
       <SidebarTrigger className="-ms-1 md:hidden" aria-label={t(language, "common.toggleSidebar")} />
-      <Breadcrumb className="min-w-0 max-sm:group-has-[[data-slot=page-header-actions]:not(:empty)]/header:hidden" aria-label={t(language, "common.breadcrumb")}>
+      <Breadcrumb
+        className="min-w-0 max-sm:group-has-[[data-slot=page-header-actions]:not(:empty)]/header:hidden"
+        aria-label={t(language, "common.breadcrumb")}
+      >
         <BreadcrumbList className="flex-nowrap">
           <BreadcrumbItem className="hidden sm:block">
-            <BreadcrumbLink href={site?.href ?? "/admin"}>{site?.title ?? t(language, "admin.consoleTitle")}</BreadcrumbLink>
+            <BreadcrumbLink href={site?.href ?? "/admin"}>
+              {site?.title ?? t(language, "admin.consoleTitle")}
+            </BreadcrumbLink>
           </BreadcrumbItem>
           {current ? (
             <>
@@ -67,21 +69,18 @@ export function Header({ title, actions }: HeaderProps): React.ReactElement {
           </Tooltip>
         ) : null}
         {publicUrl ? (
-          <span className="hidden sm:inline-flex"><Tooltip>
-            <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="icon-sm">
-                <a
-                  href={publicUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={t(language, "common.viewSite")}
-                >
-                  <ExternalLink aria-hidden />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
-          </Tooltip></span>
+          <span className="hidden sm:inline-flex">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button asChild variant="ghost" size="icon-sm">
+                  <a href={publicUrl} target="_blank" rel="noreferrer" aria-label={t(language, "common.viewSite")}>
+                    <ExternalLink aria-hidden />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t(language, "common.viewSite")}</TooltipContent>
+            </Tooltip>
+          </span>
         ) : null}
         <LanguagePreferenceDropdown compact />
         <ThemePreferenceDropdown compact />

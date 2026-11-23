@@ -82,8 +82,13 @@ Browser pages: a collection at `/admin/c/<schema>`, an admin View at `/admin/vie
 ## HTTP routes
 
 All paths below start with `/admin/api` and require an admin session; mutations
-also require the shared same-origin check. Mount `entries(...)` for collection
-routes. Send JSON with `Content-Type: application/json`.
+also require the shared same-origin check. Without a session a route answers 401
+`UNAUTHENTICATED`, and a signed-in caller without an admin session 403 `AUTH_DENIED`
+with `minimumRole`. The path and method are checked first, for every caller: a
+path no route matches is 404 `NOT_FOUND`, a method the path does not take is 405
+`METHOD_NOT_ALLOWED` with `Allow`, and a malformed path (an encoded `/`, `\` or
+NUL, or a bad escape) is 400 `INPUT_VALIDATION_FAILED`. Mount `entries(...)` for
+collection routes. Send JSON with `Content-Type: application/json`.
 
 These routes serve Admin's console with its session cookie; they are not a client API. A REST client reads back what it
 wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
@@ -97,10 +102,10 @@ wrote through the app's own Views with HTTP Triggers (`mantle help trigger`).
 | `POST /entries/{id}/unpublish?collection=<schema>` | Body `{ expectedVersion }`; returns the entry to draft. |
 | `POST /operations/{name}` | Body is the Procedure's input; runs an Admin operation (a Procedure with `requires: ctx.admin` or a `target`). Returns `{ ok: true, output }`, where `output` is what REST and MCP return (`{ results }` for a SQL Procedure). |
 | `GET /views/{name}` | Generated admin View query parameters plus `limit`/`cursor`; returns `{ rows, nextCursor? }`. |
-| `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
+| `GET /view-batch?names=a,b` | One to 20 comma-separated admin View names, deduplicated; reads the first row of each as the caller, with the single route's checks (`requires`, scope, TTL, `authorize`), and returns `{ views: { <name>: { rows } \| { unavailable: true } \| { error: true } } }`. A refused View and a missing one are the same `{ unavailable: true }`; a View that cannot answer with no input, or that `authorize` refuses with a 429, is `{ error: true }`. Neither fails the batch. Empty or more than 20 names is a 400, before the database is acquired. |
 | `GET /me` | Returns `{ userId, role, admin, login, image }` for the signed-in caller. |
 | `GET /admin` | Administrators and pending invitations, plus `adminRoles` (mounted with `identity`). |
-| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email. |
+| `GET /members?search=&limit=&cursor=&direction=` | Pages members (1–100), searching id, name and email; a search longer than 48 characters is `INPUT_VALIDATION_FAILED`. |
 | `PATCH /admin/{id}/role` | Body `{ role }`: an admin role name grants Admin, `null` removes it. You cannot change your own role. |
 | `POST /admin/invitations` | Body `{ email, role }`; invites an administrator by email. Returns `{ ok, userId, emailSent }`. |
 | `DELETE /admin/invitations/{id}` | Revokes an invitation nobody has signed in to yet (otherwise 409). |
@@ -181,8 +186,16 @@ way to name them. Leave `refresh` out when unsure; a View you forget to name kee
 In an MCP host, `useView` and `useOperation` call the View's or operation's admin MCP tool (its name lowercased, kebab to snake) through the host (`tools/call`),
 under the caller's MCP authorization; the browser-only hooks read `unavailable` there, so declare the data an App needs as an
 admin View. Without the host's `serverTools`, `run` is `undefined`. `useHost()` is `null` in the browser and the host's API
-(context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`) in a host; `useAdminSurface()`
-says which. `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
+(context, capabilities, `openLink`, `sendMessage`, `updateModelContext`, `requestDisplayMode`, `downloadFile`,
+`registerTools`) in a host; `useAdminSurface()` says which. `sendMessage` and `downloadFile` resolve to `"accepted"` (the
+host answered without an error, not proof of delivery), `"refused"` (an error answer, or not offered) or `"unknown"` (no
+answer came, so it may still arrive; do not report a failure); see [the MCP Apps guide](mcp-apps.md#rules-for-a-component-that-renders-in-a-host).
+`requestDisplayMode(mode)` resolves to the mode the host set: a refusal answers the current mode, so compare it with the
+mode asked for. Call it directly in a click or key handler while the App has focus; Claude refuses `fullscreen` without a
+recent click or key press. Claude reports `fullscreen` in its side panel too, so a way back reads "back to the conversation".
+`registerTools` lets a page add app tools the model may call while it is shown, with plain JSON Schema input and its own
+handler; register in a `useEffect` and return what it returns, so the tools go when the page unmounts. Host-to-App tool calls
+are in the MCP Apps draft specification and host support varies; see [a page's own app tools](mcp-apps.md#a-pages-own-app-tools). `@aotter/mantle-admin/hooks` also exports the same hooks untyped, for code without generated types.
 
 `@aotter/mantle-admin/app` and `/hooks`, and so `generated/admin-client.ts`, which imports them, run in the browser only:
 `mantle bundle` refuses them in the Worker's startup graph.
@@ -224,9 +237,10 @@ collection's name, `<field>` one of its fields and `<column>` a column of an adm
 | `Shell` | browser | `children`, `nav` (sidebar groups), `brand` |
 | `Sidebar` | browser | `groups`, `brand`, `footer?` (above the signed-in user) |
 | `Header` | browser | `title?`, `actions?` (before the built-in controls) |
-| `Brand` | browser | `title`, `image?`, `href?` |
+| `Brand` | browser | `title`, `image?`, `href?`, `placement` (also outside the console, [below](#brand)) |
 | `Home` | browser | `collections`, `site` (what the page shows; the built-in page loads its own data) |
 | `CollectionList` | browser | `collection` (filters come from the page's location) |
+| `SignIn` | browser | `methods`, `returnTo`, `oauthQuery`, `emailAutoComplete`, `onSignedIn(next)` ([below](#sign-in)) |
 | `RecordView` | browser | `collection`, `entryId`, `surface` |
 | `record.aside:<schema>` | browser | `collection`, `entry`, `surface` |
 | `record.actions:<schema>` | browser | `collection`, `entry`, `surface` |
@@ -399,10 +413,75 @@ plugin's is the built-in component, and the application's own `components` are o
 load. `mantle bundle` builds that App from this same entry (`<assets>/admin/mcp-app.html`) and fails it on an origin that is not
 declared. The build writes the declaration into the file, and `adminMcpApps` sends it to the host as `_meta.ui.csp` on `resources/read`.
 A page may also be an MCP App view: `pages: [{ path, title, element, mcp: { renders: "<view>" } }]`, where `renders` is an admin
-View that has an MCP tool (`tsc` checks it against the generated `admin-client.ts`).
+View that has an MCP tool (`tsc` checks it against the generated `admin-client.ts`), an admin operation, or an application tool
+declared in `interface AdminMcpTools` that `adminMcpApps({ tools })` lists.
 
 Authorization is unchanged by any of this. A component that shows or hides something grants or denies nothing; the server
 checks every route, View and Procedure.
+
+### Sign-in
+
+`/admin/sign-in` lists the methods `authRoutes` returns from `GET <auth>/methods` (`email-otp`, `magic-link`, `passkey`,
+`social`, `oauth`) through the `SignIn` slot. Admin renders the email code, magic link, social and OAuth methods; it
+renders nothing for `passkey`, which is listed for an application that builds its own. Pass changed props to
+`renderDefault` to reorder or drop `methods`, set the email field's `emailAutoComplete`, or wrap `onSignedIn`; render
+your own elements around it to add a method of your own.
+
+Admin calls `onSignedIn(next)` once the email code has signed in. `next` is where Admin goes by default: Better Auth's
+OAuth authorize continuation when the sign-in came from an OAuth client such as an MCP connector, or the page's return
+path. Run your own step first, then navigate to the same `next`. Redirecting methods (social, OAuth, magic link) leave
+the page and do not call it.
+
+```tsx
+export default defineAdmin(admin, {
+  components: {
+    SignIn: (props) => props.renderDefault({ ...props,
+      onSignedIn: next => { sessionStorage.setItem("after-sign-in", next); window.location.assign("/admin/p/welcome"); } }),
+  },
+  pages: [{ path: "welcome", title: "Welcome", element: <Welcome /> }],
+});
+```
+
+Keep `next` out of the step page's URL: read it back from where your wrapper stored it, then navigate there unchanged.
+A page that follows a `?next=` from its own address is an open redirect, and `next` may be Better Auth's absolute OAuth
+continuation, so a "same-origin only" check would also break connector sign-in. The signed-in method stays locked once
+`onSignedIn` runs, so navigate away (or replace the page) rather than leaving the card in place.
+
+### Brand
+
+`Brand` renders at the top of the sidebar and, when the application supplies one, on the pages shown before or without
+the console: above the card of the sign-in page, the OAuth consent page, connected apps (for a signed-in user who is not
+an admin), the access-denied and error pages, and in the bar of the frame shown while the session loads (the loading
+states inside the console keep their placeholder: the sidebar already shows the brand). `placement` says which:
+`sidebar`, `sign-in`, `consent`, `connected-apps`, `access-denied`, `error` or `loading`. Props you pass to
+`renderDefault` may leave `placement` out to keep the one received. Outside the sidebar:
+
+- the box is at most 40px high and as wide as the card, and clips what overflows, so size a logo for it;
+- the site settings are read only after sign-in, so `title` is the generic console title ("Admin console", localized),
+  `image` is absent, and `renderDefault` renders nothing: render your own logo and name;
+- a component that returns `null` for a placement leaves that page as it is without a `Brand`, and so does one that
+  throws there, such as one that needs the sidebar's context; the page still works.
+
+Without a `Brand` component these pages are unchanged. The loading frame never shows the sign-in card.
+
+```tsx
+const Logo = ({ size }: { size: number }) => <img src="/brand/logo.svg" alt="" width={size} height={size} />;
+
+export default defineAdmin(admin, {
+  components: {
+    Brand: (props) =>
+      props.placement === "sidebar" ? (
+        <a href={props.href} className="flex items-center gap-2 p-1"><Logo size={28} /><span>{props.title}</span></a>
+      ) : (
+        <span className="flex items-center gap-2 font-semibold"><Logo size={32} />Acme</span>
+      ),
+  },
+});
+```
+
+Your colours reach these pages the same way as the console's: they use the [public tokens](admin-ui.md) your stylesheet
+overrides. Core's own consent and connected-apps pages, for a service without Admin, run no React; give them the same
+name, logo and primary colour through [`authRoutes`' `brand`](oauth.md#brand).
 
 ### Components that also render in an MCP host
 
@@ -417,7 +496,8 @@ for one of these slots must:
 3. assume no width: a host sets it;
 4. render something on both surfaces when it branches on `surface` or `useAdminSurface()`.
 
-`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it.
+`useOpenLink()` resolves `false` for anything but an http(s) URL, and when a host cannot or refuses to open it or does not
+answer in time (a link the person confirms late can still open).
 
 `mantle bundle` enforces 1 and 2 on the built App (no `/admin/api`, no `document.cookie`, no undeclared remote origin; `window.open`
 and `target="_blank"` warn), and your CSS and Tailwind classes reach the App. The surface table, the theme mapping and the full
@@ -459,6 +539,11 @@ storage-only fields are absent from entry data and generated CSV export fields.
 Geo remains experimental: existing native outputs are readable, not generically
 editable. Metadata derives child relationships from `allCollections`.
 
+Entry `data`, `filter_field`, `scope_field` and `sort` name fields in their declared spelling (`orgId`), the keys entry
+`data` returns, on every target; unlike the [Store](../reference/manifest.md), Admin does not fold a storage spelling
+(`orgid`) or another casing to it but refuses it with 400, so a body that names one column twice is refused too. A create,
+filter or sort is refused before any SQL; a patch after reading the row, before any write. A date-time filter matches the
+stored instant in any offset.
 Entry queries validate indexed sort fields, directions, filters and limits
 1–500. `filter_field` and JSON `filter_values` are paired; each batch has at most
 50 scalar values. Search reuses native SQLite/D1 FTS and PostgreSQL behavior.
@@ -648,7 +733,9 @@ REST, MCP and storage are unchanged, entries a caller cannot see stay hidden, an
 
 - `Schema.spec.uiSchema.nav` and admin `View.spec.uiSchema.nav` take `group` (a group id), `order` (an integer;
   ascending; entries without one follow in that default order, collections before Views) and
-  `hidden: true` (out of the sidebar, still at its URL).
+  `hidden: true` (out of the sidebar, still at its URL). A Schema with no sidebar entry of its own (a child folded under
+  its parent, or a translation on its parent's language tabs) accepts `hidden: true`, which changes nothing; `group`,
+  `order` and `hidden: false` there are refused with `SCHEMA_UI_INVALID`.
 - Built-in groups need no declaration: `content`, `operations`, `reports`, `more`. A project declares every other
   group once, in `src/admin.tsx`: `defineAdmin(admin, { nav: { groups } })`, each with a title (text or
   `{ locale: text }`) and an `order` among the built-in groups' content 10, operations 20 and reports 30 (default 50);

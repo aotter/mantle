@@ -28,6 +28,22 @@ installs the exact candidate, then runs its `pnpm check`: `mantle generate`,
 The same reference is gated against exact tarballs before Core tagging. It is
 a test/example, not a scaffold product or another repository release.
 
+The packed-consumer checks (`scripts/check-packed-consumer.mjs`, behind
+`pnpm check:worker-consumer`, `scripts/check-examples.mjs` including `--fresh`,
+and `scripts/check-admin-build.mjs`) install without a lockfile, as a user
+copying an example would, so a dependency published minutes earlier could
+otherwise fail them. npm resolves only versions published at least
+`MANTLE_CONSUMER_MIN_RELEASE_AGE_DAYS` ago (`--before`, default 14). pnpm 10.16
+and newer resolve only versions published at least 120 minutes ago
+(`minimumReleaseAge`, through `npm_config_minimum_release_age`, which overrides
+it). The Mantle tarballs are local files with no publish time, so neither
+cutoff applies to them. The repository's pnpm 9 has no such setting: there a
+failed install is retried, three times 60 s apart, and six times 90 s apart
+when a registry tarball answers 404 (`ERR_PNPM_FETCH_404` on a `.tgz`, a
+version whose tarball has not reached every registry edge yet). The
+public-registry gate installs the just-published candidate and keeps its own
+three attempts 60 s apart.
+
 ## Changing release automation
 
 Before editing a release workflow, put a finite state table plus its
@@ -59,8 +75,7 @@ release reruns that same controller and version.
 candidate tag pointing at the last published candidate. Official channels
 are only `alpha`, `beta`, `rc`, and `latest`. Consumers must not install
 `mantle-release`. Deleting it after promotion is not part of the release:
-dist-tag DELETE only added failure and re-run state, and Actions
-`NPM_TOKEN` 403s on that DELETE.
+dist-tag DELETE only added failure and re-run state.
 
 ## Branches and channels
 
@@ -82,6 +97,13 @@ dist-tag DELETE only added failure and re-run state, and Actions
   changes only through promotion PRs and hotfix PRs (below); it is never pushed
   directly, rebased or force-updated. Both branches share one ruleset: PR, one
   approval, resolved threads and a current-base `Typecheck + tests` check.
+  On a PR into `main` that check is the Full checks workflow, for every
+  author: the PR CI's jobs, which it calls, plus its own examples and
+  integrations + browser jobs. On a ready PR into `develop` it is the PR CI
+  (`ci.yml`: typecheck, package tests against a PostgreSQL service and
+  `test:native`), for every author; on a draft it is skipped, which counts as
+  passing. A manual Full checks run reports `Full checks`, never
+  `Typecheck + tests`.
 - Stable is the only release that moves `latest`. A prerelease channel keeps
   its last version when a later stable publishes.
 - Publish uses `--tag mantle-release`. `mantle-release` is an internal
@@ -97,6 +119,17 @@ dist-tag DELETE only added failure and re-run state, and Actions
 1. Fetch Core refs, prove the version and tag unused. Preview GitHub generated
    notes since the previous tag; correct PR metadata and label release-only
    PRs skip-release-notes. Do not duplicate release entries in CHANGELOG.md.
+   Once the version's entry in [Releases](handbook/releases/index.md) is
+   written, run `node scripts/check-breaking.mjs --release-notes <version>
+   [--since <tag>]` (needs `gh`, tags and full history): it fails for every PR
+   labelled `breaking-change` and merged since `--since` that the version's
+   section does not mark breaking (a Breaking heading, a `**Breaking` item, or
+   a paragraph starting "Breaking" and the list after it). `--since` defaults
+   to the previous tag for a prerelease and to the previous stable tag for a
+   stable, whose section covers the whole line.
+   A version past a removed-subpath stub's `removeAfter` fails
+   `scripts/check-breaking.mjs` (in `pnpm check`) until the version PR deletes
+   that stub ([CONTRIBUTING](../CONTRIBUTING.md#removed-public-subpaths)).
 2. Align every workspace package, plugin and marketplace ref to the version.
    The controller checks package.json files and plugin manifests only; docs
    pins and the reference service's exact `@aotter/mantle*` dependencies are
@@ -119,8 +152,11 @@ dist-tag DELETE only added failure and re-run state, and Actions
 3. Review API compatibility and migration instructions for actual consumers.
    Frozen legacy consumers stay on their pinned version; do not make them
    follow new Core.
-4. Run `pnpm check`, including the reference service from exact packed
-   tarballs, skills, release invariants, types and tests. The controller runs
+4. Run `pnpm check:pg` (`pnpm check` and `test:native` against a throwaway
+   PostgreSQL), including the reference service from exact packed
+   tarballs, skills, release invariants, types and tests; plain `pnpm check`
+   skips every PostgreSQL test. The version PR body says which of the two ran.
+   The controller runs
    the same `pnpm check` against a PostgreSQL service (`MANTLE_PG_URL`), then
    four-target native conformance (`test:native`), before it tags. Inspect the `@aotter/mantle` docs payload
    (`scripts/sync-package-docs.mjs`: the upgrade guide, handbook, selected
@@ -132,7 +168,11 @@ dist-tag DELETE only added failure and re-run state, and Actions
    its `@aotter/mantle*` pins at freshly packed tarballs, resolves every other
    pin from the public registry and fails on any high or critical
    `npm audit` advisory, dev dependencies included. The controller runs the
-   same gate before it tags. On failure, bump the
+   same gate before it tags. For `0.2.2-alpha.6` only, it permits
+   [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+   in `picomatch` and the derived npm findings. Snyk revoked its advisory,
+   and the scaffold's service requests cannot supply glob rules to the Admin
+   build. On failure, bump the
    `docs/examples/app-shell/package.json` pins (Wrangler together with a
    `@cloudflare/workers-types` that satisfies its peer range), align
    `docs/examples/reference-service` and the SDK's own Wrangler devDependency,
@@ -142,10 +182,22 @@ dist-tag DELETE only added failure and re-run state, and Actions
    when its auth/kernel/generator trigger applies and before every alpha or beta.
    Before every release, alpha included, run Linux Full checks
    (`gh workflow run full-checks.yml --ref <version PR branch>`) on the frozen
-   version PR head, and link the green run from the version PR.
-5. Freeze the PR head for self review; CI must pass before merge. Merge into
-   `develop` with a merge commit for every version. For an alpha, dispatch
-   release.yml from that merge with `version` (without v). For beta, RC and
+   version PR head, and link the green run from the version PR. A promotion
+   PR into `main` runs the same workflow by itself.
+5. Freeze the PR head for self review; that Full checks run must pass before
+   merge, besides the PR's own `develop` CI, which runs `test:native` but not
+   Full checks' Wrangler/D1 integration step, the CLI and Admin native-server
+   tests, the four example runs or the Admin browser tests. A manual Full
+   checks run does not repeat the PR CI. What neither runs is checked here,
+   by the controller: the fresh-install matrix (`check-examples.mjs --fresh`,
+   npm and pnpm 10) and the Admin build under `npm ci --ignore-scripts`
+   (`check-admin-build.mjs`) run only in `release.yml`, so a failure there
+   first shows at release; worker-consumer, doc examples, OSS plugin and size
+   reports run in `pnpm check` (step 4 and the controller). Merge into
+   `develop` by rebase or with a merge commit: the controller needs the tip to
+   be the commit GitHub records as that PR's merge, which both produce. A
+   promotion into `main` is different and always takes a merge commit (below).
+   For an alpha, dispatch release.yml from that tip with `version` (without v). For beta, RC and
    stable, continue with the promotion below. The controller refuses an
    untagged source that is no longer the expected branch tip.
 
@@ -181,7 +233,7 @@ contains what `main` publishes and promotions never conflict.
    Every gate item passes with linked evidence or is explicitly deferred
    there, and no `release-gate` issue stays open against the version.
    Beta and RC need the gate defined, not passed.
-2. Merge the version PR into `develop` with a merge commit; note its SHA.
+2. Merge the version PR into `develop`; note the SHA of the resulting tip.
 3. Pin the promotion head at that SHA so later `develop` merges cannot ride
    along, then open the promotion PR against `main`:
 
@@ -226,19 +278,91 @@ gh release edit v<version> --notes-file notes.md
 Add the version's entry to [Releases](handbook/releases/index.md) in the same
 pass, so the handbook and the GitHub release describe the same thing.
 
+### What the handbook's release notes keep
+
+The handbook records how to upgrade from one stable release to the next.
+Prerelease notes are working notes for people testing that prerelease, not a
+permanent record:
+
+- An alpha, beta or RC entry is short: what to pin, what a tester must change
+  to keep running, and what is not yet verified. It does not need a full
+  migration guide for a change that a later prerelease may reshape or undo.
+  GitHub's generated notes already list every merged PR.
+- Brief never drops a breaking item. Each one is a `**Breaking: …**` item (or
+  sits under a Breaking heading) that references its PR and gives one
+  before → after line plus either the replacement or "no replacement yet"
+  with an issue link. The PR's Migration section is its source, and a fix,
+  feature or PR body is never the only place a break is announced.
+- When the stable is cut, replace that line's prerelease subsections with one
+  "Upgrading from `<previous stable>`" section that describes the final state
+  only, with full upgrade notes for each breaking item: what to change, the
+  replacement, and the stubs that release still ships. A change that was
+  introduced and then reworked or reverted between prereleases appears once,
+  as it shipped, or not at all.
+- Do not edit the notes of a prerelease that is already published to match
+  this: its packed docs are immutable. Apply it from the next version PR on.
+
 After publication, move docs/examples that were pinned to a packed checkout
 back to registry installation with an updated lockfile, and close the gate
 issue with the run link and completion evidence.
 
 ## Credentials and verification
 
-Core needs NPM_TOKEN for npmjs. Its job-scoped GITHUB_TOKEN creates the Core
-tag/release and mirrors GitHub Packages. No cross-repository fanout token is
-needed. Before tagging, verify credentials and new-version absence on both
-registries. Existing artifacts on retry must have matching integrity. The
-preflight cannot prove write access for a package's first publish
-(`@aotter/mantle-ui` with 0.2): `npm access` lists only existing packages, so
-confirm NPM_TOKEN has `@aotter` scope write before the immutable tag.
+npmjs authentication is npm
+[trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC): the
+repository holds no npm token. npmjs.com trusts the workflow file
+`release.yml` of this repository running in the GitHub environment
+`npm-publish`, and npm exchanges the job's identity for a short-lived
+credential at `npm publish` and `npm dist-tag add`. Provenance is attached
+automatically. Job-scoped GITHUB_TOKENs create the Core tag and release and
+mirror GitHub Packages. No cross-repository fanout token is needed.
+
+The controller is a chain of jobs, each with only the permissions it needs:
+
+| Job | Does | Permissions |
+|---|---|---|
+| `prepare` | Resolve state, source gates, pack; tarballs travel as a run artifact | `contents: read`, `pull-requests: read` |
+| `publish` | Preflight, Core tag, npmjs publish, metadata and artifact verification | `contents: write`, `packages: read`, `id-token: write`; environment `npm-publish` |
+| `mirror` | GitHub Packages mirror | `contents: read`, `packages: write` |
+| `consumer` | Public-registry reference Worker gate | `contents: read` |
+| `promote` | npmjs channel dist-tags | `contents: read`, `id-token: write`; environment `npm-publish` |
+| `release` | GitHub Packages channel dist-tags, GitHub release | `contents: write`, `packages: write` |
+
+Every step of a job with `id-token: write` can mint the identity npmjs
+trusts. `publish` and `promote` therefore install no dependencies and run no
+package code: only npm and the dependency-free
+`scripts/verify-release-artifact.mjs` and `scripts/release-tag-order.mjs`.
+Keep it that way when editing them; the release self-test fails otherwise.
+Both install an exact npm (`OIDC_NPM_VERSION` in the workflow): trusted
+publishing needs npm 11.5.1 or later for `npm publish`, 11.21.0 or later for
+`npm dist-tag`, and Node 22.14.0 or later, on a GitHub-hosted runner.
+
+If the `npm-publish` environment has required reviewers, a release waits for
+approval twice: before `publish` and before `promote`.
+
+Before tagging, the preflight proves new-version absence on both registries
+and that the job token reads GitHub Packages. Existing artifacts on retry
+must have matching integrity. It cannot prove npmjs write access: OIDC does
+not authenticate `npm whoami` or `npm access`. A missing, expired or
+mismatched trusted publisher therefore fails at `npm publish`, after the
+immutable tag exists; see Recovery.
+
+### One-time npmjs.com setup
+
+For each of `@aotter/mantle-ui`, `@aotter/mantle` and `@aotter/mantle-admin`:
+npmjs.com → Packages → the package → Settings → Trusted publishing → GitHub
+Actions, with
+
+- Organization or user: `aotter`
+- Repository: `mantle`
+- Workflow filename: `release.yml`
+- Environment name: `npm-publish`
+- Allowed actions: publishing with `npm publish`, and **Allow npm dist-tag**
+
+Every field is case-sensitive and the environment name must match the
+workflow's exactly. A new configuration expires unless its first publish
+succeeds within 2 days, and an expired one cannot be edited, only deleted and
+recreated: create them shortly before the next release.
 
 Completion requires the Core tag SHA, all three npmjs/GPR packages, exact
 integrity, no workspace dependencies, a passing public-registry Worker gate,
@@ -249,6 +373,25 @@ This does not prove stable production soak or upgrade safety; the version's
 release-gate issue owns those acceptance requirements. An agent acceptance run
 uses only the version-matched authoring instructions, not an SDK checkout or
 generated site.
+
+### Close the shipped issues
+
+GitHub closes an issue from `Closes #N` only when the PR merges into the default
+branch, `main`; feature PRs merge into `develop`. Two automations cover that gap:
+
+- `.github/workflows/issue-status.yml`: when a PR merges into `develop`, each
+  issue it closes (`Closes`, `Fixes` or `Resolves #N`, one keyword per issue;
+  not `Refs`) gets the `pending-release` label and the comment "Merged into
+  develop by #PR; it ships in the next release.", and is closed as completed.
+- The `issues` job of `release.yml`, after the GitHub release exists: every
+  closed issue labelled `pending-release` whose PR is in the released commit gets `Released in <version>.` and
+  loses the label. It cannot fail the release (`continue-on-error`); a failure
+  shows as a warning in its log, and a rerun of the same release repeats it.
+
+Open means not done, `pending-release` means merged but unreleased, a "Released
+in" comment means shipped. The manual check that remains: issues whose PR used
+`Refs` but were in fact completed, to close by hand; and a reverted PR, whose
+issue must be reopened by hand (remove `pending-release` too).
 
 ## Recovery
 
@@ -268,6 +411,15 @@ packing, immutable tarball comparison, and the public-registry Worker gate.
 The controller tip must not rebuild an artifact whose identity is already
 published. Verify npm metadata still runs. The Worker gate stays skipped
 because the first run already passed it before promotion.
+
+When `npm publish` fails because the trusted publisher is missing, expired
+or does not match (workflow filename, environment name, allowed actions), the
+tag already exists and nothing is published. Fix the configuration on
+npmjs.com and dispatch the same version again from the same branch: the
+controller finds the tag, skips the source gates, packs, and publishes what
+is missing. The same holds when `npm dist-tag add` is refused in `promote`
+because **Allow npm dist-tag** is off: the packages are published and
+verified, and a second dispatch only promotes.
 
 Unpublish is reserved for actual secret/private-file exposure, never routine
 fixes. Infrastructure renames require their explicit config diff and live

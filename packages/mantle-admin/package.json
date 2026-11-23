@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle-admin",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Native Admin console for Mantle apps: React admin app and build, same-origin preview and Admin MCP App. Uses @aotter/mantle as a peer.",
   "keywords": [
     "mantle",
@@ -92,6 +92,10 @@
       "types": "./dist/server/mcp.d.ts",
       "import": "./dist/server/mcp.js"
     },
+    "./mcp-app": {
+      "types": "./dist/mcp-app.d.ts",
+      "import": "./dist/mcp-app.js"
+    },
     "./server/design": {
       "types": "./dist/server/design.d.ts",
       "import": "./dist/server/design.js"
@@ -99,19 +103,19 @@
   },
   "dependencies": {
     "@aotter/mantle-ui": "workspace:*",
-    "@dagrejs/dagre": "^3.1.1",
-    "@modelcontextprotocol/ext-apps": "2.0.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@tanstack/react-query": "^5.104.2",
+    "@dagrejs/dagre": "^3.1.3",
+    "@modelcontextprotocol/ext-apps": "2.0.4",
+    "@tailwindcss/vite": "^4.3.5",
+    "@tanstack/react-query": "^5.104.5",
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
-    "@vitejs/plugin-react": "^6.1.2",
-    "@xyflow/react": "^12.12.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "@xyflow/react": "^12.12.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.5.0",
-    "lucide-react": "^1.57.0",
-    "radix-ui": "^1.6.7",
+    "lucide-react": "^1.67.0",
+    "radix-ui": "^1.8.1",
     "react-day-picker": "^10.0.2",
     "react-markdown": "^10.1.0",
     "rehype-sanitize": "^6.0.0",
@@ -120,12 +124,12 @@
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "^4.3.3",
     "tw-animate-css": "^1.4.0",
-    "vite": "^8.3.4",
-    "vite-plugin-singlefile": "^2.3.0",
+    "vite": "^8.3.6",
+    "vite-plugin-singlefile": "^2.3.4",
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@aotter/mantle": "0.2.1",
+    "@aotter/mantle": "0.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "playwright-core": ">=1.40 <2"
@@ -142,18 +146,18 @@
     "@types/react-dom": "^19.3.0",
     "playwright": "catalog:",
     "playwright-core": "catalog:",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "shadcn": "^4.21.4",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "scripts": {
     "prebuild": "rm -rf dist .tsbuildinfo",
-    "build": "tsc -b tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts && vite build --config vite.testing.config.ts && shadcn build registry/registry.json -o dist/registry && rm dist/registry/registry.json",
+    "build": "node scripts/emit-mcp-labels.mjs && tsc -b tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && vite build --config vite.upload-card.config.ts && vite build --config vite.app.config.ts && node scripts/emit-app-types.mjs && vite build --config vite.preview.config.ts && vite build --config vite.testing.config.ts && shadcn build registry/registry.json -o dist/registry && rm dist/registry/registry.json",
     "typecheck": "tsc -p tsconfig.config.json && tsc --noEmit -p admin/tsconfig.json",
     "test": "bun test tests/native/*.test.ts && vitest run",
-    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run test/revisions-browser.test.ts test/media-picker-browser.test.ts admin/test/preview-boundary.test.ts admin/test/atom-graph-browser.test.ts admin/test/load-more-browser.test.ts test/mcp-app-browser.test.ts test/frontend-mcp-app-browser.test.ts test/custom-admin-browser.test.ts test/nav-browser.test.ts test/testing.test.ts test/registry-compat.test.ts",
+    "test:browser": "MANTLE_BROWSER_TESTS=1 vitest run",
     "check:size": "node ../../scripts/check-ui-size.mjs mantle-admin",
     "test:native-server": "MANTLE_NATIVE_TESTS=1 bun test tests/native/*.test.ts"
   }

@@ -12,7 +12,7 @@ These exports moved from `@aotter/mantle-ui` without compatibility aliases:
 | Former UI subpath | New Admin subpath |
 | --- | --- |
 | `/admin-preview` | `@aotter/mantle-admin/admin-preview` |
-| `/mcp-app` | none: `@aotter/mantle-admin/mcp-app` (the prebuilt `mantleAppHtml`) is gone too; the application builds the App (see MCP App) |
+| `/mcp-app` | The application builds the App. The old `mantleAppHtml` export was removed. |
 
 The package ships no prebuilt SPA or MCP App: `admin/index.html`, `admin/preview.html`,
 `admin/mcp-app.html` and `admin/host-bridge.js` are not exports. The application builds them (see Static
@@ -124,6 +124,9 @@ workspace remains part of the product.
 
 ## MCP App
 
+Custom MCP App views can import `applyHostContext` from `@aotter/mantle-admin/mcp-app`
+to use the same host presentation settings as Admin. See [Custom MCP App views](../../docs/handbook/guides/mcp-apps.md#custom-mcp-app-views).
+
 For compatible deployments, `adminMcpApps({ catalogue, previous })` retains
 application-owned `AdminMcpSnapshot` pages at their original URIs, with the current
 caller's catalogue filtering and no current renderer ownership. Commit snapshots
@@ -148,12 +151,14 @@ through to `_meta.ui`. What the App asks of a host is in the
 components must do to render there, and how it upgrades from the prebuilt App, in
 [Customising Admin for MCP hosts](../../docs/handbook/guides/mcp-apps.md#customising-admin-for-mcp-hosts).
 
-Without an explicit `uri`, this is a request-time contributor: after the endpoint's
-origin/identity gates, it derives `ui://mantle-admin/admin/<digest>` from the built
-HTML, full static catalogue and resource metadata. Workers retain only the raw
-immutable asset/identity per ASSETS binding; catalogue filtering happens per read.
-Bun rereads the file so a new build changes the URI in the same process. A custom
-`html` function must supply a build-specific `uri`. Use `renders: ['view_tool']`
+Without an explicit `uri`, tools link the fixed `ui://mantle-admin/admin`, which hosts can
+prefetch and cache across deploys (#1934). This is a request-time contributor: after the
+endpoint's origin/identity gates, it also serves the current build at
+`ui://mantle-admin/admin/<digest>`, derived from the built HTML, full static catalogue and
+resource metadata, for conversations that hold that URI. Workers retain only the raw
+asset/identity per ASSETS binding; catalogue filtering happens per read. Bun rereads the
+file, so a new build is served in the same process. An explicit `uri` (e.g.
+`ui://mantle-admin/admin/v2`) is for an App that saved conversations must not load. Use `renders: ['view_tool']`
 to partition Views when registering another renderer; competing claims fail.
 
 The App uses the pinned official ext-apps `App` and `PostMessageTransport` for initialization, notifications, host requests,
@@ -161,10 +166,11 @@ progress and cancellation. Admin adapts advertised host capabilities to its exis
 parent origin after the official handshake and narrows subsequent message delivery to that origin (opaque origins require
 `*`); protocol parsing stays in the official client. Closing the App rejects pending calls without retrying uncertain writes.
 
-`@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html })`, the compatibility test `mantle generate --admin` writes as
+`@aotter/mantle-admin/testing` exports `checkMcpApp({ catalogue, html, inspect })`, the compatibility test `mantle generate --admin` writes as
 `generated/admin-mcp-app.check.mjs`: it loads the built App in the official `AppBridge` under the spec's default CSP and fails on a network
 request, a console error, an exception or a missing size. It needs the optional peer `playwright-core` and Chrome (`MANTLE_TEST_CHROMIUM`);
-without a browser it fails. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
+without a browser it fails. An optional `inspect({ tool, theme, frame })` is called with each scenario's open App after the
+built-in checks (not when the frame never opened, at most 10 s); what it throws is reported. `frame` is a `playwright-core` type. See [Run the compatibility test](../../docs/handbook/guides/mcp-apps.md#run-the-compatibility-test).
 
 Unsafe native integer versions remain exact in transport; generic UI
 interactions require safe numeric versions. Entries outside that range are

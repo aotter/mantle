@@ -79,7 +79,7 @@ compile-cache run.
 
 ## Not measured here
 
-- Swolhalla's real-data snapshot (`checkin-wall`, `training-report`, and the
+- A downstream application's real-data snapshot (`checkin-wall`, `training-report`, and the
   other routes) and its relative targets: a maintainer-run follow-up with this
   script.
 - PostgreSQL: no database was available, so the PostgreSQL statements are

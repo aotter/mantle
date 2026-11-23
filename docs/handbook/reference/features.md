@@ -24,17 +24,26 @@ The native 0.2 SDK compiles the closed v2 grammar for four targets. Generation d
 | `ref` Procedures and typed `Handlers` | Generated `Handlers` type; pass implementations at `store(db, caller, { handlers })`; `mantle generate` lists them. See [ref Procedures](../guides/native-execution.md#ref-procedures). |
 | Optional site settings and media | Select `site` defaults at generation to emit the generated `site` module and deployment tables; native media upload lifecycle, app-owned R2/signing. See [media](../cloudflare/media-r2.md). |
 
+## Not a Core feature: do this instead
+
+Migrations, scheduling, Views over auth tables, caller conditions in `requires`, idempotency and rate-limit tables, a
+global unique index on a scoped Schema and membership predicates are the application's, each with a documented pattern:
+see the table in [what Core does, and what it does not](../concepts/core-boundary.md#what-core-does-not-do-and-what-to-do-instead)
+before concluding Core is missing a feature.
+
 ## Refused
 
 Each unsupported declaration produces `GENERATE_UNSUPPORTED`, its manifest path,
 and the following hint. Invalid grammar/SQL retains the compiler's own diagnostic
 codes and paths. Multiple declarations produce multiple diagnostics.
+`schedule` and `lifecycle` Trigger sources and `requires.guard` are not grammar:
+they fail validation with `INVALID_MANIFEST_ENVELOPE` and the hint to wire
+`scheduled()` yourself or write a custom handler (for a guard, one that checks
+authorization before executing queries). The patterns: [scheduled work](../cloudflare/deploy-and-operate.md#scheduled-work)
+and [caller conditions](authorization.md#caller-conditions).
 
 | Declaration | Do instead |
 | --- | --- |
-| `schedule` Triggers, including disabled ones | Wire `scheduled()` yourself. |
-| `lifecycle` Triggers: before/after hooks, including targets using `ref` | Write a custom handler. |
-| `requires.guard` on a View or Procedure | Write a custom handler that checks authorization before executing queries. |
 | A View projecting a native `geo` value | Select the latitude and longitude columns explicitly. |
 | Dynamic or repeated View output names | Give each SELECT output a unique explicit alias. |
 | Declared date/date-time outputs without one SELECT item per output | Expand the SELECT list explicitly. |

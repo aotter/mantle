@@ -1,0 +1,55 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "root": true,
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "packages/*/src/**",
+      "packages/*/admin/src/**",
+      "packages/*/tests/**",
+      "packages/*/test/**",
+      "packages/*/compiler-tests/**",
+      "packages/*/scripts/**",
+      "scripts/**",
+      "biome.json",
+      "package.json",
+      "tsconfig.base.json",
+      "!**/*.css",
+      "!**/*.html",
+      "!**/*.md",
+      "!**/*.yaml",
+      "!**/*.yml",
+      "!**/*.txt",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/generated",
+      "!**/.generated",
+      "!**/fixtures",
+      "!**/__snapshots__",
+      "!**/*.golden.*",
+      "!**/*.snapshot.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "lf",
+    "lineWidth": 120
+  },
+  "linter": { "enabled": false },
+  "assist": { "enabled": false },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "preserve",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "asNeeded",
+      "bracketSpacing": true
+    }
+  },
+  "json": { "formatter": { "trailingCommas": "none" } }
+}

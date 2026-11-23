@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 // Real-browser tests launch Chrome and a Vite server each; they are load-sensitive, so they run on demand
 // (`pnpm test:browser`, before releases) rather than in every PR run (#1465, 2026-10-13).
 // The two sandbox boundaries (design preview, MCP App host bridge) and the system wiring fit (#1666).
-const browser = ["test/revisions-browser.test.ts", "test/media-picker-browser.test.ts", "test/custom-admin-browser.test.ts", "test/frontend-mcp-app-browser.test.ts", "test/nav-browser.test.ts", "admin/test/preview-boundary.test.ts", "admin/test/atom-graph-browser.test.ts", "admin/test/load-more-browser.test.ts", "test/mcp-app-browser.test.ts", "test/testing.test.ts", "test/registry-compat.test.ts"];
+const browser = ["test/revisions-browser.test.ts", "test/upload-card-browser.test.ts", "test/media-picker-browser.test.ts", "test/custom-admin-browser.test.ts", "test/sign-in-slot-browser.test.ts", "test/frontend-mcp-app-browser.test.ts", "test/nav-browser.test.ts", "admin/test/preview-boundary.test.ts", "admin/test/atom-graph-browser.test.ts", "admin/test/load-more-browser.test.ts", "test/mcp-app-browser.test.ts", "test/testing.test.ts", "test/registry-compat.test.ts"];
 const withBrowser = process.env.MANTLE_BROWSER_TESTS === "1";
 
 export default defineConfig({
@@ -15,6 +15,9 @@ export default defineConfig({
     include: withBrowser ? browser : ["test/**/*.test.{ts,tsx}", "admin/{src,test}/**/*.test.{ts,tsx}"],
     exclude: withBrowser ? [] : browser,
     typecheck: { enabled: false },
+    // Each browser file launches Chrome and a Vite server. In parallel they starve each other on a small runner and a
+    // page misses its 10 s wait, so they run one file at a time.
+    fileParallelism: !withBrowser,
     // several tests run tsc or import the built library, which takes seconds while the workspace tests run in parallel
     testTimeout: 60_000,
   },

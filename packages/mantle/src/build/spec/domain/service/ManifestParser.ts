@@ -1,6 +1,15 @@
 import { LineCounter, parseAllDocuments } from "yaml";
 import { validateDiagnostic, type Diagnostic, type SourceLocation, type SourceSpan } from "../../kernel/diagnostic.js";
-import { API_VERSION, type LifecycleMode, type Manifest, type ManifestKind, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest } from "../model/ManifestGrammar.js";
+import {
+  API_VERSION,
+  type LifecycleMode,
+  type Manifest,
+  type ManifestKind,
+  type ProcedureManifest,
+  type SchemaManifest,
+  type TriggerManifest,
+  type ViewManifest,
+} from "../model/ManifestGrammar.js";
 import { KNOWN_KINDS, ManifestParseError, rejectUnknownKeys } from "./ManifestFieldChecks.js";
 import { collectSourceSpans, sourceLocation, sourceLocationForNode } from "./ManifestSourceSpans.js";
 import { validateProcedureSpec, validateViewSpec } from "./ProcedureViewSpecChecks.js";
@@ -33,11 +42,7 @@ type ParsedSchemaManifest = Omit<SchemaManifest, "spec"> & {
 };
 
 /** Canonical atom value after all static authoring defaults are materialized. */
-export type ParsedManifest =
-  | ParsedSchemaManifest
-  | ViewManifest
-  | ProcedureManifest
-  | TriggerManifest;
+export type ParsedManifest = ParsedSchemaManifest | ViewManifest | ProcedureManifest | TriggerManifest;
 
 export interface ParsedManifestEntry {
   readonly manifest: ParsedManifest;
@@ -72,7 +77,7 @@ export function parseManifestSources(
   defaultLifecycle: LifecycleMode = "publishing",
 ): ParseResult<ParsedManifestSet> {
   const parsed = parseManifestSourcesInternal(sourceSet, defaultLifecycle);
-  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+  if (parsed.diagnostics.some(diagnostic => diagnostic.severity === "error")) {
     return { ok: false, diagnostics: parsed.diagnostics };
   }
   return {
@@ -84,7 +89,10 @@ export function parseManifestSources(
   };
 }
 
-function parseManifestSourcesInternal(sourceSet: ManifestSourceSet, defaultLifecycle: LifecycleMode): InternalParseResult {
+function parseManifestSourcesInternal(
+  sourceSet: ManifestSourceSet,
+  defaultLifecycle: LifecycleMode,
+): InternalParseResult {
   const entries: ParsedManifestEntry[] = [];
   const diagnostics: Diagnostic[] = [];
   const sources = sourceSet?.sources;
@@ -100,27 +108,30 @@ function parseManifestSourcesInternal(sourceSet: ManifestSourceSet, defaultLifec
       continue;
     }
     if (typeof source.sourceId !== "string" || source.sourceId.length === 0) {
-      diagnostics.push(invalidSourceDiagnostic(
-        `/sources/${index}/sourceId`,
-        "manifest sourceId must be a non-empty string",
-      ));
+      diagnostics.push(
+        invalidSourceDiagnostic(`/sources/${index}/sourceId`, "manifest sourceId must be a non-empty string"),
+      );
       continue;
     }
     if (seenIds.has(source.sourceId)) {
-      diagnostics.push(invalidSourceDiagnostic(
-        `/sources/${index}/sourceId`,
-        `manifest sourceId '${source.sourceId}' is duplicated`,
-        source.sourceId,
-      ));
+      diagnostics.push(
+        invalidSourceDiagnostic(
+          `/sources/${index}/sourceId`,
+          `manifest sourceId '${source.sourceId}' is duplicated`,
+          source.sourceId,
+        ),
+      );
       continue;
     }
     seenIds.add(source.sourceId);
     if (typeof source.text !== "string") {
-      diagnostics.push(invalidSourceDiagnostic(
-        `/sources/${index}/text`,
-        `manifest source '${source.sourceId}' text must be a string`,
-        source.sourceId,
-      ));
+      diagnostics.push(
+        invalidSourceDiagnostic(
+          `/sources/${index}/text`,
+          `manifest source '${source.sourceId}' text must be a string`,
+          source.sourceId,
+        ),
+      );
       continue;
     }
     parseOneStream(source, entries, diagnostics, defaultLifecycle);
@@ -133,9 +144,7 @@ function invalidSourceDiagnostic(path: string, message: string, sourceId?: strin
     code: "INVALID_MANIFEST_ENVELOPE",
     severity: "error",
     path,
-    ...(sourceId
-      ? { source: { sourceId, documentIndex: 0, path } }
-      : {}),
+    ...(sourceId ? { source: { sourceId, documentIndex: 0, path } } : {}),
     message,
   });
 }
@@ -153,20 +162,14 @@ function parseOneStream(
     const docIndex = i;
     if (doc.errors.length > 0) {
       const error = doc.errors[0];
-      const location = sourceLocation(
-        source.sourceId,
-        docIndex,
-        "/",
-        lineCounter,
-        error?.pos ?? doc.range,
-      );
+      const location = sourceLocation(source.sourceId, docIndex, "/", lineCounter, error?.pos ?? doc.range);
       diagnostics.push(
         validateDiagnostic({
           code: "INVALID_MANIFEST_ENVELOPE",
           severity: "error",
           path: "/",
           source: location,
-          message: `[doc ${docIndex}] YAML parse error: ${doc.errors.map((e) => e.message).join("; ")}`,
+          message: `[doc ${docIndex}] YAML parse error: ${doc.errors.map(e => e.message).join("; ")}`,
         }),
       );
       continue;
@@ -218,10 +221,7 @@ function parseOneStream(
             severity: "error",
             path: "/",
             source: sourceLocationForNode(source.sourceId, docIndex, "/", doc, lineCounter),
-            message:
-              e instanceof Error
-                ? `[doc ${docIndex}] ${e.message}`
-                : `[doc ${docIndex}] unknown parse error`,
+            message: e instanceof Error ? `[doc ${docIndex}] ${e.message}` : `[doc ${docIndex}] unknown parse error`,
           }),
         );
       }
@@ -256,7 +256,9 @@ function validateEnvelope(raw: unknown, docIndex: number): Manifest {
   if (m["apiVersion"] !== API_VERSION) {
     throw new ManifestParseError(
       `apiVersion must be "${API_VERSION}"; got ${JSON.stringify(m["apiVersion"])}` +
-        (m["apiVersion"] === "cms.mantle.aotter.net/v1" ? " (a 0.1.x manifest: run mantle help upgrade-0.1-to-0.2)" : ""),
+        (m["apiVersion"] === "cms.mantle.aotter.net/v1"
+          ? " (a 0.1.x manifest: run mantle help upgrade-0.1-to-0.2)"
+          : ""),
       docIndex,
       "/apiVersion",
     );

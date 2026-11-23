@@ -10,7 +10,9 @@ export interface RegistryItem {
   readonly meta: { readonly surface: "both" | "browser"; readonly slots: readonly string[] };
 }
 
-export const items: readonly RegistryItem[] = JSON.parse(readFileSync(resolve(pkg, "registry/registry.json"), "utf8")).items;
+export const items: readonly RegistryItem[] = JSON.parse(
+  readFileSync(resolve(pkg, "registry/registry.json"), "utf8"),
+).items;
 
 export const source = (file: { readonly path: string }): string => readFileSync(resolve(pkg, file.path), "utf8");
 
@@ -21,7 +23,12 @@ export const source = (file: { readonly path: string }): string => readFileSync(
 export const bothItems: readonly RegistryItem[] = items.filter(item => item.meta.surface === "both");
 
 /** The surface a slot key renders in: Admin's own `isBothSlot`. */
-export const slotSurface = (slot: string): "both" | "browser" => isBothSlot(slot) ? "both" : "browser";
+export const slotSurface = (slot: string): "both" | "browser" => (isBothSlot(slot) ? "both" : "browser");
 
 /** A concrete key for a slot template, for the typecheck consumer. */
-export const sampleKey = (slot: string): string => slot.replace("<schema>", "requests").replace("<field>", "status").replace("<view>", "pending-requests").replace("<column>", "amount");
+export const sampleKey = (slot: string): string =>
+  slot
+    .replace("<schema>", "requests")
+    .replace("<field>", "status")
+    .replace("<view>", "pending-requests")
+    .replace("<column>", "amount");

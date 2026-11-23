@@ -4,13 +4,16 @@
 export const BUILT_IN_NAV_GROUPS: ReadonlySet<string> = new Set(["content", "operations", "reports", "more"]);
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const PLACEMENT: Readonly<Record<string, readonly [(value: unknown) => boolean, string]>> = {
-  group: [(v) => typeof v === "string" && ID.test(v), "a kebab-case group id"],
+  group: [v => typeof v === "string" && ID.test(v), "a kebab-case group id"],
   order: [Number.isInteger, "an integer"],
-  hidden: [(v) => typeof v === "boolean", "a boolean"],
+  hidden: [v => typeof v === "boolean", "a boolean"],
 };
 
 /** The first bad `nav` key as [key, expected], or null; `own` keys are the owner's to check. Group ids are typed by `admin-client.ts`. */
-export function navPlacementProblems(nav: Readonly<Record<string, unknown>>, own: readonly string[] = []): [string, string] | null {
+export function navPlacementProblems(
+  nav: Readonly<Record<string, unknown>>,
+  own: readonly string[] = [],
+): [string, string] | null {
   const keys = [...own, ...Object.keys(PLACEMENT)];
   for (const [key, value] of Object.entries(nav)) {
     if (own.includes(key)) continue;

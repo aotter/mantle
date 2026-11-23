@@ -15,17 +15,18 @@ process remain unchanged. No plugin was installed, uploaded or published.
   The six shipped consumer skills retain their distinct package/plugin
   projections, triggers, authority and destructive/deployment restrictions.
 - Checked CLI/preset ownership, installed-version documentation, peer pinning,
-  Manifest/SQL-first guidance, public surface composition, Cloud host protocol,
-  save/preview/publish states, source recovery, secrets and upgrade boundaries.
-- Checked existing host compatibility manifests and the packaged Cloud helper.
+  Manifest/SQL-first guidance, public surface composition, the hosted platform's
+  protocol, save/preview/publish states, source recovery, secrets and upgrade
+  boundaries.
+- Checked existing host compatibility manifests and the packaged platform helper.
   This audit does not migrate the plugin's distribution format or change the
-  connected Cloud endpoint. The helper's offline checks remain local evidence.
+  connected host endpoint. The helper's offline checks remain local evidence.
 
 ## Repairs
 
 1. Provision, handbook overview/deployment and the current 0.2 release narrative
-   still said Cloud could not accept 0.2 services. They now route through the
-   plugin's Cloud workflow and the selected project's exact host contract,
+   still said the hosted platform could not accept 0.2 services. They now route
+   through the plugin's hosted workflow and the selected project's exact host contract,
    preserving the D1-only, project-grant and paired-publish boundaries.
 2. Procurement/View predicates did not describe generic Admin entry access.
    The example now blocks generic writes with Schema `readOnly`; authorization
@@ -36,7 +37,7 @@ process remain unchanged. No plugin was installed, uploaded or published.
    Approval-chain advice prefers SQL conditions before custom hooks/guards.
 4. Provision's secrets text distinguishes deployment secret storage from
    untracked local environment files; the old standalone hosted-auth model is
-   distinguished from Cloud's managed tenant identity.
+   distinguished from a managed host's tenant identity.
 5. The member MCP App recipe reads the installed Core's `peerDependencies`
    for optional package versions, matching the CLI's consumer contract.
 6. OAuth docs explain the preset's closed DCR policy and public owner-managed
@@ -53,7 +54,7 @@ node scripts/check-skills.mjs
 node scripts/check-boundaries.mjs
 node scripts/sync-plugin-manifests.mjs --check
 node scripts/check-doc-examples.mjs
-node scripts/check-cloud-plugin.mjs
+# and the packaged platform helper's check script (since removed)
 ```
 
 The checks cover six shipped skills, six synchronized host/marketplace
@@ -63,7 +64,7 @@ key, private import or second identity resolver. Fresh PR #1336 consumer
 verification independently reproduced the contributor generic-read gap and
 verified the stricter host composition with real sessions and PostgreSQL.
 
-This source audit does not prove remote authenticated Cloud publication. Cloud
-staging/production rollout and release evidence belong to `aotter/mantle-home`.
+This source audit does not prove remote authenticated hosted publication. Hosted
+staging/production rollout and release evidence belong to the hosting platform.
 The source changes reach installed package consumers through a later authorized
 SDK release; no npm publication is part of this audit.

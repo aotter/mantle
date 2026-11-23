@@ -27,23 +27,50 @@ describe("@aotter/mantle-ui components", () => {
   it("renders the panel with bound inputs, the host's fields and a disabled Run until ready", () => {
     const html = renderToStaticMarkup(
       <OperationPanel controller={controller()} title="Review requisition" previewFields={["requestStatus"]}>
-        <label>Note <input name="note" /></label>
+        <label>
+          Note <input name="note" />
+        </label>
       </OperationPanel>,
     );
     expect(html).toContain("Review requisition");
     expect(html).toContain("From the selected row");
     expect(html).toContain('name="note"');
     expect(html).toContain("submitted");
+    expect(html.indexOf('data-slot="entity-preview"')).toBeLessThan(html.indexOf("From the selected row"));
+    // Admin composes its reviewed record and editable fields as children, with their own formatters.
+    expect(html.indexOf('name="note"')).toBeLessThan(html.indexOf("From the selected row"));
     // Submitted from script: MCP hosts often sandbox Apps without `allow-forms`.
     expect(html).toMatch(/<button type="button" disabled=""[^>]*>Run<\/button>/u);
     expect(html).not.toContain('type="submit"');
+  });
+
+  it("labels the unchanged reviewed snapshot separately from a successful operation result", async () => {
+    const c = controller({ invoke: async () => ({ ok: true, data: { requestStatus: "approved" } }) });
+    await c.open();
+    await c.submit();
+    const html = renderToStaticMarkup(
+      <OperationPanel
+        controller={c}
+        title="Approve request"
+        previewFields={["requestStatus"]}
+        renderResult={result => <p>{JSON.stringify(result)}</p>}
+      />,
+    );
+    expect(c.getSnapshot().reviewed?.data.requestStatus).toBe("submitted");
+    expect(html).toContain("Snapshot before this operation");
+    expect(html).toContain("Operation completed.");
+    expect(html).toContain("approved");
+    expect(html.indexOf("Snapshot before this operation")).toBeLessThan(html.indexOf("Operation completed."));
   });
 
   it("offers no dead re-read after a conflict when the host cannot read", async () => {
     const c = createInteractionController({
       interaction,
       row,
-      invoke: async (): Promise<InvokeOutcome> => ({ ok: false, diagnostics: [{ code: "CONFLICT", message: "Moved." }] }),
+      invoke: async (): Promise<InvokeOutcome> => ({
+        ok: false,
+        diagnostics: [{ code: "CONFLICT", message: "Moved." }],
+      }),
     });
     await c.open();
     await c.submit();
@@ -63,19 +90,27 @@ describe("@aotter/mantle-ui components", () => {
   });
 
   it("offers acknowledgement for an uncertain write only when the host cannot read", async () => {
-    const failing = async (): Promise<InvokeOutcome> => { throw new Error("timeout"); };
+    const failing = async (): Promise<InvokeOutcome> => {
+      throw new Error("timeout");
+    };
     const withRead = controller({ invoke: failing });
     await withRead.open();
     await withRead.submit();
-    expect(renderToStaticMarkup(<OperationStatus controller={withRead} state={withRead.getSnapshot()} />)).toContain("Load latest version");
+    expect(renderToStaticMarkup(<OperationStatus controller={withRead} state={withRead.getSnapshot()} />)).toContain(
+      "Load latest version",
+    );
     const blind = createInteractionController({ interaction, row, invoke: failing });
     await blind.open();
     await blind.submit();
-    expect(renderToStaticMarkup(<OperationStatus controller={blind} state={blind.getSnapshot()} />)).toContain("I checked; continue");
+    expect(renderToStaticMarkup(<OperationStatus controller={blind} state={blind.getSnapshot()} />)).toContain(
+      "I checked; continue",
+    );
   });
 
   it("shows runtime diagnostics as the person-facing reason", async () => {
-    const c = controller({ invoke: async () => ({ ok: false, diagnostics: [{ code: "AUTH_DENIED", message: "Only owners can approve." }] }) });
+    const c = controller({
+      invoke: async () => ({ ok: false, diagnostics: [{ code: "AUTH_DENIED", message: "Only owners can approve." }] }),
+    });
     await c.open();
     await c.submit();
     const html = renderToStaticMarkup(<OperationStatus controller={c} state={c.getSnapshot()} />);
@@ -84,20 +119,46 @@ describe("@aotter/mantle-ui components", () => {
   });
 
   it("renders a diff and an entity preview with host labels", () => {
-    const diff = renderToStaticMarkup(<ChangeDiff changes={[{ field: "note", before: "", after: "Ok" }]} fieldLabel={() => "Reviewer note"} />);
+    const diff = renderToStaticMarkup(
+      <ChangeDiff changes={[{ field: "note", before: "", after: "Ok" }]} fieldLabel={() => "Reviewer note"} />,
+    );
     expect(diff).toContain("Reviewer note");
     expect(diff).toContain("—");
-    const preview = renderToStaticMarkup(<EntityPreview entry={{ id: "r1", version: 3, data: { title: "Laptops" } }} />);
+    const preview = renderToStaticMarkup(
+      <EntityPreview entry={{ id: "r1", version: 3, data: { title: "Laptops" } }} />,
+    );
     expect(preview).toContain("Laptops");
     expect(preview).toContain("Version");
   });
 });
 
-
-it.each([true, false])("allows localized diagnostics in conflicts (locked: %s) without changing retry state", async locked => {
-  const c = controller({interaction: locked ? interaction : {bind: []}, invoke: async () => ({ok: false, diagnostics: [{code: "CONFLICT", message: "Expected one affected row."}]})});
-  await c.open(); await c.submit();
-  expect(c.getSnapshot().phase).toBe(locked ? "conflict" : "failed");
-  const html = renderToStaticMarkup(<OperationStatus controller={c} state={c.getSnapshot()} renderDiagnostic={d => <><span>Refresh and try again.</span><details><summary>Details</summary>{d.message}</details></>} />);
-  expect(html).toContain("Refresh and try again."); expect(html).toContain("Expected one affected row."); expect(html).toContain("<details>");
-});
+it.each([true, false])(
+  "allows localized diagnostics in conflicts (locked: %s) without changing retry state",
+  async locked => {
+    const c = controller({
+      interaction: locked ? interaction : { bind: [] },
+      invoke: async () => ({ ok: false, diagnostics: [{ code: "CONFLICT", message: "Expected one affected row." }] }),
+    });
+    await c.open();
+    await c.submit();
+    expect(c.getSnapshot().phase).toBe(locked ? "conflict" : "failed");
+    const html = renderToStaticMarkup(
+      <OperationStatus
+        controller={c}
+        state={c.getSnapshot()}
+        renderDiagnostic={d => (
+          <>
+            <span>Refresh and try again.</span>
+            <details>
+              <summary>Details</summary>
+              {d.message}
+            </details>
+          </>
+        )}
+      />,
+    );
+    expect(html).toContain("Refresh and try again.");
+    expect(html).toContain("Expected one affected row.");
+    expect(html).toContain("<details>");
+  },
+);

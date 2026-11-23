@@ -13,7 +13,7 @@
           "link": "/start/overview"
         },
         {
-          "text": "Quickstart: a service on Workers",
+          "text": "Quickstart: an app on Workers",
           "link": "/start/quickstart-worker"
         },
         {
@@ -66,6 +66,10 @@
           "link": "/guides/native-execution"
         },
         {
+          "text": "Schema migrations",
+          "link": "/guides/migrations"
+        },
+        {
           "text": "PostgreSQL adapters",
           "link": "/guides/postgres-adapters"
         },
@@ -88,6 +92,10 @@
         {
           "text": "Performance pass",
           "link": "/guides/performance"
+        },
+        {
+          "text": "Caching",
+          "link": "/guides/caching"
         }
       ]
     },
@@ -97,6 +105,10 @@
         {
           "text": "The four atoms",
           "link": "/concepts/four-atoms"
+        },
+        {
+          "text": "What Core does, and what it does not",
+          "link": "/concepts/core-boundary"
         },
         {
           "text": "Lifecycle and locales",
@@ -185,12 +197,20 @@
           "link": "/cloudflare/service-entry"
         },
         {
+          "text": "Choose how users sign in",
+          "link": "/cloudflare/sign-in-methods"
+        },
+        {
           "text": "Authentication",
           "link": "/cloudflare/authentication"
         },
         {
           "text": "Media uploads with R2",
           "link": "/cloudflare/media-r2"
+        },
+        {
+          "text": "PostgreSQL through Hyperdrive",
+          "link": "/cloudflare/postgres-hyperdrive"
         },
         {
           "text": "Deploy and operate",

@@ -195,6 +195,49 @@ spec:
     ) x WHERE x.n = 1 ORDER BY x.productId
 ---
 apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: invoices }
+spec:
+  title: Invoices
+  lifecycle: operational
+  scope: "owner = auth.uid()"
+  uniqueIndexes: [[owner, operationId]]
+  indexes: [[owner, createdAt]]
+  schema:
+    type: object
+    required: [owner, operationId, customer, amount]
+    properties:
+      owner: { type: string }
+      operationId: { type: string, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: create-invoice }
+spec:
+  description: Create an invoice. Sending the same operationId again returns the same invoice; reusing it for a different invoice is refused (409).
+  requires: { auth: { all: [ctx.user] } }
+  input:
+    type: object
+    additionalProperties: false
+    required: [operationId, customer, amount]
+    properties:
+      operationId: { type: string, minLength: 1, maxLength: 64 }
+      customer: { type: string }
+      amount: { type: integer, minimum: 1 }
+  output: { type: object }
+  handler:
+    steps:
+      - name: replay
+        sql: |
+          INSERT INTO invoices (operationId, customer, amount) VALUES (input.operationId, input.customer, input.amount)
+            ON CONFLICT (operationId) DO UPDATE SET amount = invoices.amount
+              WHERE invoices.customer = excluded.customer AND invoices.amount = excluded.amount
+            RETURNING id, amount
+        onNoRows: conflict
+---
+apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: place-order-http }
 spec: { source: { kind: http, method: POST, path: /api/orders }, target: { procedure: place-order } }
@@ -223,3 +266,8 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: { name: request-order-http }
 spec: { source: { kind: http, method: POST, path: /api/orders/request }, target: { procedure: request-order } }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: create-invoice-http }
+spec: { source: { kind: http, method: POST, path: /api/invoices }, target: { procedure: create-invoice } }

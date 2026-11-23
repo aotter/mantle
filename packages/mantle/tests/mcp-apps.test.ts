@@ -3,39 +3,118 @@ import { expect, test, spyOn } from "bun:test";
 import { mcp, type Tool } from "../src/kernel/mcp.js";
 import { ContractError } from "../src/kernel/contracts.js";
 import type { McpApps, McpAppResource } from "../src/kernel/mcp-apps.js";
+import {
+  ERAS,
+  LEGACY_REVISION,
+  legacyInit,
+  legacyInitialize,
+  MCP_REVISION,
+  mcpInit,
+  mcpMessage,
+  type Era,
+} from "./mcp-wire.js";
 
 const capabilities = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
 const meta = { "io.modelcontextprotocol/clientCapabilities": capabilities };
-const tools: Tool<null>[] = ["public", "admin"].flatMap(surface => ["rows", "details"].map(name => ({
-  name: `${surface}_${name}`, surface, description: name, inputSchema: { type: "object", additionalProperties: false },
-  validate: (raw: unknown) => raw as Record<string, unknown>, path: name,
-  page: async () => ({ rows: [{ id: "one" }] }),
-})));
+const tools: Tool<null>[] = ["public", "admin"].flatMap(surface =>
+  ["rows", "details"].map(name => ({
+    name: `${surface}_${name}`,
+    surface,
+    description: name,
+    inputSchema: { type: "object", additionalProperties: false },
+    validate: (raw: unknown) => raw as Record<string, unknown>,
+    path: name,
+    page: async () => ({ rows: [{ id: "one" }] }),
+  })),
+);
 const refused = (build: () => unknown, fragment: string) => {
-  try { build(); throw new Error("expected refusal"); }
-  catch (error) { expect(error).toBeInstanceOf(ContractError); expect((error as ContractError).code).toBe("MCP_APP_CONFLICT"); expect((error as Error).message).toContain(fragment); }
+  try {
+    build();
+    throw new Error("expected refusal");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ContractError);
+    expect((error as ContractError).code).toBe("MCP_APP_CONFLICT");
+    expect((error as Error).message).toContain(fragment);
+  }
 };
-const resource = (uri: string, renders: string[] = []): McpAppResource => ({ uri, name: uri.slice(5), html: "<h1>App</h1>", renders });
-const handle = (apps?: Parameters<typeof mcp<unknown, null>>[1]["apps"]) => mcp(tools, {
-  db: () => null, caller: () => (fixtureCaller({ kind: "user", subject: "u", role: "admin", admin: true, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null })), apps,
+const resource = (uri: string, renders: string[] = []): McpAppResource => ({
+  uri,
+  name: uri.slice(5),
+  html: "<h1>App</h1>",
+  renders,
 });
-const call = async (api: ReturnType<typeof handle>, method: string, params: Record<string, unknown> = {}, surface = "public", ui: boolean | null = true) => {
-  const response = await api(new Request(`https://app.test/mcp${surface === "admin" ? "/admin/" : "/"}`, {
-    method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, ...(ui !== null ? { _meta: ui ? meta : { "io.modelcontextprotocol/clientCapabilities": {} } } : {}) } }),
-  }), {});
+const handle = (apps?: Parameters<typeof mcp<unknown, null>>[1]["apps"]) =>
+  mcp(tools, {
+    db: () => null,
+    caller: () =>
+      fixtureCaller({
+        kind: "user",
+        subject: "u",
+        role: "admin",
+        admin: true,
+        scopes: ["mcp"],
+        credential: "oauth",
+        credentialId: null,
+        clientId: null,
+      }),
+    apps,
+  });
+const call = async (
+  api: ReturnType<typeof handle>,
+  method: string,
+  params: Record<string, unknown> = {},
+  surface = "public",
+  ui = true,
+  origin = "https://app.test",
+) => {
+  const response = await api(
+    new Request(
+      `${origin}/mcp${surface === "admin" ? "/admin/" : "/"}`,
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params: {
+            ...params,
+            _meta: ui ? meta : { "io.modelcontextprotocol/clientCapabilities": {} },
+          },
+        },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    ),
+    {},
+  );
   const text = await response!.text();
   return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
 };
 
 test("public app and admin app + external Admin contributor use the same hook; HTML is request-only", async () => {
   let loads = 0;
-  const admin: McpApps = { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), html: () => { loads++; return "<h1>Admin</h1>"; }, csp: { connectDomains: ["https://app.test"] }, prefersBorder: true }] };
-  const api = handle({ public: { resources: [resource("ui://my-app/rows", ["public_rows"])] }, admin: [admin, { resources: [resource("ui://my-app/details", ["admin_details"])] }] });
+  const admin: McpApps = {
+    resources: [
+      {
+        ...resource("ui://mantle-admin/rows", ["admin_rows"]),
+        html: () => {
+          loads++;
+          return "<h1>Admin</h1>";
+        },
+        csp: { connectDomains: ["https://app.test"] },
+        prefersBorder: true,
+      },
+    ],
+  };
+  const api = handle({
+    public: { resources: [resource("ui://my-app/rows", ["public_rows"])] },
+    admin: [admin, { resources: [resource("ui://my-app/details", ["admin_details"])] }],
+  });
   expect(loads).toBe(0);
-  const initialized = await call(api, "initialize", { protocolVersion: "2025-03-26", capabilities, clientInfo: { name: "test", version: "1" } }, "admin");
-  expect(initialized.result.capabilities.resources).toBeDefined();
-  expect((await call(api, "resources/list", {}, "admin")).result.resources.map((r: any) => r.uri)).toEqual(["ui://mantle-admin/rows", "ui://my-app/details"]);
+  const discovered = await call(api, "server/discover", {}, "admin");
+  expect(discovered.result.capabilities.resources).toBeDefined();
+  expect((await call(api, "resources/list", {}, "admin")).result.resources.map((r: any) => r.uri)).toEqual([
+    "ui://mantle-admin/rows",
+    "ui://my-app/details",
+  ]);
   const listed = (await call(api, "tools/list", {}, "admin")).result.tools;
   expect(listed[0]._meta.ui.resourceUri).toBe("ui://mantle-admin/rows");
   expect(listed[0]._meta["ui/resourceUri"]).toBe("ui://mantle-admin/rows");
@@ -43,100 +122,462 @@ test("public app and admin app + external Admin contributor use the same hook; H
   expect(listed[1]._meta.ui.resourceUri).toBe("ui://my-app/details");
   expect(loads).toBe(0);
   const read = await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin");
-  expect(read.result.contents[0]).toMatchObject({ uri: "ui://mantle-admin/rows", text: "<h1>Admin</h1>", mimeType: "text/html;profile=mcp-app", _meta: { ui: { prefersBorder: true } } });
+  expect(read.result.contents[0]).toMatchObject({
+    uri: "ui://mantle-admin/rows",
+    text: "<h1>Admin</h1>",
+    mimeType: "text/html;profile=mcp-app",
+    _meta: { ui: { prefersBorder: true } },
+  });
   expect(loads).toBe(1);
   expect((await call(api, "resources/list")).result.resources.map((r: any) => r.uri)).toEqual(["ui://my-app/rows"]);
   const result = (await call(api, "tools/call", { name: "public_rows", arguments: {} })).result;
   expect(result.structuredContent).toEqual({ rows: [{ id: "one" }] });
-  expect(result._meta).toEqual({ "net.aotter.mantle/tool": "public_rows" });
+  // 2026-07-28 results name the server in `_meta`.
+  expect(result._meta).toEqual({
+    "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }),
+    "net.aotter.mantle/tool": "public_rows",
+  });
 });
 
-test("request-bound tool tables revalidate changed names and never dispatch the cached endpoint table",async()=>{
- let checks=0,invoked=0;const app:McpApps={get resources(){checks++;return[resource("ui://my-app/rows",["public_rows"])];}};
- const api=mcp<{changed:boolean;value:string},null>((_request,env)=>[{...tools[0]!,name:env.changed?"public_other":"public_rows",page:async()=>{invoked++;return{rows:[{value:env.value}]};}}], {db:()=>null,caller:()=>({kind:"anonymous"}),apps:{public:app}});
- const request=(name:string)=>new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name,arguments:{},_meta:meta}})});
- const response=await api(request("public_rows"),{changed:false,value:"first"}),body=await response!.text();expect(body).toContain('"value":"first"');expect(invoked).toBe(1);expect(checks).toBe(1);
- const second=await api(request("public_rows"),{changed:false,value:"second"});expect(await second!.text()).toContain('"value":"second"');expect(invoked).toBe(2);expect(checks).toBe(1);
- const rejected=await api(request("public_other"),{changed:true,value:"never"});expect(rejected!.status).toBe(500);expect(await rejected!.json()).toMatchObject({error:{code:"INTERNAL_ERROR"}});expect(checks).toBe(1);/* the catalogue is read once; the changed names are what get revalidated */expect(invoked).toBe(2);
+test("request-bound tool tables revalidate changed names and never dispatch the cached endpoint table", async () => {
+  let checks = 0,
+    invoked = 0;
+  const app: McpApps = {
+    get resources() {
+      checks++;
+      return [resource("ui://my-app/rows", ["public_rows"])];
+    },
+  };
+  const api = mcp<{ changed: boolean; value: string }, null>(
+    (_request, env) => [
+      {
+        ...tools[0]!,
+        name: env.changed ? "public_other" : "public_rows",
+        page: async () => {
+          invoked++;
+          return { rows: [{ value: env.value }] };
+        },
+      },
+    ],
+    { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: app } },
+  );
+  const request = (name: string) =>
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: {}, _meta: meta },
+        },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    );
+  const response = await api(request("public_rows"), { changed: false, value: "first" }),
+    body = await response!.text();
+  expect(body).toContain('"value":"first"');
+  expect(invoked).toBe(1);
+  expect(checks).toBe(1);
+  const second = await api(request("public_rows"), { changed: false, value: "second" });
+  expect(await second!.text()).toContain('"value":"second"');
+  expect(invoked).toBe(2);
+  expect(checks).toBe(1);
+  const rejected = await api(request("public_other"), { changed: true, value: "never" });
+  expect(rejected!.status).toBe(500);
+  expect(await rejected!.json()).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+  expect(checks).toBe(1); /* the catalogue is read once; the changed names are what get revalidated */
+  expect(invoked).toBe(2);
 });
 
 test("request-bound tool tables revalidate a same-named View changing into a Procedure", async () => {
-  let write = false, invoked = 0;
-  const api = mcp<{ write: boolean }, null>((_request, env) => [env.write
-    ? { name: "same", surface: "public", description: "write", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, path: "same", run: async () => { invoked++; return {}; } }
-    : { name: "same", surface: "public", description: "read", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, path: "same", page: async () => ({ rows: [] }) }] as Tool<null>[],
-  { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://app/same"), appOnly: ["same"] }] } } });
-  const request = (method: string) => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "tools/call" ? { name: "same", arguments: {}, _meta: meta } : { _meta: meta } }) });
+  let write = false,
+    invoked = 0;
+  const api = mcp<{ write: boolean }, null>(
+    (_request, env) =>
+      [
+        env.write
+          ? {
+              name: "same",
+              surface: "public",
+              description: "write",
+              inputSchema: { type: "object" },
+              validate: raw => raw as Record<string, unknown>,
+              path: "same",
+              run: async () => {
+                invoked++;
+                return {};
+              },
+            }
+          : {
+              name: "same",
+              surface: "public",
+              description: "read",
+              inputSchema: { type: "object" },
+              validate: raw => raw as Record<string, unknown>,
+              path: "same",
+              page: async () => ({ rows: [] }),
+            },
+      ] as Tool<null>[],
+    {
+      db: () => null,
+      caller: () => ({ kind: "anonymous" }),
+      apps: { public: { resources: [{ ...resource("ui://app/same"), appOnly: ["same"] }] } },
+    },
+  );
+  const request = (method: string) =>
+    new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          params: method === "tools/call" ? { name: "same", arguments: {}, _meta: meta } : { _meta: meta },
+        },
+        { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+      ),
+    );
   expect((await api(request("tools/list"), { write }))!.status).toBe(200);
   write = true;
   expect((await api(request("tools/call"), { write }))!.status).toBe(500);
   expect(invoked).toBe(0);
 });
 
-test("clients that declare no MCP Apps support see no App resources or App-only tools", async () => {
-  const api = handle({ public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] } });
+test("clients that declare no MCP Apps support list no App resources or App-only tools; a call that names one runs", async () => {
+  const api = handle({
+    public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
+  });
   for (const ui of [false]) {
-    const init = await call(api, "initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "1" } }, "public", ui);
-    expect(init.error).toBeUndefined();
+    const discovered = await call(api, "server/discover", {}, "public", ui);
+    expect(discovered.error).toBeUndefined();
+    expect(discovered.result.capabilities.resources).toBeUndefined();
     expect((await call(api, "resources/list", {}, "public", ui)).result?.resources ?? []).toEqual([]);
     const listed = (await call(api, "tools/list", {}, "public", ui)).result.tools;
     expect(listed.map((t: any) => t.name)).toEqual(["public_rows"]);
     expect(listed[0]._meta).toBeUndefined();
-    expect((await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", ui)).error).toBeDefined();
+    // Visibility hides the tool from the list only; a call that names it runs, without App metadata.
+    const called = await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", ui);
+    expect(called.error).toBeUndefined();
+    expect(called.result.isError).toBeUndefined();
+    expect(called.result.structuredContent).toEqual({ rows: [{ id: "one" }] });
+    expect(called.result._meta?.["net.aotter.mantle/tool"]).toBeUndefined();
   }
   const listed = (await call(api, "tools/list")).result.tools;
   expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
 });
 
-test("a request that advertises no capabilities (unknown) still sees App resources, _meta.ui and App-only tools", async () => {
-  const api = handle({ public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] } });
-  expect((await call(api, "resources/list", {}, "public", null)).result.resources.map((r: any) => r.uri)).toEqual(["ui://my-app/rows"]);
-  const listed = (await call(api, "tools/list", {}, "public", null)).result.tools;
+test("the MCP Apps support matrix: era × declared, undeclared or absent support → listed, callable, rendered in an App", async () => {
+  const seen: Record<string, boolean> = {};
+  const tool = (name: string): Tool<null> => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async (_db, _caller, _input, _handlers, call) => {
+      seen[name] = call!.apps;
+      return { ok: true };
+    },
+  });
+  // `hidden` is App-only through its own meta, like a Procedure an App calls; `linked` renders in an App.
+  const hiddenApi = mcp<unknown, null>([tool("linked"), { ...tool("hidden"), meta: { ui: { visibility: ["app"] } } }], {
+    db: () => null,
+    caller: () => ({ kind: "anonymous" }),
+    apps: { public: { resources: [resource("ui://my-app/view", ["linked"])] } },
+  });
+  const declarations = { declared: capabilities, undeclared: {}, absent: undefined } as const;
+  const send = async (era: Era, declared: object | undefined, method: string, params: Record<string, unknown> = {}) => {
+    const message = { jsonrpc: "2.0", id: 1, method, params };
+    const request =
+      era === MCP_REVISION
+        ? new Request(
+            "https://app.test/mcp",
+            declared === undefined
+              ? // A 2026-07-28 envelope without client capabilities: not a request the SDK serves.
+                (() => {
+                  const init = mcpInit(mcpMessage(method, params));
+                  const body = JSON.parse(init.body as string);
+                  delete body.params._meta["io.modelcontextprotocol/clientCapabilities"];
+                  return { ...init, body: JSON.stringify(body) };
+                })()
+              : mcpInit(mcpMessage(method, params, { capabilities: declared })),
+          )
+        : new Request(
+            "https://app.test/mcp",
+            legacyInit(
+              declared === undefined
+                ? message
+                : {
+                    ...message,
+                    params: { ...params, _meta: { "io.modelcontextprotocol/clientCapabilities": declared } },
+                  },
+            ),
+          );
+    const response = (await hiddenApi(request, {}))!;
+    const text = await response.text();
+    return {
+      status: response.status,
+      body: text ? JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text) : undefined,
+    };
+  };
+  const matrix: Record<string, unknown> = {};
+  for (const era of ERAS)
+    for (const [name, declared] of Object.entries(declarations)) {
+      const listing = await send(era, declared, "tools/list");
+      if (listing.status !== 200) {
+        matrix[`${era} ${name}`] = { status: listing.status };
+        continue;
+      }
+      const listed = listing.body.result.tools.map((t: any) => t.name);
+      for (const key of Object.keys(seen)) delete seen[key];
+      const hidden = await send(era, declared, "tools/call", { name: "hidden", arguments: {} });
+      await send(era, declared, "tools/call", { name: "linked", arguments: {} });
+      const resources = (await send(era, declared, "resources/list")).body;
+      matrix[`${era} ${name}`] = {
+        listed: listed.includes("hidden"),
+        callable: hidden.body.result?.structuredContent?.ok === true,
+        rendersInApp: seen.linked,
+        resources: (resources.result?.resources ?? []).length > 0,
+      };
+    }
+  expect(matrix).toEqual({
+    [`${LEGACY_REVISION} declared`]: { listed: true, callable: true, rendersInApp: true, resources: true },
+    [`${LEGACY_REVISION} undeclared`]: { listed: false, callable: true, rendersInApp: false, resources: false },
+    // A stateless request after `initialize` carries no capabilities: support is unknown, so Apps stay offered but
+    // no result is said to render in an App.
+    [`${LEGACY_REVISION} absent`]: { listed: true, callable: true, rendersInApp: false, resources: true },
+    [`${MCP_REVISION} declared`]: { listed: true, callable: true, rendersInApp: true, resources: true },
+    [`${MCP_REVISION} undeclared`]: { listed: false, callable: true, rendersInApp: false, resources: false },
+    // Every 2026-07-28 request declares its capabilities; one without them is refused by the SDK.
+    [`${MCP_REVISION} absent`]: { status: 400 },
+  });
+  // A 2025-era initialize that declares MCP Apps support is answered with the resources capability; one that declares
+  // none without it.
+  for (const [declared, has] of [
+    [capabilities, true],
+    [{}, false],
+  ] as const) {
+    const response = (await hiddenApi(
+      new Request(
+        "https://app.test/mcp",
+        legacyInit({ ...legacyInitialize, params: { ...legacyInitialize.params, capabilities: declared } }),
+      ),
+      {},
+    ))!;
+    const text = await response.text();
+    const body = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+    expect([has, body.result.capabilities.resources !== undefined]).toEqual([has, has]);
+  }
+});
+
+test("a host forwarding an App's call of an App-only tool with no declared capabilities runs it, authorized as any call", async () => {
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  const write: Tool<null> = {
+    name: "public_write",
+    surface: "public",
+    description: "write",
+    meta: { ui: { visibility: ["app"] } },
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async () => ({ written: true }),
+  };
+  const targets = Object.fromEntries(
+    [...tools, write].map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash` }]),
+  );
+  let allowed = true;
+  const api = mcp<unknown, null>([...tools, write], {
+    db: () => null,
+    gateway: { tenant: "example" },
+    accessTargets: async () => targets,
+    authorize: () => allowed,
+    apps: {
+      public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
+    },
+  });
+  // The documented forwarding example: `clientCapabilities: {}`.
+  const forward = async (name: string) => {
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name, arguments: {}, _meta: { "io.modelcontextprotocol/clientCapabilities": {} } },
+        }),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
+    return { status: response!.status, body: JSON.parse(await response!.text()) };
+  };
+  expect(await forward("public_write")).toMatchObject({
+    status: 200,
+    body: { result: { structuredContent: { written: true } } },
+  });
+  expect(await forward("public_details")).toMatchObject({
+    status: 200,
+    body: { result: { structuredContent: { rows: [{ id: "one" }] } } },
+  });
+  // The 2025 form a host forwards (no envelope, no capabilities) reaches it too.
+  const legacy = await api(
+    new Request(
+      "https://app.test/mcp",
+      legacyInit({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "public_write", arguments: {} } }),
+    ),
+    {},
+    { props: { mantle: await pinned(mantleProps({}), targets, "admin:tool:public_write") } },
+  );
+  expect(await legacy!.text()).toContain('"structuredContent":{"written":true}');
+  // Its own authorization still decides.
+  allowed = false;
+  expect(await forward("public_write")).toMatchObject({ status: 403, body: { error: { code: "AUTH_DENIED" } } });
+});
+
+test("a 2025-era request that advertises no capabilities (unknown) still sees App resources, _meta.ui and App-only tools", async () => {
+  const api = handle({
+    public: { resources: [{ ...resource("ui://my-app/rows", ["public_rows"]), appOnly: ["public_details"] }] },
+  });
+  const legacyCall = async (method: string, params: Record<string, unknown> = {}) => {
+    const response = await api(
+      new Request("https://app.test/mcp", legacyInit({ jsonrpc: "2.0", id: 1, method, params })),
+      {},
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+  };
+  expect((await legacyCall("resources/list")).result.resources.map((r: any) => r.uri)).toEqual(["ui://my-app/rows"]);
+  const listed = (await legacyCall("tools/list")).result.tools;
   expect(listed.map((t: any) => t.name)).toEqual(["public_rows", "public_details"]);
   expect(listed[0]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows" });
   expect(listed[1]._meta.ui).toEqual({ resourceUri: "ui://my-app/rows", visibility: ["app"] });
-  expect((await call(api, "tools/call", { name: "public_details", arguments: {} }, "public", null)).result.structuredContent).toEqual({ rows: [{ id: "one" }] });
+  expect((await legacyCall("tools/call", { name: "public_details", arguments: {} })).result.structuredContent).toEqual({
+    rows: [{ id: "one" }],
+  });
 });
 
 for (const [name, resources, fragment] of [
   ["URI collision", [resource("ui://app/a"), { ...resource("ui://app/a"), name: "other" }], "URI"],
   ["name collision", [resource("ui://app/a"), { ...resource("ui://app/b"), name: "app/a" }], "name"],
   ["render ownership", [resource("ui://app/a", ["public_rows"]), resource("ui://app/b", ["public_rows"])], "claimed"],
-  ["app-only ownership", [{ ...resource("ui://app/a"), appOnly: ["public_rows"] }, resource("ui://app/b", ["public_rows"])], "claimed"],
+  [
+    "app-only ownership",
+    [{ ...resource("ui://app/a"), appOnly: ["public_rows"] }, resource("ui://app/b", ["public_rows"])],
+    "claimed",
+  ],
   ["foreign render tool", [resource("ui://app/a", ["admin_rows"])], "endpoint"],
   ["foreign app-only tool", [{ ...resource("ui://app/a"), appOnly: ["admin_rows"] }], "endpoint"],
   ["unknown tool", [resource("ui://app/a", ["absent"])], "endpoint"],
   ["non-ui URI", [resource("https://app.test/a")], "ui://"],
-] as const) test(`App configuration refuses ${name} at construction with ContractError`, () => {
-  refused(() => handle({ public: resources.map(r => ({ resources: [r] })) }), fragment);
-});
+] as const)
+  test(`App configuration refuses ${name} at construction with ContractError`, () => {
+    refused(() => handle({ public: resources.map(r => ({ resources: [r] })) }), fragment);
+  });
 
 test("appOnly is for Views: a Procedure is hidden only through its own meta.ui.visibility", async () => {
-  const write: Tool<null> = { name: "public_write", surface: "public", description: "write", inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, run: async () => ({}) };
-  refused(() => mcp<unknown, null>([...tools, write], { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://app/a"), appOnly: ["public_write"] }] } } }), "must be a View");
+  const write: Tool<null> = {
+    name: "public_write",
+    surface: "public",
+    description: "write",
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async () => ({}),
+  };
+  refused(
+    () =>
+      mcp<unknown, null>([...tools, write], {
+        db: () => null,
+        caller: () => ({ kind: "anonymous" }),
+        apps: { public: { resources: [{ ...resource("ui://app/a"), appOnly: ["public_write"] }] } },
+      }),
+    "must be a View",
+  );
 });
 
 test("a bad configuration is not deferred to a request-bound tool table's first request", () => {
-  refused(() => mcp<unknown, null>(() => tools, { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [resource("https://app.test/a")] } } }), "ui://");
+  refused(
+    () =>
+      mcp<unknown, null>(() => tools, {
+        db: () => null,
+        caller: () => ({ kind: "anonymous" }),
+        apps: { public: { resources: [resource("https://app.test/a")] } },
+      }),
+    "ui://",
+  );
 });
 
 test("App bindings are checked once per endpoint and render failures never expose loader secrets", async () => {
   let bindings = 0;
-  const api = handle({ public: { get resources() { bindings++; return [{ ...resource("ui://app/a", ["public_rows"]), html: () => { throw new Error("token-secret"); } }]; } } });
+  const api = handle({
+    public: {
+      get resources() {
+        bindings++;
+        return [
+          {
+            ...resource("ui://app/a", ["public_rows"]),
+            html: () => {
+              throw new Error("token-secret");
+            },
+          },
+        ];
+      },
+    },
+  });
   expect(bindings).toBe(1);
   await Promise.all([call(api, "tools/list"), call(api, "tools/list")]);
   expect(bindings).toBe(1);
   const log = spyOn(console, "error").mockImplementation(() => {});
-  try { const result = await call(api, "resources/read", { uri: "ui://app/a" }); expect(JSON.stringify(result)).not.toContain("token-secret"); expect(result.error).toBeDefined(); /* the response is redacted; the server log says why */ expect(log.mock.calls.flat().join(" ")).toContain("resource rendering failed: token-secret"); }
-  finally { log.mockRestore(); }
+  try {
+    const result = await call(api, "resources/read", { uri: "ui://app/a" });
+    expect(JSON.stringify(result)).not.toContain("token-secret");
+    expect(result.error).toBeDefined(); /* the response is redacted; the server log says why */
+    expect(log.mock.calls.flat().join(" ")).toContain("resource rendering failed: token-secret");
+  } finally {
+    log.mockRestore();
+  }
 });
 
 test("the admin tool table loads only for an admin caller", async () => {
-  let loads = 0, role: string | null = "admin", kind: "user" | "anonymous" = "anonymous";
-  const api = mcp<unknown, null>(() => { loads++; return tools; }, { db: () => null, caller: () => kind === "anonymous" ? { kind } : fixtureCaller({ kind, subject: "u", role, admin: role === "admin", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }) });
-  const list = () => api(new Request("https://app.test/mcp/admin", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) }), {});
+  let loads = 0,
+    role: string | null = "admin",
+    kind: "user" | "anonymous" = "anonymous";
+  const api = mcp<unknown, null>(
+    () => {
+      loads++;
+      return tools;
+    },
+    {
+      db: () => null,
+      caller: () =>
+        kind === "anonymous"
+          ? { kind }
+          : fixtureCaller({
+              kind,
+              subject: "u",
+              role,
+              admin: role === "admin",
+              scopes: ["mcp"],
+              credential: "oauth",
+              credentialId: null,
+              clientId: null,
+            }),
+    },
+  );
+  const list = () =>
+    api(
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
   expect((await list())!.status).toBe(401);
-  kind = "user"; role = "reader";
+  kind = "user";
+  role = "reader";
   expect((await list())!.status).toBe(403);
   expect(loads).toBe(0);
   role = "admin";
@@ -145,28 +586,147 @@ test("the admin tool table loads only for an admin caller", async () => {
 });
 
 test("a resource's domain is passed through as _meta.ui.domain on list and read", async () => {
-  const api = handle({ admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), domain: "rows.apps.example" }] } });
-  expect((await call(api, "resources/list", {}, "admin")).result.resources[0]._meta.ui).toEqual({ domain: "rows.apps.example" });
-  expect((await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0]._meta.ui).toEqual({ domain: "rows.apps.example" });
+  const api = handle({
+    admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), domain: "rows.apps.example" }] },
+  });
+  expect((await call(api, "resources/list", {}, "admin")).result.resources[0]._meta.ui).toEqual({
+    domain: "rows.apps.example",
+  });
+  expect(
+    (await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0]._meta.ui,
+  ).toEqual({ domain: "rows.apps.example" });
+});
+
+test("a resource's meta is merged into the resources/read content _meta only", async () => {
+  const api = handle({
+    public: {
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          prefersBorder: true,
+          meta: { ui: { preferredDisplayMode: "fullscreen" }, "example/hint": 1 },
+        },
+      ],
+    },
+  });
+  expect((await call(api, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toEqual({
+    ui: { preferredDisplayMode: "fullscreen", prefersBorder: true },
+    "example/hint": 1,
+  });
+  expect((await call(api, "resources/list")).result.resources[0]._meta).toEqual({ ui: { prefersBorder: true } });
+  const listed = (await call(api, "tools/list")).result.tools.find((tool: any) => tool.name === "public_rows");
+  expect(listed._meta).toEqual({
+    ui: { resourceUri: "ui://app/rows" },
+    "ui/resourceUri": "ui://app/rows",
+    "openai/outputTemplate": "ui://app/rows",
+  });
+  // Without meta (and without typed fields) the read content carries no _meta at all.
+  const plain = handle({ public: { resources: [resource("ui://app/rows", ["public_rows"])] } });
+  expect((await call(plain, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toBeUndefined();
+});
+
+test("typed fields win over meta.ui keys of the same name, and a loader's csp still replaces the resource's", async () => {
+  const csp = { resourceDomains: ["https://cdn.example.test"] };
+  const api = handle({
+    public: {
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          html: () => ({ html: "<p>x</p>", csp }),
+          csp: { connectDomains: ["https://static.example.test"] },
+          domain: "rows.apps.example",
+          meta: {
+            ui: { domain: "other.example", csp: { connectDomains: ["https://meta.example.test"] }, extra: true },
+          },
+        },
+      ],
+    },
+  });
+  expect((await call(api, "resources/read", { uri: "ui://app/rows" })).result.contents[0]._meta).toEqual({
+    ui: { domain: "rows.apps.example", csp, extra: true },
+  });
+});
+
+test("a function source may set domain per request; each read emits its own", async () => {
+  const api = handle({
+    public: async ({ request }) => ({
+      resources: [
+        {
+          ...resource("ui://app/rows", ["public_rows"]),
+          domain: `${new URL(request.url).hostname.split(".")[0]}.apps.example`,
+          meta: { ui: { preferredDisplayMode: "fullscreen" } },
+        },
+      ],
+    }),
+  });
+  const read = async (origin: string) =>
+    (await call(api, "resources/read", { uri: "ui://app/rows" }, "public", true, origin)).result.contents[0]._meta.ui;
+  expect(await read("https://one.example.test")).toEqual({
+    domain: "one.apps.example",
+    preferredDisplayMode: "fullscreen",
+  });
+  expect(await read("https://two.example.test")).toEqual({
+    domain: "two.apps.example",
+    preferredDisplayMode: "fullscreen",
+  });
 });
 
 test("an HTML loader renders for the tools this caller's tools/list shows, and only those", async () => {
   const rendered: string[][] = [];
   const api = mcp(tools, {
-    db: () => null, caller: () => fixtureCaller({ kind: "user", subject: "u", role: "admin", admin: true, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }),
+    db: () => null,
+    caller: () =>
+      fixtureCaller({
+        kind: "user",
+        subject: "u",
+        role: "admin",
+        admin: true,
+        scopes: ["mcp"],
+        credential: "oauth",
+        credentialId: null,
+        clientId: null,
+      }),
     authorize: target => target.name !== "admin_details",
-    apps: { admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), html: ({ tools }) => { rendered.push([...tools]); return "<h1>Admin</h1>"; } }] } },
+    apps: {
+      admin: {
+        resources: [
+          {
+            ...resource("ui://mantle-admin/rows", ["admin_rows"]),
+            html: ({ tools }) => {
+              rendered.push([...tools]);
+              return "<h1>Admin</h1>";
+            },
+          },
+        ],
+      },
+    },
   });
   const listed = (await call(api, "tools/list", {}, "admin")).result.tools.map((tool: any) => tool.name);
   expect(listed).toEqual(["admin_rows"]);
-  expect((await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0].text).toBe("<h1>Admin</h1>");
+  expect((await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0].text).toBe(
+    "<h1>Admin</h1>",
+  );
   expect(rendered).toEqual([listed]);
 });
 
 test("an MCP page passes limits 1..500 to the View unchanged and refuses above 500", async () => {
   const limits: unknown[] = [];
-  const api = mcp([{ ...tools[0]!, page: async (_db, _caller, _input, paging) => { limits.push(paging.limit); return { rows: [], nextCursor: "next" }; } }], { db: () => null, caller: () => ({ kind: "anonymous" }) });
-  for (const limit of [20, 100, 101, 500]) expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit } })).result.structuredContent).toEqual({ rows: [], nextCursor: "next" });
+  const api = mcp(
+    [
+      {
+        ...tools[0]!,
+        page: async (_db, _caller, _input, paging) => {
+          limits.push(paging.limit);
+          return { rows: [], nextCursor: "next" };
+        },
+      },
+    ],
+    { db: () => null, caller: () => ({ kind: "anonymous" }) },
+  );
+  for (const limit of [20, 100, 101, 500])
+    expect(
+      (await call(api, "tools/call", { name: "public_rows", arguments: { limit } })).result.structuredContent,
+    ).toEqual({ rows: [], nextCursor: "next" });
   expect(limits).toEqual([20, 100, 101, 500]);
   expect((await call(api, "tools/call", { name: "public_rows", arguments: { limit: 501 } })).result.isError).toBe(true);
   expect(limits).toHaveLength(4);
@@ -174,7 +734,17 @@ test("an MCP page passes limits 1..500 to the View unchanged and refuses above 5
 
 test("a loader may return { html, csp }: the CSP found at read time rides on the resources/read content, and replaces the resource's static one", async () => {
   const csp = { resourceDomains: ["https://cdn.example.test"] };
-  const api = handle({ admin: { resources: [{ ...resource("ui://mantle-admin/rows", ["admin_rows"]), csp: { connectDomains: ["https://static.example.test"] }, html: () => ({ html: "<p>x</p>", csp }) }] } });
+  const api = handle({
+    admin: {
+      resources: [
+        {
+          ...resource("ui://mantle-admin/rows", ["admin_rows"]),
+          csp: { connectDomains: ["https://static.example.test"] },
+          html: () => ({ html: "<p>x</p>", csp }),
+        },
+      ],
+    },
+  });
   const read = (await call(api, "resources/read", { uri: "ui://mantle-admin/rows" }, "admin")).result.contents[0];
   expect(read.text).toBe("<p>x</p>");
   expect(read._meta.ui.csp).toEqual(csp);
@@ -183,16 +753,34 @@ test("a loader may return { html, csp }: the CSP found at read time rides on the
 test("an HTML loader also receives the request's env and request; a zero-argument or tools-only loader still works", async () => {
   const seen: { tools: ReadonlySet<string>; env: unknown; request: Request }[] = [];
   const env = { ASSETS: { fetch: async () => new Response("x") } };
-  const admin: McpApps = { resources: [
-    { ...resource("ui://mantle-admin/full", ["admin_rows"]), html: render => { seen.push(render); return "<p>full</p>"; } },
-    { ...resource("ui://mantle-admin/none", ["admin_details"]), html: () => "<p>none</p>" },
-    { ...resource("ui://mantle-admin/tools"), html: ({ tools }) => "<p>" + [...tools].sort().join(",") + "</p>" },
-  ] };
+  const admin: McpApps = {
+    resources: [
+      {
+        ...resource("ui://mantle-admin/full", ["admin_rows"]),
+        html: render => {
+          seen.push(render);
+          return "<p>full</p>";
+        },
+      },
+      { ...resource("ui://mantle-admin/none", ["admin_details"]), html: () => "<p>none</p>" },
+      { ...resource("ui://mantle-admin/tools"), html: ({ tools }) => "<p>" + [...tools].sort().join(",") + "</p>" },
+    ],
+  };
   const api = handle({ admin });
   const read = async (uri: string) => {
-    const response = await api(new Request("https://app.test/mcp/admin/", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } }) }), env);
+    const response = await api(
+      new Request(
+        "https://app.test/mcp/admin/",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "resources/read", params: { uri, _meta: meta } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      env,
+    );
     const text = await response!.text();
-    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0].text as string;
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result.contents[0]
+      .text as string;
   };
   expect(await read("ui://mantle-admin/full")).toBe("<p>full</p>");
   expect(seen).toHaveLength(1);
@@ -204,21 +792,55 @@ test("an HTML loader also receives the request's env and request; a zero-argumen
 });
 
 test("async Admin contributors resolve only after origin, caller and Admin gates", async () => {
-  let role: "anonymous" | "member" | "admin" = "anonymous", resolved = 0;
-  const env = { build: "one" }, seen: unknown[] = [];
+  let role: "anonymous" | "member" | "admin" = "anonymous",
+    resolved = 0;
+  const env = { build: "one" },
+    seen: unknown[] = [];
   const api = mcp(tools, {
     db: () => null,
-    caller: () => role === "anonymous" ? { kind: "anonymous" } : fixtureCaller({ kind: "user", subject: "u", role, admin: role === "admin", scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }),
-    apps: { admin: async context => { resolved++; seen.push(context); return { resources: [resource("ui://app/" + (context.env as typeof env).build, ["admin_rows"])] }; } },
+    caller: () =>
+      role === "anonymous"
+        ? { kind: "anonymous" }
+        : fixtureCaller({
+            kind: "user",
+            subject: "u",
+            role,
+            admin: role === "admin",
+            scopes: ["mcp"],
+            credential: "oauth",
+            credentialId: null,
+            clientId: null,
+          }),
+    apps: {
+      admin: async context => {
+        resolved++;
+        seen.push(context);
+        return { resources: [resource("ui://app/" + (context.env as typeof env).build, ["admin_rows"])] };
+      },
+    },
   });
   const list = (origin?: string) => {
-    const request = new Request("https://app.test/mcp/admin", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(origin ? { origin } : {}) }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+    const request = new Request(
+      "https://app.test/mcp/admin",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+        {
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            ...(origin ? { origin } : {}),
+          },
+        },
+      ),
+    );
     return api(request, env);
   };
   expect(resolved).toBe(0);
   expect((await list())!.status).toBe(401);
-  role = "member"; expect((await list())!.status).toBe(403);
-  role = "admin"; expect((await list("https://foreign.test"))!.status).toBe(403);
+  role = "member";
+  expect((await list())!.status).toBe(403);
+  role = "admin";
+  expect((await list("https://foreign.test"))!.status).toBe(403);
   expect(resolved).toBe(0);
   expect((await list())!.status).toBe(200);
   expect(resolved).toBe(1);
@@ -227,16 +849,48 @@ test("async Admin contributors resolve only after origin, caller and Admin gates
 });
 
 test("mixed static and async contributors retain getter-once semantics and refresh links for the same tool names", async () => {
-  let staticReads = 0, resolves = 0;
-  const fixed: McpApps = { get resources() { staticReads++; return [resource("ui://app/fixed", ["public_details"])]; } };
-  const api = mcp<{ build: string }, null>(tools, { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: [fixed, async ({ env }) => {
-    resolves++;
-    const uri = "ui://app/" + (env as { build: string }).build;
-    return { resources: [{ ...resource(uri, ["public_rows"]), html: ({ env }) => "<p>" + (env as { build: string }).build + "</p>" }] };
-  }] } });
-  expect(staticReads).toBe(1); expect(resolves).toBe(0);
+  let staticReads = 0,
+    resolves = 0;
+  const fixed: McpApps = {
+    get resources() {
+      staticReads++;
+      return [resource("ui://app/fixed", ["public_details"])];
+    },
+  };
+  const api = mcp<{ build: string }, null>(tools, {
+    db: () => null,
+    caller: () => ({ kind: "anonymous" }),
+    apps: {
+      public: [
+        fixed,
+        async ({ env }) => {
+          resolves++;
+          const uri = "ui://app/" + (env as { build: string }).build;
+          return {
+            resources: [
+              {
+                ...resource(uri, ["public_rows"]),
+                html: ({ env }) => "<p>" + (env as { build: string }).build + "</p>",
+              },
+            ],
+          };
+        },
+      ],
+    },
+  });
+  expect(staticReads).toBe(1);
+  expect(resolves).toBe(0);
   const request = async (build: string, method: string, params = {}) => {
-    const response = await api(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) }), { build });
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: meta } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      { build },
+    );
     const text = await response!.text();
     return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
   };
@@ -244,10 +898,16 @@ test("mixed static and async contributors retain getter-once semantics and refre
     const listed = (await request(build, "tools/list")).result.tools;
     expect(listed.find((tool: any) => tool.name === "public_rows")._meta.ui.resourceUri).toBe("ui://app/" + build);
     expect(listed.find((tool: any) => tool.name === "public_details")._meta.ui.resourceUri).toBe("ui://app/fixed");
-    expect((await request(build, "resources/list")).result.resources.map((item: any) => item.uri)).toEqual(["ui://app/fixed", "ui://app/" + build]);
-    expect((await request(build, "resources/read", { uri: "ui://app/" + build })).result.contents[0].text).toBe("<p>" + build + "</p>");
+    expect((await request(build, "resources/list")).result.resources.map((item: any) => item.uri)).toEqual([
+      "ui://app/fixed",
+      "ui://app/" + build,
+    ]);
+    expect((await request(build, "resources/read", { uri: "ui://app/" + build })).result.contents[0].text).toBe(
+      "<p>" + build + "</p>",
+    );
   }
-  expect(staticReads).toBe(1); expect(resolves).toBe(9);
+  expect(staticReads).toBe(1);
+  expect(resolves).toBe(9);
 });
 
 for (const [name, bad] of [
@@ -255,22 +915,36 @@ for (const [name, bad] of [
   ["name", { ...resource("ui://app/private-name-secret"), name: "app/static" }],
   ["renderer", resource("ui://app/private-renderer-secret", ["public_rows"])],
   ["foreign tool", resource("ui://app/private-foreign-secret", ["admin_rows"])],
-] as const) test(`request-bound App contributors refuse ${name} conflicts with redacted responses`, async () => {
-  const log = spyOn(console, "error").mockImplementation(() => {});
-  try {
-    let resolves = 0;
-    const api = handle({ public: [{ resources: [resource("ui://app/static", ["public_rows"])] }, async () => { resolves++; return { resources: [bad] }; }] });
-    expect(resolves).toBe(0);
-    const response = await call(api, "tools/list");
-    expect(response).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
-    expect(JSON.stringify(response)).not.toContain("private-");
-    expect(resolves).toBe(1);
-  } finally { log.mockRestore(); }
-});
+] as const)
+  test(`request-bound App contributors refuse ${name} conflicts with redacted responses`, async () => {
+    const log = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      let resolves = 0;
+      const api = handle({
+        public: [
+          { resources: [resource("ui://app/static", ["public_rows"])] },
+          async () => {
+            resolves++;
+            return { resources: [bad] };
+          },
+        ],
+      });
+      expect(resolves).toBe(0);
+      const response = await call(api, "tools/list");
+      expect(response).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+      expect(JSON.stringify(response)).not.toContain("private-");
+      expect(resolves).toBe(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
 
 test("known static conflicts are eager even beside an unresolved contributor", () => {
   let resolves = 0;
-  const dynamic = async () => { resolves++; return { resources: [] }; };
+  const dynamic = async () => {
+    resolves++;
+    return { resources: [] };
+  };
   for (const resources of [
     [resource("ui://app/a"), resource("ui://app/a")],
     [resource("ui://app/a", ["admin_rows"])],
@@ -281,60 +955,148 @@ test("known static conflicts are eager even beside an unresolved contributor", (
   expect(resolves).toBe(0);
 });
 
-
 test("a failing contributor is redacted and a later request may resolve it again", async () => {
   let attempts = 0;
   const log = spyOn(console, "error").mockImplementation(() => {});
   try {
-    const api = handle({ public: async () => {
-      if (++attempts === 1) throw new Error("private-loader-secret");
-      return { resources: [resource("ui://app/recovered", ["public_rows"])] };
-    } });
-    const request = () => new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+    const api = handle({
+      public: async () => {
+        if (++attempts === 1) throw new Error("private-loader-secret");
+        return { resources: [resource("ui://app/recovered", ["public_rows"])] };
+      },
+    });
+    const request = () =>
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list" },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      );
     const failed = await api(request(), {});
     expect(failed!.status).toBe(500);
     const body = await failed!.text();
-    expect(body).toContain("INTERNAL_ERROR"); expect(body).not.toContain("private-loader-secret");
+    expect(body).toContain("INTERNAL_ERROR");
+    expect(body).not.toContain("private-loader-secret");
     expect((await call(api, "tools/list")).result.tools[0]._meta.ui.resourceUri).toBe("ui://app/recovered");
     expect(attempts).toBe(2);
-  } finally { log.mockRestore(); }
+  } finally {
+    log.mockRestore();
+  }
 });
 
 test("authorize filters identity, scopes, checks and application refusals from lists and loader tools; default discovery remains independent", async () => {
   const open = { ...tools[0]!, name: "open" };
-  const table: Tool<null>[] = [open,
+  const table: Tool<null>[] = [
+    open,
     { ...open, name: "closed", closed: true },
     { ...open, name: "scoped", closed: true, scopes: ["private:read"] },
-    { ...open, name: "checked", check: () => { throw new ContractError("AUTH_DENIED", "Not allowed."); } },
+    {
+      ...open,
+      name: "checked",
+      check: () => {
+        throw new ContractError("AUTH_DENIED", "Not allowed.");
+      },
+    },
     { ...open, name: "application_denied" },
   ];
   let authenticated = false;
   const options = {
     db: () => null,
-    caller: () => authenticated ? fixtureCaller({ kind: "user", subject: "u", role: "user", admin: false, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null }) : { kind: "anonymous" as const },
-    apps: { public: async () => ({ resources: [{ ...resource("ui://app/filtered", ["open"]), html: ({ tools }: { tools: ReadonlySet<string> }) => JSON.stringify([...tools]) }] }) },
+    caller: () =>
+      authenticated
+        ? fixtureCaller({
+            kind: "user",
+            subject: "u",
+            role: "user",
+            admin: false,
+            scopes: ["mcp"],
+            credential: "oauth",
+            credentialId: null,
+            clientId: null,
+          })
+        : { kind: "anonymous" as const },
+    apps: {
+      public: async () => ({
+        resources: [
+          {
+            ...resource("ui://app/filtered", ["open"]),
+            html: ({ tools }: { tools: ReadonlySet<string> }) => JSON.stringify([...tools]),
+          },
+        ],
+      }),
+    },
   };
   const filtered = mcp(table, { ...options, authorize: target => target.name !== "application_denied" });
   for (const expected of [["open"], ["open", "closed"]]) {
     expect((await call(filtered, "tools/list")).result.tools.map((tool: any) => tool.name)).toEqual(expected);
-    expect(JSON.parse((await call(filtered, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text)).toEqual(expected);
+    expect(
+      JSON.parse((await call(filtered, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text),
+    ).toEqual(expected);
     authenticated = true;
   }
   const independent = mcp(table, options);
   const names = table.map(tool => tool.name);
   expect((await call(independent, "tools/list")).result.tools.map((tool: any) => tool.name)).toEqual(names);
-  expect(JSON.parse((await call(independent, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text)).toEqual(names);
+  expect(
+    JSON.parse((await call(independent, "resources/read", { uri: "ui://app/filtered" })).result.contents[0].text),
+  ).toEqual(names);
   const denied = await call(filtered, "tools/call", { name: "scoped", arguments: {} });
   expect(denied.error.code).toBe("AUTH_DENIED");
 });
 
 test("meta.ui.visibility hides a Procedure from clients without MCP Apps; tools/call stays authorized like any tool", async () => {
-  let runs = 0, allow = true, caller: any = { kind: "anonymous" };
-  const write: Tool<null> = { name: "public_write", surface: "public", description: "write", closed: true, meta: { ui: { visibility: ["app"] } }, inputSchema: { type: "object" }, validate: raw => raw as Record<string, unknown>, run: async () => { runs++; return {}; } };
-  const api = mcp<unknown, null>([...tools, write], { db: () => null, caller: () => caller, authorize: target => allow || target.name !== "public_write" });
-  const post = () => api(new Request("https://app.test/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "public_write", arguments: {}, _meta: meta } }) }), {});
-  caller = fixtureCaller({ kind: "user", subject: "u", role: null, admin: false, scopes: ["mcp"], credential: "oauth", credentialId: null, clientId: null });
-  expect((await call(api, "tools/list", {}, "public", false)).result.tools.map((t: any) => t.name)).toEqual(["public_rows", "public_details"]);
+  let runs = 0,
+    allow = true,
+    caller: any = { kind: "anonymous" };
+  const write: Tool<null> = {
+    name: "public_write",
+    surface: "public",
+    description: "write",
+    closed: true,
+    meta: { ui: { visibility: ["app"] } },
+    inputSchema: { type: "object" },
+    validate: raw => raw as Record<string, unknown>,
+    run: async () => {
+      runs++;
+      return {};
+    },
+  };
+  const api = mcp<unknown, null>([...tools, write], {
+    db: () => null,
+    caller: () => caller,
+    authorize: target => allow || target.name !== "public_write",
+  });
+  const post = () =>
+    api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "public_write", arguments: {}, _meta: meta },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+  caller = fixtureCaller({
+    kind: "user",
+    subject: "u",
+    role: null,
+    admin: false,
+    scopes: ["mcp"],
+    credential: "oauth",
+    credentialId: null,
+    clientId: null,
+  });
+  expect((await call(api, "tools/list", {}, "public", false)).result.tools.map((t: any) => t.name)).toEqual([
+    "public_rows",
+    "public_details",
+  ]);
   const listed = (await call(api, "tools/list")).result.tools;
   expect(listed.map((t: any) => t.name)).toEqual(["public_rows", "public_details", "public_write"]);
   expect(listed[2]._meta).toEqual({ ui: { visibility: ["app"] } });
@@ -347,13 +1109,83 @@ test("meta.ui.visibility hides a Procedure from clients without MCP Apps; tools/
 });
 
 test("a tool's meta merges with its App links and may not contradict them", async () => {
-  const own = (name: string, meta: Record<string, unknown>) => tools.map(tool => tool.name === name ? { ...tool, meta } : tool);
-  const card = { ui: { resourceUri: "ui://my-app/rows", prefersBorder: true }, "openai/outputTemplate": "ui://my-app/rows", "openai/fileParams": ["image"] };
-  const api = mcp<unknown, null>(own("public_rows", card), { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [resource("ui://my-app/rows", ["public_rows"])] } } });
-  expect((await call(api, "tools/list")).result.tools[0]._meta).toEqual({ ui: { resourceUri: "ui://my-app/rows", prefersBorder: true }, "ui/resourceUri": "ui://my-app/rows", "openai/outputTemplate": "ui://my-app/rows", "openai/fileParams": ["image"] });
-  const apps = (meta: Record<string, unknown>, app: Partial<McpAppResource>) => () => mcp<unknown, null>(own("public_rows", meta), { db: () => null, caller: () => ({ kind: "anonymous" }), apps: { public: { resources: [{ ...resource("ui://my-app/rows"), ...app }] } } });
+  const own = (name: string, meta: Record<string, unknown>) =>
+    tools.map(tool => (tool.name === name ? { ...tool, meta } : tool));
+  const card = {
+    ui: { resourceUri: "ui://my-app/rows", prefersBorder: true },
+    "openai/outputTemplate": "ui://my-app/rows",
+    "openai/fileParams": ["image"],
+  };
+  const api = mcp<unknown, null>(own("public_rows", card), {
+    db: () => null,
+    caller: () => ({ kind: "anonymous" }),
+    apps: { public: { resources: [resource("ui://my-app/rows", ["public_rows"])] } },
+  });
+  expect((await call(api, "tools/list")).result.tools[0]._meta).toEqual({
+    ui: { resourceUri: "ui://my-app/rows", prefersBorder: true },
+    "ui/resourceUri": "ui://my-app/rows",
+    "openai/outputTemplate": "ui://my-app/rows",
+    "openai/fileParams": ["image"],
+  });
+  const apps = (meta: Record<string, unknown>, app: Partial<McpAppResource>) => () =>
+    mcp<unknown, null>(own("public_rows", meta), {
+      db: () => null,
+      caller: () => ({ kind: "anonymous" }),
+      apps: { public: { resources: [{ ...resource("ui://my-app/rows"), ...app }] } },
+    });
   refused(apps({ ui: { resourceUri: "ui://other/card" } }, { renders: ["public_rows"] }), "contradicts");
   refused(apps({ "openai/outputTemplate": "ui://other/card" }, { renders: ["public_rows"] }), "contradicts");
   refused(apps({ ui: { visibility: ["model", "app"] } }, { appOnly: ["public_rows"] }), "contradicts");
   apps({ ui: { visibility: ["app"] } }, { appOnly: ["public_rows"] })();
+});
+
+test("resolveMcpApps returns every source shape in one normal form, which an application wraps and hands back", async () => {
+  const { resolveMcpApps } = await import("../src/kernel/mcp-app-pages.js");
+  const context = { env: { build: "b1" }, request: new Request("https://app.test/mcp/") };
+  const sources = [
+    { resources: [{ uri: "ui://app/string", name: "string", html: "<p>string</p>" }] },
+    () => ({ resources: [{ uri: "ui://app/loader", name: "loader", html: () => "<p>loader</p>" }] }),
+    async ({ env }: { env: unknown }) => ({
+      resources: [
+        {
+          uri: "ui://app/page",
+          name: "page",
+          renders: ["public_rows"],
+          html: async () => ({
+            html: `<p>${(env as { build: string }).build}</p>`,
+            csp: { connectDomains: ["https://api.test"] },
+          }),
+        },
+      ],
+    }),
+  ];
+  const normal = await resolveMcpApps(sources, context);
+  const render = { ...context, tools: new Set<string>() };
+  expect(await Promise.all(normal.resources.map(resource => resource.html(render)))).toEqual([
+    { html: "<p>string</p>" },
+    { html: "<p>loader</p>" },
+    { html: "<p>b1</p>", csp: { connectDomains: ["https://api.test"] } },
+  ]);
+  expect(normal.resources.map(resource => [resource.uri, resource.renders])).toEqual([
+    ["ui://app/string", undefined],
+    ["ui://app/loader", undefined],
+    ["ui://app/page", ["public_rows"]],
+  ]);
+  // The wrapper an application writes: observe each page read, with no shape checks of its own.
+  const read: string[] = [];
+  const api = handle({
+    public: async source => ({
+      resources: (await resolveMcpApps(sources, source)).resources.map(resource => ({
+        ...resource,
+        html: async page => {
+          read.push(resource.uri);
+          return resource.html(page);
+        },
+      })),
+    }),
+  });
+  const result = await call(api, "resources/read", { uri: "ui://app/page" });
+  expect(result.result.contents[0].text).toBe("<p>undefined</p>");
+  expect(result.result.contents[0]._meta.ui.csp).toEqual({ connectDomains: ["https://api.test"] });
+  expect(read).toEqual(["ui://app/page"]);
 });

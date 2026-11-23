@@ -6,8 +6,13 @@ import { expect, test } from "vitest";
 const read = (...path: string[]) => readFileSync(resolve(import.meta.dirname, ...path), "utf8");
 const tokens = read("../src/kit/styles/tokens.css");
 const names = (css: string) => [...css.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]!);
-const block = (selector: RegExp) => { const m = new RegExp(`^(${selector.source})\\s*\\{([^}]*)\\}`, "m").exec(tokens); if (!m) throw new Error(`no ${selector} block`); return { selector: m[1]!, names: new Set(names(m[2]!)) }; };
-const root = block(/:root/), dark = block(/\.dark[^{]*/);
+const block = (selector: RegExp) => {
+  const m = new RegExp(`^(${selector.source})\\s*\\{([^}]*)\\}`, "m").exec(tokens);
+  if (!m) throw new Error(`no ${selector} block`);
+  return { selector: m[1]!, names: new Set(names(m[2]!)) };
+};
+const root = block(/:root/),
+  dark = block(/\.dark[^{]*/);
 const internal = (name: string) => name.startsWith("--mantle-") || name === "--chrome-glass";
 
 test("the documented public tokens are the non-internal :root tokens", () => {
@@ -19,15 +24,30 @@ test("the documented public tokens are the non-internal :root tokens", () => {
 
 test("dark values cover every :root token but the radius and internal palette, and add none", () => {
   expect([...dark.names].filter(name => !root.names.has(name))).toEqual([]);
-  expect([...root.names].filter(name => !dark.names.has(name) && name !== "--radius" && !name.startsWith("--mantle-"))).toEqual([]);
+  expect(
+    [...root.names].filter(name => !dark.names.has(name) && name !== "--radius" && !name.startsWith("--mantle-")),
+  ).toEqual([]);
 });
 
 test("dark tokens and the compiled dark: variant answer to .dark and :root[data-theme]", async () => {
   // no part may outrank `.dark`: an application's `.dark {}` override loaded after the defaults must win
   expect(dark.selector.split(",").map(part => part.trim())).toEqual([".dark", ':where(:root[data-theme="dark"])']);
   for (const css of [read("../src/kit/styles/kit.css"), read("../../mantle-admin/admin/styles.css")]) {
-    const out = (await compile(`${/@custom-variant dark [^\n]*;/.exec(css)![0]}\n@tailwind utilities;`)).build(["dark:underline"]);
+    const out = (await compile(`${/@custom-variant dark [^\n]*;/.exec(css)![0]}\n@tailwind utilities;`)).build([
+      "dark:underline",
+    ]);
     expect(out).toContain(".dark *");
     expect(out).toContain(':root[data-theme="dark"] *');
   }
+});
+
+test("the shipped theme.css is only the @theme mapping and references defined tokens", () => {
+  const theme = read("../dist/kit/theme.css")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .trim();
+  expect(theme).toMatch(/^@theme inline \{[^{}]*\}$/);
+  const defined = new Set(names(read("../dist/kit/tokens.css")));
+  const used = [...theme.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]!);
+  expect(used.length).toBeGreaterThan(0);
+  expect(used.filter(name => !defined.has(name))).toEqual([]);
 });

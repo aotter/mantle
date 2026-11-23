@@ -34,14 +34,14 @@ export function ListQueryToolbar({
   actions?: React.ReactNode;
   onSubmit: (query: { search: string; filters: Record<string, string> }) => void;
 }): React.ReactElement {
-  const optionFilters = filters.filter((filter) => filter.options);
-  const fieldFilters = filters.filter((filter) => !filter.options);
+  const optionFilters = filters.filter(filter => filter.options);
+  const fieldFilters = filters.filter(filter => !filter.options);
   const placeholder = searchPlaceholder ?? t(language, "collection.searchPlaceholder");
   return (
     <form
       className={cn("space-y-3", optionFilters.length > 0 ? "mb-5" : "mb-3")}
       role="search"
-      onSubmit={(event) => {
+      onSubmit={event => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
         onSubmit({
@@ -58,13 +58,11 @@ export function ListQueryToolbar({
           {searchable ? (
             <div className="flex min-w-64 max-w-xl flex-1 gap-2">
               <label className="relative block flex-1" aria-label={placeholder}>
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                <Input
-                  name="search"
-                  className="h-9 ps-9"
-                  defaultValue={searchValue}
-                  placeholder={placeholder}
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
                 />
+                <Input name="search" className="h-9 ps-9" defaultValue={searchValue} placeholder={placeholder} />
               </label>
               <SubmitButton language={language} />
             </div>
@@ -74,26 +72,22 @@ export function ListQueryToolbar({
       ) : null}
       {fieldFilters.length > 0 ? (
         <div className="flex flex-wrap items-end gap-3">
-          {fieldFilters.map((filter) => (
+          {fieldFilters.map(filter => (
             <label key={filter.name} className="grid gap-1.5 text-sm font-medium">
               <span>{filter.label}</span>
-              <Input
-                name={`filter.${filter.name}`}
-                className="h-9 w-48"
-                defaultValue={filter.value ?? ""}
-              />
+              <Input name={`filter.${filter.name}`} className="h-9 w-48" defaultValue={filter.value ?? ""} />
             </label>
           ))}
           {!searchable ? <SubmitButton language={language} /> : null}
         </div>
       ) : null}
-      {optionFilters.map((filter) => (
+      {optionFilters.map(filter => (
         <div key={filter.name} className="flex gap-2 overflow-x-auto pb-1" aria-label={filter.label}>
           <input type="hidden" name={`filter.${filter.name}`} value={filter.value ?? ""} />
           <FilterTab href={filter.allHref ?? "#"} active={!filter.value}>
             {t(language, "collection.filter.all")}
           </FilterTab>
-          {filter.options?.map((option) => (
+          {filter.options?.map(option => (
             <FilterTab key={option.value} href={option.href} active={filter.value === option.value}>
               {option.label}
             </FilterTab>

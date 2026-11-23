@@ -2,7 +2,7 @@
 
 One row per original test file; deleted rows name the remaining owner. Distinct runtime, dialect and transport boundaries keep their own checks. Shared scenarios still run on every supported native adapter.
 
-Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty values and marker forgery); `user-fields-drivers.test.ts` (native scope paths); `gateway.test.ts` (ingress authority, copied brands, props.mantle, snapshot writes, pins and dry runs); `authorize.test.ts` and Admin `authorize-bypass.test.ts`/`server.test.ts` (REST/MCP/Admin/WebMCP); `auth-cookie.test.ts`, `auth-caller.test.ts`, `auth-identity.test.ts` (OAuth/session authority); `origin.test.ts` (ambient origin). Startup and size gates remain in the focused bundle tests and `packages/mantle/scripts/check-size.ts`, `check-package.ts`, and `scripts/check-ui-size.mjs`.
+Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty values and marker forgery); `user-fields-drivers.test.ts` (native scope paths); `gateway.test.ts` (ingress authority, copied brands, props.mantle, snapshot writes, pins and the refused `dryRun` key); `authorize.test.ts` and Admin `authorize-bypass.test.ts`/`server.test.ts` (REST/MCP/Admin/WebMCP); `auth-cookie.test.ts`, `auth-caller.test.ts`, `auth-identity.test.ts` (OAuth/session authority); `origin.test.ts` (ambient origin). Startup and size gates remain in the focused bundle tests and `packages/mantle/scripts/check-size.ts`, `check-package.ts`, and `scripts/check-ui-size.mjs`.
 
 | Test file | Guarded rules / remaining owner |
 | --- | --- |
@@ -86,7 +86,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/tests/auth-resource.test.ts` | OAuth resource selection/seeding and renamed native models without boot SQL. |
 | `packages/mantle/tests/auth-split.test.ts` | Lazy optional auth imports, startup import tripwires, auth schema/index compatibility and CLI auth loading. |
 | `packages/mantle/tests/authorize.test.ts` | REST and MCP authorize manifest targets before SQL/handlers; requires precedes authorization and lists hide denied targets. |
-| `packages/mantle/tests/boundaries.test.ts` | Request and build imports respect package/layer boundaries. |
+| `packages/mantle/tests/boundaries.test.ts` | Kernel source statically imports no package; folder reach is `scripts/check-boundaries.mjs`. |
 | `packages/mantle/tests/bun-assets.test.ts` | Asset reader refuses traversal, malformed paths and escaping symlinks. |
 | `packages/mantle/tests/cli.test.ts` | CLI handler guidance, config preservation/idempotence, executable consumer build and the removed `--admin-extensions` option; process timeout 30 s. |
 | `packages/mantle/tests/compiler-boundary.test.ts` | Generator loads and compiles without optional auth/MCP dependencies; process timeout 30 s. |
@@ -94,7 +94,7 @@ Security witnesses: `user-fields.test.ts` (scope, restrict inheritance, empty va
 | `packages/mantle/tests/describe-diff.test.ts` | Restriction replacement widens access; target hashes are independent of process locale. |
 | `packages/mantle/tests/describe.test.ts` | Deterministic access catalogue/hash/diff, conservative read/write classification, route dispatch and inherited View restrictions. |
 | `packages/mantle/tests/email.test.ts` | Email locale/category/HTML contract, development sender, public entry and optional bundle exclusion. |
-| `packages/mantle/tests/gateway.test.ts` | Trusted ingress only, copied authority denied, props.mantle tripwire, scoped reads, snapshot write refusal, pins and dry runs. |
+| `packages/mantle/tests/gateway.test.ts` | Trusted ingress only, copied authority denied, props.mantle tripwire, scoped reads, snapshot write refusal, pins and the refused `dryRun` key. |
 | `packages/mantle/tests/generate.test.ts` | Native generation refusals, unique/uncertain write outcomes, authored binds, driver-native rows and temporal SQL semantics. |
 | `packages/mantle/tests/handlers.test.ts` | Ref dispatch authorization, caller/transaction-bound Store, rollback, missing/inherited handlers and generated handler types. |
 | `packages/mantle/tests/kernel.test.ts` | Strict scalar/calendar conversion and SQLite rollback-failure classification. |

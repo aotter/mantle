@@ -95,8 +95,8 @@ export default {
 
 Keep the MCP and REST entries together for the normal symmetric path. For a deliberate
 asymmetric exception, remove the omitted surface's imports and array entry. `mcp.ts`
-exists only when the manifest has an MCP surface and requires the documented optional
-MCP peer. An application that deliberately does not mount MCP need not import generated
+is always generated (its `tools` table is empty when the manifest exposes nothing to MCP) and serving it requires the
+documented optional MCP peer. An application that deliberately does not mount MCP need not import generated
 `mcp.ts`; outside the entry import graph, it contributes nothing to the bundle.
 Pass the same handlers to each selected surface that exposes ref Procedures.
 Bind site/media/identity capabilities through the selected Admin/MCP
@@ -115,9 +115,10 @@ its collection parameter selects only a generated table and visibility policy.
 ## Workers assets and secrets
 
 `mantle generate --admin --wrangler wrangler.jsonc` sets the selected assets
-directory. A new assets block defaults to `binding: "ASSETS"`, `run_worker_first: true`
-and `html_handling: "none"`. Existing blocks keep their binding and routing; when
-`run_worker_first` is already true, a missing `html_handling` defaults to `none`.
+directory. A new assets block defaults to `binding: "ASSETS"`,
+`run_worker_first: ["/*", "!/admin/assets/*", "!/assets/*"]` and `html_handling: "none"`.
+Existing blocks keep their binding and routing; when `run_worker_first` is true or a
+list, a missing `html_handling` defaults to `none`.
 A different binding needs a custom Admin HTML loader. Deploy the built assets and
 Worker together.
 
@@ -133,18 +134,55 @@ JSONC comments and unrelated settings survive regeneration:
   "assets": {
     "directory": "dist/client",
     "binding": "ASSETS",
-    "run_worker_first": true,
+    "run_worker_first": ["/*", "!/admin/assets/*", "!/assets/*"],
     "html_handling": "none"
   },
   "d1_databases": [{ "binding": "DB", "database_name": "your-database", "database_id": "your-id" }]
 }
 ```
 
-`run_worker_first` lets the application supply shell/security/cache headers;
-`none` keeps `index.html` available by name. `adminShell(request, assets)` passes
+The Worker serves HTML shells and APIs; static files are answered by the edge without
+running it. `mantle bundle` writes `<assets>/_headers` with `nosniff` and a one-day
+`immutable` cache (`public, max-age=86400, immutable`) for Admin's content-hashed `/admin/assets/*`. When `public/_headers`
+has no `/admin/assets/*` rule, the build appends it to the copy in the assets directory
+and prints one line; `public/_headers` itself is not edited, and a rule the app writes
+is kept as it is. A `_headers` the build did not copy (`--assets public`, or one another
+step wrote) is not edited: the build prints the rule to add. `mantle bundle` also copies the
+working directory's `public/` into the assets directory (removing what it copied last
+time; `public/admin` is refused, and `public/assets/client` when the app has browser entries). The application's browser entries
+(`client/<name>.ts|tsx` beside the Worker entry) are built into `<assets>/assets/client/<name>.js`, answered by
+the edge at `/assets/client/<name>.js`, with content-hashed copies under `/assets/client/h/`
+([reference](../start/project-and-cli.md#outputs)). For those copies the build's `_headers` also gets
+`/assets/client/h/*` with `public, max-age=86400, immutable` (one day, for the same reason as Admin's rule below),
+written, appended or printed exactly as Admin's rule; a `_headers` that holds only rules `mantle bundle` writes is the
+build's own and is rewritten with this build's rules, or removed when the build has none. A `bun-*` build writes no
+hashed copies. `/assets/*` is excluded by default, so
+`public/assets/*` is answered by the edge; other public files reach the Worker first,
+which can serve them with `env.ASSETS.fetch(request)` as the app shell does. Cloudflare
+sends `Cache-Control: public, max-age=0, must-revalidate` and an ETag by default; set
+`immutable` in `public/_headers` only for content-hashed files, with a `max-age` of a day
+rather than a year. `_headers` does not
+apply to responses the Worker builds. It does apply to the edge's own `404` for a missing
+file under an excluded path, which never reaches the Worker: a chunk name that is not in
+the deployed build (`/admin/assets/<old>.js`) answers `404` with the same `nosniff` and
+`Cache-Control`. A browser stores that `404` and serves it without asking again until
+`max-age` passes, on navigation and on reload, even after the name exists (a rollback, or
+two versions served at once); if it is the entry chunk, Admin does not start and no script
+can recover. So the rule is one day: a present chunk costs one revalidation (`304`) a day,
+and a stored `404` heals within a day. An application whose own `/admin/assets/*` rule says
+a year keeps it; shorten it. A path the Worker must answer stays out of the
+exclusion. What a cache in front of the Worker stores, and the `Cache-Control` every Worker response states, is in
+[caching](../guides/caching.md).
+
+After a deploy the previous version's assets are gone, so an open Admin tab that loads
+a chunk from the old build gets a 404; Admin then offers a reload and warns that unsaved changes may be lost.
+With [gradual deployments](https://developers.cloudflare.com/workers/versions-and-deployments/gradual-deployments/version-affinity/),
+set a version key (`Cloudflare-Workers-Version-Key`) so a page and its chunks come from
+the same version. `none` keeps `index.html`
+available by name. `adminShell(request, assets)` passes
 paths relative to the Admin directory, so the app fetches them under `/admin/`:
 `path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, request.url), request))`. Admin assets are not a public database
-API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring,
+API. PostgreSQL uses application-owned Hyperdrive/postgres.js wiring ([PostgreSQL through Hyperdrive](postgres-hyperdrive.md)),
 with Hyperdrive query caching disabled for authority and mutation visibility.
 
 Commit `.dev.vars.example` containing variable names and placeholders only:
@@ -165,16 +203,18 @@ Name the variables as your `auth.ts` reads them (the app shell uses these three)
 
 ## Scheduling and Bun
 
-Scheduling remains app-owned; schedule/lifecycle Triggers are refused. Import
+Scheduling remains app-owned; a schedule or lifecycle Trigger source fails validation. Import
 only the desired generated `sweepExpired` entry in `scheduled()`, pass a system
 Caller with a reason, and choose an application-owned page budget for each
 invocation; see the [TTL contract](../guides/native-execution.md#ttl-maintenance). Configure `triggers.crons` yourself;
 `toCloudflareCron` converts POSIX schedules without adding a dispatcher. Keep
-larger sweeps' cursors for a later invocation instead of scanning without a bound.
+larger sweeps' cursors for a later invocation instead of scanning without a bound. A checked cron map, a `scheduled()`
+that reports each job, and the test that keeps `triggers.crons` equal to the map are in
+[scheduled work](deploy-and-operate.md#scheduled-work).
 
 On Bun, reuse a process-owned `Database` or `SQL` pool and call the same generated
 surfaces from `Bun.serve({fetch})`. Bun runs the server as TypeScript, so
-`mantle bundle` builds only Admin for it: the `bun-*` target that
+`mantle bundle` builds only Admin (and the browser entries, `dist/client/assets/client/<name>.js`, stable names: root `bunAdminAssets` at `dist/client/admin` as above, or at the assets directory, where it revalidates `/assets/client/` but caches every other `/assets/` file as immutable) for it: the `bun-*` target that
 `generated/.mantle-inputs.json` records skips the Worker bundle, and Admin goes
 to `dist/client/admin` (`--assets` as on Workers) when the server imports
 `@aotter/mantle-admin/server`. Add it as the build script and run it before
@@ -199,7 +239,10 @@ const reader = async (path: string) => (await assets('/' + path)) ?? new Respons
 ```
 
 The reader returns a native `Response` or `null`, rejects traversal/control
-characters and escaping symlinks; the app owns shell, CSP and cache headers.
+characters and escaping symlinks, sets `nosniff` on every file and caches Admin's
+content-hashed `/assets/` chunks for a year (`immutable`); the app owns shell, CSP
+and any other cache headers. Root it at Admin's directory: it caches every `/assets/` path for a year, so serve `public/` files with your own reader and cache headers. Bun has no edge in front of it: put a CDN or reverse
+proxy before the server to keep static requests off it.
 Use ignored `.env` on Bun.
 
 Admin's build tools and UI packages are dependencies of `@aotter/mantle-admin`,

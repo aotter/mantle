@@ -3,16 +3,14 @@
  * SQLite share, so most nodes print as they are; each override exists because a case fails on local D1
  * without it. Runs in the Worker: AST in, SQL text out, no parser.
  */
-import { Deparser } from "pgsql-deparser";
+import { NativeDeparser } from "../core/sql/print.js";
+export type { RawExpr } from "../core/sql/print.js";
 import type { SqlNode } from "../spec/domain/index.js";
 import { parenthesized } from "../core/sql/ast.js";
 
 /** A pre-lowered SQLite expression: strings print as they are, nodes print as the deparser would, always in parentheses. */
-export interface RawExpr {
-  readonly parts: readonly (string | SqlNode)[];
-}
 
-export class SqliteDeparser extends Deparser {
+export class SqliteDeparser extends NativeDeparser {
   /** PostgreSQL prints $n; SQLite reads $n as a NAMED parameter numbered by first appearance, so binds would shift silently. */
   override ParamRef(n: SqlNode) {
     return `?${n.number}`;
@@ -41,15 +39,9 @@ export class SqliteDeparser extends Deparser {
     // SQLite looks through a unary sign: `ORDER BY +2` is column position 2 to it (and `-2` an error) where PostgreSQL has a constant
     const sign = n.name?.[0]?.String?.sval;
     // the operand in its own parentheses: `-` then `-2` must never print as `--`, which starts a comment
-    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-")) return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
+    if (n.kind === "AEXPR_OP" && !n.lexpr && (sign === "+" || sign === "-"))
+      return `(${sign}(${this.visit(n.rexpr as never, ctx)}) + 0)`;
     return super.A_Expr(n, ctx);
-  }
-  override NullTest(n: SqlNode, ctx: any) { return super.NullTest(parenthesized("NullTest", n) as never, ctx); }
-  override BooleanTest(n: SqlNode, ctx: any) { return super.BooleanTest(parenthesized("BooleanTest", n) as never, ctx); }
-  override SubLink(n: SqlNode, ctx: any) { return super.SubLink(parenthesized("SubLink", n) as never, ctx); }
-  /** Mantle's own lowerings are written as SQLite text with sub-ASTs spliced in (see `raw` in policy.ts). */
-  Raw(n: RawExpr, ctx: any) {
-    return `(${n.parts.map((p) => (typeof p === "string" ? p : this.visit(p as never, ctx))).join("")})`;
   }
 }
 

@@ -14,8 +14,8 @@ exact packed tarballs (`scripts/check-worker-consumer.mjs`).
   Better Auth loads dynamically, and local-only email OTPs print to the log.
 - `src/handlers.ts`: scoped cancellation and stock restoration in one native
   batch. Order activity runs after commit with the actual caller, best effort,
-  preserving the old after-hook semantics. Generated lifecycle Triggers are
-  refused; this effect also covers the app's Admin entry writers.
+  preserving the old after-hook semantics. Lifecycle Triggers are not
+  grammar; this effect also covers the app's Admin entry writers.
 - `src/pages.ts`: app-owned keysets for relevance and aggregate ordering outside
   the generator's automatic paging proofs. SQL applies cursors and LIMIT; the
   application does not read all rows and then paginate them.

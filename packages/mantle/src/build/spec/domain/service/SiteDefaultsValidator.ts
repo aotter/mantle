@@ -4,14 +4,9 @@ import {
   type SiteIcon,
   type SiteDefaults,
 } from "../model/SiteConfig.js";
-import {
-  expandPolicyRequired,
-  parseMimeAccept,
-} from "../model/MediaMimeAccept.js";
-import {
-  canonicalizeLocaleList,
-  containsScriptSubtagLocale,
-} from "./LocaleCanonicalizer.js";
+import { expandPolicyRequired, parseMimeAccept } from "../model/MediaMimeAccept.js";
+import { canonicalizeLocaleList, containsScriptSubtagLocale } from "./LocaleCanonicalizer.js";
+import { validAccept } from "../../../../kernel/media-type.js";
 
 /**
  * Synchronous fail-fast for `siteDefaults`. Throws
@@ -35,7 +30,7 @@ export class InvalidSiteDefaultsError extends Error {
     const hasScriptSubtag = containsScriptSubtagLocale(invalidLocales);
     super(
       `Invalid Mantle locale tag(s) in adapter siteDefaults.locales: ` +
-        invalidLocales.map((s) => `'${s}'`).join(", ") +
+        invalidLocales.map(s => `'${s}'`).join(", ") +
         `. Use Mantle v0.1 locale form like 'en' or 'zh-TW' — the canonicalizer ` +
         `accepts mixed case ('zh-tw' / 'ZH_TW'), but the structure must ` +
         `be a 2/3-letter language plus optional 2-letter region. ` +
@@ -54,9 +49,11 @@ export interface MediaPurposeIssue {
     | "invalid-slug"
     | "empty-required"
     | "empty-required-slot"
+    | "invalid-mime"
     | "overlapping-slot-mimes"
     | "maxBytes-missing-mime"
-    | "maxBytes-non-positive";
+    | "maxBytes-non-positive"
+    | "invalid-visibility";
   readonly detail?: string;
 }
 
@@ -65,7 +62,7 @@ export class InvalidMediaPurposesError extends Error {
     super(
       `Invalid media purpose declaration(s) in adapter siteDefaults.media.purposes: ` +
         issues
-          .map((i) => {
+          .map(i => {
             const tag = `'${i.name || "(unnamed)"}'`;
             switch (i.reason) {
               case "invalid-slug":
@@ -74,12 +71,16 @@ export class InvalidMediaPurposesError extends Error {
                 return `${tag} declares no required slots (need at least one)`;
               case "empty-required-slot":
                 return `${tag} has a required slot that parses to zero mimes: ${i.detail}`;
+              case "invalid-mime":
+                return `${tag} names media types that are not a lowercase type/subtype without parameters (at most 127 characters each), type/* or */*: ${i.detail}`;
               case "overlapping-slot-mimes":
                 return `${tag} has slots with overlapping mime sets (variant→slot mapping is ambiguous): ${i.detail}`;
               case "maxBytes-missing-mime":
                 return `${tag} maxBytes is missing entries: ${i.detail}`;
               case "maxBytes-non-positive":
                 return `${tag} maxBytes has non-positive entries: ${i.detail}`;
+              case "invalid-visibility":
+                return `${tag} visibility must be 'public' or 'private', not ${i.detail}`;
             }
           })
           .join("; ") +
@@ -104,23 +105,26 @@ export class InvalidSiteIconsError extends Error {
   }
 }
 
-export function assertSiteDefaultsCanonical(
-  defaults: SiteDefaults | undefined,
-): void {
+export function assertSiteDefaultsCanonical(defaults: SiteDefaults | undefined): void {
   if (defaults?.locales && defaults.locales.length > 0) {
     const { invalid } = canonicalizeLocaleList(defaults.locales);
     if (invalid.length > 0) throw new InvalidSiteDefaultsError(invalid);
   }
   if (defaults?.icons) {
-    const invalid = defaults.icons.filter((icon) => !validSiteIcon(icon));
+    const invalid = defaults.icons.filter(icon => !validSiteIcon(icon));
     if (defaults.icons.length === 0 || invalid.length > 0) {
       throw new InvalidSiteIconsError(invalid.length > 0 ? invalid : defaults.icons);
     }
   }
   // canonical and public URLs are built on it: an absolute http(s) origin, no path and no trailing slash
   const origin = defaults?.origin;
-  if (origin && !(URL.canParse(origin) && /^https?:$/.test(new URL(origin).protocol) && new URL(origin).origin === origin))
-    throw new Error(`siteDefaults.origin '${origin}' must be an absolute http(s) origin such as 'https://example.com', with no path or trailing slash.`);
+  if (
+    origin &&
+    !(URL.canParse(origin) && /^https?:$/.test(new URL(origin).protocol) && new URL(origin).origin === origin)
+  )
+    throw new Error(
+      `siteDefaults.origin '${origin}' must be an absolute http(s) origin such as 'https://example.com', with no path or trailing slash.`,
+    );
   const purposes = defaults?.media?.purposes;
   if (purposes && purposes.length > 0) {
     const issues = collectMediaPurposeIssues(purposes);
@@ -130,24 +134,27 @@ export function assertSiteDefaultsCanonical(
 
 function validSiteIcon(icon: SiteIcon): boolean {
   if (!icon || typeof icon !== "object" || typeof icon.src !== "string") return false;
-  const validSrc = (/^\/(?!\/)[^\s\\]*$/.test(icon.src))
-    || (URL.canParse(icon.src) && new URL(icon.src).protocol === "https:");
+  const validSrc =
+    /^\/(?!\/)[^\s\\]*$/.test(icon.src) || (URL.canParse(icon.src) && new URL(icon.src).protocol === "https:");
   return Boolean(
-    validSrc
-      && (!icon.mimeType || ["image/png", "image/jpeg", "image/svg+xml", "image/webp"].includes(icon.mimeType))
-      && (!icon.theme || icon.theme === "light" || icon.theme === "dark")
-      && (!icon.sizes || (Array.isArray(icon.sizes) && icon.sizes.length > 0))
-      && (icon.sizes?.every((size) => typeof size === "string" && (size === "any" || /^[1-9]\d*x[1-9]\d*$/.test(size))) ?? true),
+    validSrc &&
+      (!icon.mimeType || ["image/png", "image/jpeg", "image/svg+xml", "image/webp"].includes(icon.mimeType)) &&
+      (!icon.theme || icon.theme === "light" || icon.theme === "dark") &&
+      (!icon.sizes || (Array.isArray(icon.sizes) && icon.sizes.length > 0)) &&
+      (icon.sizes?.every(size => typeof size === "string" && (size === "any" || /^[1-9]\d*x[1-9]\d*$/.test(size))) ??
+        true),
   );
 }
 
-function collectMediaPurposeIssues(
-  purposes: ReadonlyArray<MediaPurposePolicy>,
-): ReadonlyArray<MediaPurposeIssue> {
+function collectMediaPurposeIssues(purposes: ReadonlyArray<MediaPurposePolicy>): ReadonlyArray<MediaPurposeIssue> {
   const out: MediaPurposeIssue[] = [];
   for (const p of purposes) {
     if (!MEDIA_PURPOSE_SLUG_PATTERN.test(p.name)) {
       out.push({ name: p.name, reason: "invalid-slug" });
+      continue;
+    }
+    if (p.visibility !== undefined && p.visibility !== "public" && p.visibility !== "private") {
+      out.push({ name: p.name, reason: "invalid-visibility", detail: JSON.stringify(p.visibility) });
       continue;
     }
     if (p.required.length === 0) {
@@ -158,15 +165,18 @@ function collectMediaPurposeIssues(
     // MediaMimeAccept). Each slot must yield ≥1 mime; otherwise
     // the agent has no acceptable mime to ship for that slot.
     const slots = expandPolicyRequired(p.required);
-    const emptySlots = slots
-      .map((mimes, i) => ({ mimes, raw: p.required[i] }))
-      .filter((s) => s.mimes.length === 0);
+    const emptySlots = slots.map((mimes, i) => ({ mimes, raw: p.required[i] })).filter(s => s.mimes.length === 0);
     if (emptySlots.length > 0) {
       out.push({
         name: p.name,
         reason: "empty-required-slot",
-        detail: emptySlots.map((s) => `'${s.raw}'`).join(", "),
+        detail: emptySlots.map(s => `'${s.raw}'`).join(", "),
       });
+      continue;
+    }
+    const invalid = slots.flat().filter(mime => !validAccept(mime));
+    if (invalid.length > 0) {
+      out.push({ name: p.name, reason: "invalid-mime", detail: invalid.map(m => JSON.stringify(m)).join(", ") });
       continue;
     }
     // Variant → slot mapping is by mime: each supplied mime must
@@ -181,9 +191,7 @@ function collectMediaPurposeIssues(
     slots.forEach((mimes, slotIdx) => {
       for (const mime of mimes) {
         if (seen.has(mime)) {
-          overlaps.push(
-            `'${mime}' in slots [${seen.get(mime)}, ${slotIdx}]`,
-          );
+          overlaps.push(`'${mime}' in slots [${seen.get(mime)}, ${slotIdx}]`);
         } else {
           seen.set(mime, slotIdx);
         }
@@ -200,7 +208,7 @@ function collectMediaPurposeIssues(
     // maxBytes must cover every mime that COULD be shipped — the
     // expanded set, not the literal `required[i]` strings.
     const expandedMimes = Array.from(seen.keys());
-    const missing = expandedMimes.filter((mime) => !(mime in p.maxBytes));
+    const missing = expandedMimes.filter(mime => !(mime in p.maxBytes));
     if (missing.length > 0) {
       out.push({
         name: p.name,
@@ -209,14 +217,12 @@ function collectMediaPurposeIssues(
       });
       continue;
     }
-    const nonPositive = expandedMimes.filter(
-      (mime) => !(typeof p.maxBytes[mime] === "number" && p.maxBytes[mime]! > 0),
-    );
+    const nonPositive = expandedMimes.filter(mime => !(typeof p.maxBytes[mime] === "number" && p.maxBytes[mime]! > 0));
     if (nonPositive.length > 0) {
       out.push({
         name: p.name,
         reason: "maxBytes-non-positive",
-        detail: nonPositive.map((m) => `${m}=${p.maxBytes[m]}`).join(", "),
+        detail: nonPositive.map(m => `${m}=${p.maxBytes[m]}`).join(", "),
       });
     }
   }

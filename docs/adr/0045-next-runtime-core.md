@@ -55,7 +55,10 @@ block, for every Schema repeats what the database and the generated types alread
    cursors (percent-encoded JSON `[value, id]`, bound as parameters; a malformed one is `INPUT_VALIDATION_FAILED`).
    - **Names are storage names.** Rows, `where`, `set`, `orderBy` and cursors use the table's column names (`requestnumber`,
      `created_at`), the keys `SELECT *` returns on every target and the same SQL names as the other generated outputs.
-     Authored camelCase exists only in a View's aliases.
+     Authored camelCase exists only in a View's aliases. A name given anyway in its declared spelling (`requestNumber`, from
+     JavaScript or a cast) is folded to lower case first, so it is that storage column on every dialect, as SQLite already
+     resolved it, date-time and date conversion included (#2119); rows keep storage names. A write that names one column
+     in two spellings is refused before SQL.
    - **No runtime allowlist.** Every column name is quoted by the dialect (`ident`); an unknown one is a database error, never
      SQL. Column names, value types, operators, `order`, ids, lock values, writable columns and `orderBy` are enforced
      by the generated TypeScript types only; every value is a bound parameter, so the worst outcome of breaking a type is a
@@ -121,3 +124,20 @@ block, for every Schema repeats what the database and the generated types alread
 - Rows of a table with a `geo` field carry its two physical columns (`*`); the row type lists `<field>_lat`/`<field>_lng`.
 - `SELECT *` order and the rule that the last of two same-named columns wins are driver behavior; the Store scenarios
   pin them on every target.
+
+
+## Amendment #2048: Declared native database access (2026-11-17)
+
+Procedure `spec.db: native` is an optional closed-enum capability, valid only with `handler.ref`.
+The compiler retains it in the sealed Procedure. Describe reports `_meta.nativeDatabase` as a boolean on targets and
+route variants; routes OR their variants. Adding it widens access and changes the target hash. The marker describes
+that Procedure's own declaration, not calls hidden in application code: a handler may call a declared Procedure through
+`store.procedures`. Hosts must review that chain; the marker is not a sandbox or proof that a handler stays scoped.
+`opaque` remains independent and conservative for all ref handlers.
+
+The first rollout in alpha.6 preserved both handles and warned on undeclared reads. The enforcement phase removes
+undeclared native access from the generated context types and runtime values, including interactive transaction
+callbacks. Handler Stores expose only `collection`, `batch`, `views` and `procedures`; the application's top-level
+Store retains its native transaction API. A handler uses `ctx.transaction` to open or join a transaction on interactive
+targets. The caller and transaction binding stay intact. D1 has no interactive transaction. Applications that used
+an undeclared native handle add `spec.db: native` and regenerate.

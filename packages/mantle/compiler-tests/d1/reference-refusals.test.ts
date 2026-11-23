@@ -1,9 +1,13 @@
 // @ts-nocheck test code over loosely typed IR
 /** ADR-0037 decision 1: D1 runs the base profile, and refuses each reference-profile construct as needing PostgreSQL. */
 import { expect, it } from "vitest";
-import {compileSql} from "../compiler.js";
-import {schemas} from "../schemas.js";
-const program=async(kind:string,sql:string)=>{const r=await compileSql(sql,{schemas,inputs:{},kind:kind as "view"});if(!r.ok)throw new Error(r.diagnostic.code+": "+r.diagnostic.message);return r.plan;};
+import { compileSql } from "../compiler.js";
+import { schemas } from "../schemas.js";
+const program = async (kind: string, sql: string) => {
+  const r = await compileSql(sql, { schemas, inputs: {}, kind: kind as "view" });
+  if (!r.ok) throw new Error(r.diagnostic.code + ": " + r.diagnostic.message);
+  return r.plan;
+};
 
 const POSTGRES_ONLY = [
   "WITH RECURSIVE s AS (SELECT id FROM items) SELECT id FROM s ORDER BY id",
@@ -21,7 +25,10 @@ const POSTGRES_ONLY = [
 ];
 
 it("D1 refuses every reference-profile construct as needing the PostgreSQL dialect", async () => {
-  for (const sql of POSTGRES_ONLY) await expect(program("view", sql), sql).rejects.toThrow(/needs the PostgreSQL dialect/);
+  for (const sql of POSTGRES_ONLY)
+    await expect(program("view", sql), sql).rejects.toThrow(/needs the PostgreSQL dialect/);
   // what neither profile accepts is an ordinary refusal
-  await expect(program("view", "SELECT g.id FROM generate_series(1, 3) g")).rejects.toThrow(/^(?!.*PostgreSQL dialect).*only json_each/);
+  await expect(program("view", "SELECT g.id FROM generate_series(1, 3) g")).rejects.toThrow(
+    /^(?!.*PostgreSQL dialect).*only json_each/,
+  );
 });

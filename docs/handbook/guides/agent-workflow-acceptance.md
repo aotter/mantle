@@ -66,7 +66,12 @@ exclusions, but keep an unmet explicit user requirement unresolved until the
 user changes its scope; do not redefine it as optional to make a round pass.
 Reuse the installed version's Views,
 Procedures, Store and surface contracts; a missing business tool is not by
-itself an SDK runtime defect.
+itself an SDK runtime defect. Before recording a gap as a Mantle gap, check
+[what Core does, and what it does not](../concepts/core-boundary.md): a need on
+its table is application-owned, so record it as `application-owned (pattern:
+<link>)` and build that pattern. Record a candidate Mantle gap only with the
+evidence that page asks for: the application code that works around it, why
+the listed patterns do not fit, and which of its tests the request passes.
 
 For simple creates/partial updates, prefer a declared Store-backed `ref`
 Procedure: await the caller-bound Store write, return a safe allowlist with its
@@ -98,6 +103,39 @@ fixes:
   browser if none is there); only what you cannot provide goes to the user now, rather than reported as BLOCKED later.
 
 Keep the rubric itself private: the plan names goals, never the checks an evaluator is graded on.
+
+## Accept Admin work in the browser
+
+Give a fresh admin evaluator its signed-in Admin URL and a real browser.
+It must use the UI; API/MCP writes and seeded records cannot substitute for a
+missing control. Derive the private rubric from the original brief: each
+required, authorized workflow's business inputs and observable result, including
+jobs the evaluator does not discover.
+
+| Required browser evidence | What the author checks |
+| --- | --- |
+| Find the action | The role can start the workflow from its normal entry, including applicable empty or later-page states. Knowing a hidden URL is insufficient. |
+| Enter the business inputs | Required user-supplied fields and relations can be entered or changed, including custom inputs and operation dialogs. |
+| Submit and interpret the outcome | Exercise applicable validation, refusals and recovery. Distinguish failure from uncertain completion without blindly retrying. A success toast alone is not proof of a write. |
+| Reopen or reload and read back | Observe persisted values, relations and state through the UI, not just the submitted draft or completion summary. |
+
+A missing required action or input is a product FAIL (P1, or P0 for authority,
+integrity or data loss), even when the API works. An unattempted workflow is
+UNVERIFIED; a browser/tool or execution-policy refusal is an environment BLOCKED.
+A required write covered only by browsing, or an applicable failure path never
+attempted, stays UNVERIFIED.
+
+Judge controls against the intended role. Read-only collections, system-managed
+values and parent/locale values supplied by context need no generic create
+button or editable field. Operational collections may use declared
+[collection or row operations](native-admin.md#collection-navigation-and-operation-placement).
+Verify that workflow; do not widen permissions or enable generic CRUD to pass.
+
+Capture and visually inspect real screenshots at supported desktop and narrow
+widths: fields, actions, focus, legibility and overflow. DOM checks alone do not
+prove usability. Record browser/version, screenshots and persisted readbacks in
+the existing handoff; keep API/MCP evidence separate. The evaluator gets only
+the role prompt below, never a rubric, expected control locations or click script.
 
 ## Run role-only acceptance rounds until they converge
 
@@ -143,7 +181,10 @@ the evidence.
    discoverable), P2 (friction) or P3 (suggestion), with evidence and the
    smallest repair. Separate a violated explicit requirement, a demonstrated
    defect and a newly inferred product wish; a wish is not permission to grow
-   the product. A goal the evaluator's own environment stopped (its tool
+   the product. A repair is the application's own unless
+   [Core's boundary](../concepts/core-boundary.md) says otherwise: a finding
+   whose repair is on its "does not do" table is fixed with that pattern, not
+   reported as a Mantle defect. A goal the evaluator's own environment stopped (its tool
    approval, sandbox or network, not an app refusal) is not a finding: record
    it as an [environment block](#report-done-ness-in-layers) and rerun that
    role once it is lifted.
@@ -350,6 +391,13 @@ Use ordinary Markdown; no new receipt schema or framework is required:
   author regression only, or UNVERIFIED); the final CONVERGED / BLOCKED / UNVERIFIED verdict and rounds
   used, which is layer 3 of the [layered report](#report-done-ness-in-layers).
   Retain every failed report.
+- Each schema change made during the rounds and its migration, written by
+  the author from the `generated/schema.sql` diff and rehearsed on a copy
+  ([schema migrations](migrations.md)); Mantle ships no migration tool, and
+  needing one is not a finding against it.
+- Every need recorded as application-owned with its pattern, and every
+  candidate Mantle gap with the evidence
+  [Core's boundary](../concepts/core-boundary.md#when-something-really-is-missing) asks for.
 - Fixture cleanup result and every remaining limitation.
 
 Keep credentials, raw auth logs, full resource HTML and private operational

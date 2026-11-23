@@ -25,7 +25,10 @@ export function loadEntryForm(entry: Entry, previous?: EntryForm | null): EntryF
 }
 
 export function isEntryFormDirty(form: EntryForm): boolean {
-  return Object.values(form.inputs).some(input => input.dirty) || JSON.stringify(form.data) !== JSON.stringify(form.base.data);
+  return (
+    Object.values(form.inputs).some(input => input.dirty) ||
+    JSON.stringify(form.data) !== JSON.stringify(form.base.data)
+  );
 }
 
 export function hasEntryInputErrors(form: EntryForm): boolean {
@@ -45,11 +48,17 @@ export function reportEntryInput(form: EntryForm, key: string, status?: InputSta
 
 /** A re-read of the editor payload: a clean form follows it, a dirty one keeps its edits. */
 export function followEntry(form: EntryForm | null, entry: Entry): EntryForm {
-  if (!form || form.base.id !== entry.id || form.base.collection !== entry.collection) return loadEntryForm(entry, form);
-  if (!isEntryFormDirty(form)) return entry.version === form.base.version ? { ...form, base: entry, data: entry.data } : loadEntryForm(entry, form);
+  if (!form || form.base.id !== entry.id || form.base.collection !== entry.collection)
+    return loadEntryForm(entry, form);
+  if (!isEntryFormDirty(form))
+    return entry.version === form.base.version
+      ? { ...form, base: entry, data: entry.data }
+      : loadEntryForm(entry, form);
   // same version: only related sections or metadata moved, which the page reads from the payload itself
   if (entry.version === form.base.version) return form.newer ? { ...form, newer: null } : form;
-  return form.newer?.version === entry.version ? form : { ...form, newer: { version: entry.version, dismissed: false } };
+  return form.newer?.version === entry.version
+    ? form
+    : { ...form, newer: { version: entry.version, dismissed: false } };
 }
 
 /** The person's edit: reverted onto a known newer version, the form adopts it so Save and Publish send the current version. */
@@ -63,7 +72,8 @@ export function editEntryForm(form: EntryForm, data: Record<string, unknown>, la
  * while it was in flight (or kept through an unpublish) stay on top of the version it returned.
  */
 export function settleEntryForm(form: EntryForm | null, sent: Record<string, unknown>, entry: Entry): EntryForm {
-  if (!form || (JSON.stringify(form.data) === JSON.stringify(sent) && Object.keys(form.inputs).length === 0)) return loadEntryForm(entry, form);
+  if (!form || (JSON.stringify(form.data) === JSON.stringify(sent) && Object.keys(form.inputs).length === 0))
+    return loadEntryForm(entry, form);
   return { ...form, base: entry, newer: null };
 }
 

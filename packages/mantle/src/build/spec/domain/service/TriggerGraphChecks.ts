@@ -1,7 +1,13 @@
-/** Graph checks across Triggers, Procedures and Views: targets, guards, sql handlers, and MCP tool names. */
+/** Graph checks across Triggers, Procedures and Views: targets, sql handlers, and MCP tool names. */
 import { validateDiagnostic, type Diagnostic } from "../../kernel/diagnostic.js";
-import { resolveLocalizedText, type ProcedureManifest, type SchemaManifest, type TriggerManifest, type ViewManifest, type JsonSchema } from "../model/ManifestGrammar.js";
-import { jsonSchemaToZod } from "./JsonSchemaToZod.js";
+import {
+  resolveLocalizedText,
+  type ProcedureManifest,
+  type SchemaManifest,
+  type TriggerManifest,
+  type ViewManifest,
+  type JsonSchema,
+} from "../model/ManifestGrammar.js";
 import { bestMatch, manifestPath, type ManifestFilePaths } from "./ManifestPathDiagnoser.js";
 import { mcpToolNameSegment } from "./McpToolNaming.js";
 
@@ -14,8 +20,8 @@ export function checkProcedureTarget(
   const target = procedure.spec.target;
   if (!target) return [];
   const name = procedure.metadata.name;
-  const fail = (pointer: string, value: unknown, expected: string, message: string, candidates?: readonly string[]) =>
-    [validateDiagnostic({
+  const fail = (pointer: string, value: unknown, expected: string, message: string, candidates?: readonly string[]) => [
+    validateDiagnostic({
       code: "PROCEDURE_TARGET_INVALID",
       severity: "error",
       path: manifestPath("Procedure", name, `/spec/target${pointer}`, filePaths),
@@ -23,26 +29,42 @@ export function checkProcedureTarget(
       expected,
       ...(candidates ? { candidates } : {}),
       message,
-    })];
+    }),
+  ];
   if (!schemasByName.has(target.schema)) {
-    return fail("/schema", target.schema, "the metadata.name of an existing Schema", `Procedure '${name}' target references unknown Schema '${target.schema}'.`, [...schemasByName.keys()]);
+    return fail(
+      "/schema",
+      target.schema,
+      "the metadata.name of an existing Schema",
+      `Procedure '${name}' target references unknown Schema '${target.schema}'.`,
+      [...schemasByName.keys()],
+    );
   }
   const input = procedure.spec.input;
   const properties = input.properties ?? {};
   const required = new Set(input.required ?? []);
   if (!required.has(target.id) || !hasType(properties[target.id], ["string"])) {
-    return fail("/id", target.id, "a required string input property", `Procedure '${name}' target.id '${target.id}' must be a required string property of spec.input.`, Object.keys(properties));
+    return fail(
+      "/id",
+      target.id,
+      "a required string input property",
+      `Procedure '${name}' target.id '${target.id}' must be a required string property of spec.input.`,
+      Object.keys(properties),
+    );
   }
   if (target.version !== undefined && !hasType(properties[target.version], ["number", "integer"])) {
-    return fail("/version", target.version, "a number input property", `Procedure '${name}' target.version '${target.version}' must be a number property of spec.input.`, Object.keys(properties));
+    return fail(
+      "/version",
+      target.version,
+      "a number input property",
+      `Procedure '${name}' target.version '${target.version}' must be a number property of spec.input.`,
+      Object.keys(properties),
+    );
   }
   return [];
 }
 
-export function checkSqlHandler(
-  p: ProcedureManifest,
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
+export function checkSqlHandler(p: ProcedureManifest, filePaths?: ManifestFilePaths): Diagnostic[] {
   // Declared annotations must not contradict what a `sql` handler proves (#972): it always writes,
   // and a DELETE destroys. A false hint would tell a client to skip the confirmation the MCP spec
   // defaults to. What the statements do is otherwise checked by compilePlan; a `DELETE FROM` inside
@@ -51,14 +73,16 @@ export function checkSqlHandler(
   if (!("sql" in h)) return [];
   const hint = (key: "readOnlyHint" | "destructiveHint", value: boolean, message: string) =>
     p.spec.mcp?.[key] === value
-      ? [validateDiagnostic({
-          code: "INVALID_MANIFEST_ENVELOPE",
-          severity: "error",
-          path: manifestPath("Procedure", p.metadata.name, `/spec/mcp/${key}`, filePaths),
-          value,
-          expected: `no ${key}, or ${key}: ${!value}, on this sql handler`,
-          message: `Procedure '${p.metadata.name}' declares mcp.${key}: ${value} but its sql handler ${message}.`,
-        })]
+      ? [
+          validateDiagnostic({
+            code: "INVALID_MANIFEST_ENVELOPE",
+            severity: "error",
+            path: manifestPath("Procedure", p.metadata.name, `/spec/mcp/${key}`, filePaths),
+            value,
+            expected: `no ${key}, or ${key}: ${!value}, on this sql handler`,
+            message: `Procedure '${p.metadata.name}' declares mcp.${key}: ${value} but its sql handler ${message}.`,
+          }),
+        ]
       : [];
   return [
     ...hint("readOnlyHint", true, "writes"),
@@ -66,83 +90,10 @@ export function checkSqlHandler(
   ];
 }
 
-export function checkGuards(
-  targets: ReadonlyArray<ProcedureManifest | ViewManifest>,
-  proceduresByName: ReadonlyMap<string, ProcedureManifest>,
-  filePaths?: ManifestFilePaths,
-): Diagnostic[] {
-  const out: Diagnostic[] = [];
-  for (const target of targets) {
-    const guardName = target.spec.requires?.guard?.procedure;
-    if (!guardName) continue;
-    const path = manifestPath(
-      target.kind,
-      target.metadata.name,
-      "/spec/requires/guard/procedure",
-      filePaths,
-    );
-    const guard = proceduresByName.get(guardName);
-    if (!guard) {
-      out.push(
-        validateDiagnostic({
-          code: "GUARD_PROCEDURE_UNKNOWN",
-          severity: "error",
-          path,
-          value: guardName,
-          expected: "name of a declared Procedure",
-          candidates: [...proceduresByName.keys()],
-          suggestion: bestMatch(guardName, [...proceduresByName.keys()]),
-          message: `${target.kind} '${target.metadata.name}' references unknown guard Procedure '${guardName}'.`,
-        }),
-      );
-      continue;
-    }
-    if (target.kind === "Procedure" && target.metadata.name === guardName) {
-      out.push(
-        validateDiagnostic({
-          code: "GUARD_SELF_REFERENCE",
-          severity: "error",
-          path,
-          value: guardName,
-          expected: "a different, unguarded Procedure",
-          message: `Procedure '${target.metadata.name}' cannot guard itself.`,
-        }),
-      );
-      continue;
-    }
-    if (!("ref" in guard.spec.handler)) {
-      out.push(
-        validateDiagnostic({
-          code: "GUARD_PROCEDURE_NOT_REF",
-          severity: "error",
-          path,
-          value: guardName,
-          expected: "a Procedure with a ref handler",
-          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard Procedures must use a ref handler.`,
-        }),
-      );
-    }
-    if (guard.spec.requires?.guard) {
-      out.push(
-        validateDiagnostic({
-          code: "GUARD_CHAIN_NOT_ALLOWED",
-          severity: "error",
-          path,
-          value: guardName,
-          expected: "an unguarded Procedure",
-          message: `${target.kind} '${target.metadata.name}' uses '${guardName}' as a guard, but guard chains are not allowed.`,
-        }),
-      );
-    }
-  }
-  return out;
-}
-
 export function checkTriggerRefs(
   triggers: ReadonlyArray<TriggerManifest>,
   proceduresByName: ReadonlyMap<string, ProcedureManifest>,
   filePaths?: ManifestFilePaths,
-  schemasByName?: ReadonlyMap<string, SchemaManifest>,
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
@@ -166,35 +117,13 @@ export function checkTriggerRefs(
       );
     }
 
-    if (t.spec.source.kind === "schedule") {
-      const target = proceduresByName.get(procName);
-      if (target && (target.spec.requires?.auth?.all.length ?? 0) > 0) {
-        out.push(validateDiagnostic({
-          code: "SCHEDULE_AUTH_INVALID",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: procName,
-          expected: "a Procedure without user or admin authorization requirements",
-          message: `Scheduled Trigger '${t.metadata.name}' cannot satisfy '${procName}' authorization with a system caller.`,
-        }));
-      }
-      if (target && !jsonSchemaToZod(target.spec.input).safeParse({}).success) {
-        out.push(validateDiagnostic({
-          code: "SCHEDULE_INPUT_INVALID",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: procName,
-          expected: "a Procedure whose input accepts an empty object",
-          message: `Scheduled Trigger '${t.metadata.name}' cannot supply required Procedure input to '${procName}'.`,
-        }));
-      }
-    }
-
     if (t.spec.source.kind === "http") {
       const httpPath = t.spec.source.path;
       // describe writes `{name}` as `:name`, so a literal `:name` segment or a brace outside a whole `{name}` segment
       // would read as another route; refused so describe templates name exactly one route.
-      const ambiguous = httpPath.split("/").find(segment => !/^\{[^{}/]+\}$/.test(segment) && (segment.startsWith(":") || /[{}]/.test(segment)));
+      const ambiguous = httpPath
+        .split("/")
+        .find(segment => !/^\{[^{}/]+\}$/.test(segment) && (segment.startsWith(":") || /[{}]/.test(segment)));
       const isValidPrefix = httpPath.startsWith("/api/") && ambiguous === undefined;
       if (ambiguous !== undefined) {
         out.push(
@@ -253,8 +182,11 @@ export function checkTriggerRefs(
       // absent, which reads like a description and hides the gap; the
       // authoring gate is the one place that can still see it (#970).
       const target = proceduresByName.get(procName);
-      if (target && !undescribedMcpProcedures.has(procName)
-        && !resolveLocalizedText(target.spec.description, "en")?.trim()) {
+      if (
+        target &&
+        !undescribedMcpProcedures.has(procName) &&
+        !resolveLocalizedText(target.spec.description, "en")?.trim()
+      ) {
         undescribedMcpProcedures.add(procName);
         out.push(
           validateDiagnostic({
@@ -270,37 +202,6 @@ export function checkTriggerRefs(
           }),
         );
       }
-    }
-
-    // a hook target is consumer code: an inline program would write inside a before hook, which fails open (ADR-0032 decision 3)
-    const hookTarget = t.spec.source.kind === "lifecycle" ? proceduresByName.get(t.spec.target.procedure) : undefined;
-    if (hookTarget && !("ref" in hookTarget.spec.handler)) {
-      out.push(
-        validateDiagnostic({
-          code: "LIFECYCLE_TARGET_NOT_REF",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/procedure", filePaths),
-          value: t.spec.target.procedure,
-          expected: "a Procedure with a ref handler",
-          message: `Lifecycle Trigger '${t.metadata.name}' targets '${t.spec.target.procedure}', whose handler is an inline program; a hook target must use a ref handler.`,
-        }),
-      );
-    }
-
-    if (t.spec.source.kind === "lifecycle" && schemasByName && !schemasByName.has(t.spec.source.schema)) {
-      const schemaName = t.spec.source.schema;
-      out.push(
-        validateDiagnostic({
-          code: "LIFECYCLE_SCHEMA_UNKNOWN",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/source/schema", filePaths),
-          value: schemaName,
-          expected: "name of a declared Schema",
-          candidates: [...schemasByName.keys()],
-          suggestion: bestMatch(schemaName, [...schemasByName.keys()]),
-          message: `Trigger '${t.metadata.name}' watches unknown Schema '${schemaName}'.`,
-        }),
-      );
     }
   }
   return out;
@@ -318,30 +219,34 @@ export function checkMcpToolNameCollisions(
 ): Diagnostic[] {
   const seen = new Map<string, string>();
   const out: Diagnostic[] = [];
-  const exposed = new Set(triggers.flatMap((t) => (t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [])));
+  const exposed = new Set(triggers.flatMap(t => (t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [])));
   const claim = (kind: "View" | "Procedure", name: string) => {
     const segment = mcpToolNameSegment(name);
     if ((kind === "View" || exposed.has(name)) && (segment.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(segment))) {
-      out.push(validateDiagnostic({
-        code: "MCP_TOOL_NAME_COLLISION",
-        severity: "error",
-        path: manifestPath(kind, name, "/metadata/name", filePaths),
-        value: segment,
-        expected: "an MCP tool name of at most 128 characters from [A-Za-z0-9_.-]",
-        message: `${kind} '${name}' cannot be an MCP tool name: it must be at most 128 characters from [A-Za-z0-9_.-].`,
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "MCP_TOOL_NAME_COLLISION",
+          severity: "error",
+          path: manifestPath(kind, name, "/metadata/name", filePaths),
+          value: segment,
+          expected: "an MCP tool name of at most 128 characters from [A-Za-z0-9_.-]",
+          message: `${kind} '${name}' cannot be an MCP tool name: it must be at most 128 characters from [A-Za-z0-9_.-].`,
+        }),
+      );
       return;
     }
     const prior = seen.get(segment);
     if (prior && prior !== `${kind} ${name}`) {
-      out.push(validateDiagnostic({
-        code: "MCP_TOOL_NAME_COLLISION",
-        severity: "error",
-        path: manifestPath(kind, name, "/metadata/name", filePaths),
-        value: segment,
-        expected: `${kind} name unique after kebab→snake mangling (collides with ${prior})`,
-        message: `${kind} '${name}' mangles to MCP tool name '${segment}', which already comes from ${prior}.`,
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "MCP_TOOL_NAME_COLLISION",
+          severity: "error",
+          path: manifestPath(kind, name, "/metadata/name", filePaths),
+          value: segment,
+          expected: `${kind} name unique after kebab→snake mangling (collides with ${prior})`,
+          message: `${kind} '${name}' mangles to MCP tool name '${segment}', which already comes from ${prior}.`,
+        }),
+      );
     } else if (!prior) seen.set(segment, `${kind} ${name}`);
   };
   for (const view of views) if (view.spec.surface !== "internal") claim("View", view.metadata.name);
@@ -354,14 +259,16 @@ export function checkMcpToolNameCollisions(
     const key = `${source.surface}\0${tool}`;
     const prior = mcpTriggers.get(key);
     if (prior) {
-      out.push(validateDiagnostic({
-        code: "MCP_TOOL_NAME_COLLISION",
-        severity: "error",
-        path: manifestPath("Trigger", trigger.metadata.name, "/spec/source", filePaths),
-        value: tool,
-        expected: `one MCP Trigger per surface and tool name (already bound by '${prior}')`,
-        message: `Trigger '${trigger.metadata.name}' and Trigger '${prior}' both bind '${tool}' on the ${source.surface} MCP surface; invocation would lose Trigger identity.`,
-      }));
+      out.push(
+        validateDiagnostic({
+          code: "MCP_TOOL_NAME_COLLISION",
+          severity: "error",
+          path: manifestPath("Trigger", trigger.metadata.name, "/spec/source", filePaths),
+          value: tool,
+          expected: `one MCP Trigger per surface and tool name (already bound by '${prior}')`,
+          message: `Trigger '${trigger.metadata.name}' and Trigger '${prior}' both bind '${tool}' on the ${source.surface} MCP surface; invocation would lose Trigger identity.`,
+        }),
+      );
     } else {
       mcpTriggers.set(key, trigger.metadata.name);
     }
@@ -372,5 +279,9 @@ export function checkMcpToolNameCollisions(
 function hasType(schema: JsonSchema | undefined, types: readonly string[]): boolean {
   const declared = schema?.type;
   const list = Array.isArray(declared) ? declared : declared === undefined ? [] : [declared];
-  return list.length > 0 && list.every((type) => types.includes(type) || type === "null") && list.some((type) => types.includes(type));
+  return (
+    list.length > 0 &&
+    list.every(type => types.includes(type) || type === "null") &&
+    list.some(type => types.includes(type))
+  );
 }

@@ -6,7 +6,12 @@ import { usePreferences, type AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import { api } from "../../lib/api";
 import { entryEditorQueryOptions, operationsQueryOptions } from "../../lib/queries";
-import { entryEditPath, foldedChildScopeValue, hasFoldedChildCollections, isFoldedFieldChild } from "../../lib/collection-nav";
+import {
+  entryEditPath,
+  foldedChildScopeValue,
+  hasFoldedChildCollections,
+  isFoldedFieldChild,
+} from "../../lib/collection-nav";
 import { resolveLocalizedText } from "../../lib/localized-text";
 import type { AdminUser, Collection, EntryEditorPayload, JsonSchema, SiteInfo, AdminOperation } from "../../lib/types";
 import { Skeleton } from "@aotter/mantle-ui/kit";
@@ -52,22 +57,26 @@ export function ParentEntryWorkbench({
 
   const payload = query.data;
   const canonical = site.data?.canonicalLocale ?? null;
-  const collectionTitle = resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
+  const collectionTitle =
+    resolveLocalizedText(payload.collection.title, language, canonical) ?? payload.collection.name;
   const title = entryTitle(
     payload.entry.data,
     t(language, "collection.untitled"),
     payload.collection,
     payload.entry.id,
   );
-  const children = payload.related.filter((section) =>
-    section.relationship.kind === "field" &&
-    isFoldedFieldChild(section.collection, collectionName, section.relationship.childField)
+  const children = payload.related.filter(
+    section =>
+      section.relationship.kind === "field" &&
+      isFoldedFieldChild(section.collection, collectionName, section.relationship.childField),
   );
-  const selected = children.find((section) => section.collection.name === childParam) ?? children[0];
+  const selected = children.find(section => section.collection.name === childParam) ?? children[0];
   // the parent's value of the field the child references (its id or a unique field), never the id in its place
   const selectedScope = selected ? foldedChildScopeValue(selected.relationship) : null;
   // the list's own data columns: the primary field is already the title, and the entry payload carries no native column
-  const summary = (payload.collection.list?.columns ?? []).filter((f) => f !== payload.collection.list?.primaryField && !!payload.collection.schema?.properties?.[f]);
+  const summary = (payload.collection.list?.columns ?? []).filter(
+    f => f !== payload.collection.list?.primaryField && !!payload.collection.schema?.properties?.[f],
+  );
 
   return (
     <div className="flex min-h-full flex-col gap-6">
@@ -102,14 +111,26 @@ export function ParentEntryWorkbench({
       {summary.length > 0 ? (
         // what the parent itself says, as its list shows it: the person reviews the children without opening the editor first
         <SectionCard className="gap-3 p-4">
-          <RefTitlesProvider value={payload.refTitles}><dl className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3 text-sm">
-            {summary.map((field) => (
-              <div key={field} className="min-w-0">
-                <dt className="text-xs text-muted-foreground">{propertyLabel(field, payload.collection.schema?.properties?.[field], language, canonical)}</dt>
-                <dd className="truncate"><SummaryValue field={field} property={payload.collection.schema?.properties?.[field]} value={payload.entry.data[field]} language={language} canonical={canonical} /></dd>
-              </div>
-            ))}
-          </dl></RefTitlesProvider>
+          <RefTitlesProvider value={payload.refTitles}>
+            <dl className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-6 gap-y-3 text-sm">
+              {summary.map(field => (
+                <div key={field} className="min-w-0">
+                  <dt className="text-xs text-muted-foreground">
+                    {propertyLabel(field, payload.collection.schema?.properties?.[field], language, canonical)}
+                  </dt>
+                  <dd className="truncate">
+                    <SummaryValue
+                      field={field}
+                      property={payload.collection.schema?.properties?.[field]}
+                      value={payload.entry.data[field]}
+                      language={language}
+                      canonical={canonical}
+                    />
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </RefTitlesProvider>
         </SectionCard>
       ) : null}
 
@@ -123,13 +144,15 @@ export function ParentEntryWorkbench({
               aria-label={t(language, "entryWorkbench.children")}
               className="w-full justify-start overflow-x-auto rounded-none border-b"
             >
-              {children.map((section) => {
-                const label = resolveLocalizedText(section.collection.title, language, canonical)
-                  ?? section.collection.name;
+              {children.map(section => {
+                const label =
+                  resolveLocalizedText(section.collection.title, language, canonical) ?? section.collection.name;
                 const href = `/admin/c/${encodeURIComponent(collectionName)}/${encodeURIComponent(entryId)}?child=${encodeURIComponent(section.collection.name)}`;
                 return (
                   <TabsTrigger key={section.collection.name} value={section.collection.name} asChild>
-                    <a href={href} className="flex-none px-3">{label}</a>
+                    <a href={href} className="flex-none px-3">
+                      {label}
+                    </a>
                   </TabsTrigger>
                 );
               })}
@@ -161,7 +184,10 @@ export function ParentEntryWorkbench({
  * still says Edit, since its editor offers the admin the unlock, as the list does,
  * and so does a published one, whose editor offers Unpublish.
  */
-export function canOpenForEdit(payload: Pick<EntryEditorPayload, "collection" | "entry">, admin: boolean | undefined): boolean {
+export function canOpenForEdit(
+  payload: Pick<EntryEditorPayload, "collection" | "entry">,
+  admin: boolean | undefined,
+): boolean {
   const unsupportedVersion = typeof payload.entry.version !== "number" || !Number.isSafeInteger(payload.entry.version);
   return canEditEntry({
     admin,
@@ -181,7 +207,23 @@ export function shouldOpenParentWorkbench(
 }
 
 /** A summary value as the list shows it; a reference the server resolved is its target's title, linked. */
-function SummaryValue({ field, property, value, language, canonical }: { field: string; property: JsonSchema | undefined; value: unknown; language: AdminLanguage; canonical: string | null }): React.ReactNode {
+function SummaryValue({
+  field,
+  property,
+  value,
+  language,
+  canonical,
+}: {
+  field: string;
+  property: JsonSchema | undefined;
+  value: unknown;
+  language: AdminLanguage;
+  canonical: string | null;
+}): React.ReactNode {
   const target = useRefTarget(field, value);
-  return target && typeof value === "string" ? <RefLink target={target} value={value} /> : renderDataValue(property, value, language, canonical);
+  return target && typeof value === "string" ? (
+    <RefLink target={target} value={value} />
+  ) : (
+    renderDataValue(property, value, language, canonical)
+  );
 }

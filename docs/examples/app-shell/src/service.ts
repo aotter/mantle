@@ -26,6 +26,15 @@ let serveMcpHandler: ReturnType<typeof serveMcp<Env, Handle, Handlers>> | undefi
 const serveRest = rest(options);
 
 export async function fetchService(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
+  const response = await serve(request, env, context);
+  // A shared cache in front of the Worker (Workers Cache) stores a response that does not opt out: default to private.
+  if (response.status === 101 || response.headers.has("cache-control")) return response;
+  const copy = new Response(response.body, response); // a copy: some responses have immutable headers
+  copy.headers.set("cache-control", "private, no-store");
+  return copy;
+}
+
+async function serve(request: Request, env: Env, context: ExecutionContext): Promise<Response> {
   auth ??= authLoader(() => import("./auth.js").then(m => m.createAuth(env)));
   const headers = new Headers();
   let authority: Promise<Caller> | undefined;
@@ -66,6 +75,11 @@ export async function fetchService(request: Request, env: Env, context: Executio
     if (response) return respond(response);
     const shell = await adminShell(request, path => env.ASSETS.fetch(new Request(new URL("/admin/" + path, url), request)));
     if (shell) return shell;
+    // public/ files outside /assets/* (for example /favicon.ico) reach the Worker first; serve them from ASSETS.
+    if (request.method === "GET" || request.method === "HEAD") {
+      const file = await env.ASSETS.fetch(request);
+      if (file.status !== 404) return file;
+    }
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   } catch (error) { return surfaceFailure(error); }
 }

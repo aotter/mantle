@@ -12,9 +12,15 @@ if (process.argv.length !== 2 && !(registry && process.argv.length === 4)) {
   throw new Error("Usage: check-worker-consumer.mjs [--registry <exact Core version>]");
 }
 const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
-const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, env, stdio: "inherit", timeout: 300_000 });
+// The packed consumer may wait out a registry tarball that has not propagated yet (check-packed-consumer.mjs retryWait):
+// 330 s more waiting and three more failed attempts than the 300 s budget held, 300 + 330 + 180 = 810 s within 900 s.
+const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, env, stdio: "inherit", timeout: 900_000 });
 if (!registry) {
-  run(process.execPath, [join(root, "scripts/check-packed-consumer.mjs"), "--project", reference, "--", "pnpm", "check"], root);
+  run(
+    process.execPath,
+    [join(root, "scripts/check-packed-consumer.mjs"), "--project", reference, "--", "pnpm", "check"],
+    root,
+  );
 } else {
   const temp = mkdtempSync(join(tmpdir(), "mantle-registry-consumer-"));
   try {
@@ -26,8 +32,18 @@ if (!registry) {
       if (name === "@aotter/mantle" || name.startsWith("@aotter/mantle-")) pkg.dependencies[name] = version;
     }
     writeFileSync(path, JSON.stringify(pkg, null, 2) + "\n");
-    run("pnpm", ["install", "--no-frozen-lockfile"], temp);
-    for (const name of Object.keys(pkg.dependencies).filter((name) => name.startsWith("@aotter/mantle"))) {
+    // A version published a moment ago may not be on every registry edge yet: try the install again before failing.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        run("pnpm", ["install", "--no-frozen-lockfile"], temp);
+        break;
+      } catch (error) {
+        if (attempt === 3) throw error;
+        console.error(`[registry-consumer] install failed (attempt ${attempt} of 3); retrying in 60s`);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 60_000);
+      }
+    }
+    for (const name of Object.keys(pkg.dependencies).filter(name => name.startsWith("@aotter/mantle"))) {
       const installed = JSON.parse(readFileSync(join(temp, "node_modules", name, "package.json"), "utf8"));
       if (installed.version !== version) throw new Error(`Unexpected ${name}@${installed.version}`);
     }

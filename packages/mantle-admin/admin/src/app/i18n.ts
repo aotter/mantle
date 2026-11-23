@@ -34,9 +34,11 @@ export function loadLanguage(language: AdminLanguage): Promise<void> {
   if (language === "en" || STRINGS[language]) return Promise.resolve();
   const existing = pending.get(language);
   if (existing) return existing;
-  const loading = loaders[language]().then(({ default: messages }) => {
-    STRINGS[language] = messages;
-  }).finally(() => pending.delete(language));
+  const loading = loaders[language]()
+    .then(({ default: messages }) => {
+      STRINGS[language] = messages;
+    })
+    .finally(() => pending.delete(language));
   pending.set(language, loading);
   return loading;
 }

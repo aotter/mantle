@@ -1,22 +1,19 @@
+import { indexDefinitions } from "../core/sql/storage.js";
+import { q, lit } from "../core/sql/ast.js";
 /** Build-time initial SQLite DDL; applications own migrations. */
-import { ftsTableName, geoTreeName, checkShapeProblem, notNullColumns, storageColumns, parseNumeric, type SqlNode } from "../spec/domain/index.js";
+import {
+  ftsTableName,
+  geoTreeName,
+  checkShapeProblem,
+  notNullColumns,
+  storageColumns,
+  type SqlNode,
+} from "../spec/domain/index.js";
+import { sqliteType } from "./codec.js";
 import type { StorageSchema } from "../core/dialect.js";
 import { print } from "./print.js";
 
 export type { StorageSchema };
-
-const q = (id: string) => `"${id.replace(/"/g, '""')}"`;
-const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
-
-function colType(t: string): "TEXT" | "INTEGER" | "REAL" {
-  if (parseNumeric(t)) return "INTEGER";
-  switch (t) {
-    case "text": case "json": return "TEXT";
-    case "integer": case "bool": case "timestamptz": case "date": return "INTEGER";
-    case "real": return "REAL";
-  }
-  throw new Error(`no column type for ${t}`);
-}
 
 /** `stock >= 0` as IR -> `"new"."stock" >= 0`: the same printer as everything else. */
 function checkText(expr: SqlNode, s: StorageSchema): string {
@@ -25,24 +22,26 @@ function checkText(expr: SqlNode, s: StorageSchema): string {
   const qualify = (v: any): any => {
     if (Array.isArray(v)) return v.map(qualify);
     if (!v || typeof v !== "object") return v;
-    if (v.ColumnRef?.fields?.length === 1) return { ColumnRef: { fields: [{ String: { sval: "new" } }, v.ColumnRef.fields[0]] } };
+    if (v.ColumnRef?.fields?.length === 1)
+      return { ColumnRef: { fields: [{ String: { sval: "new" } }, v.ColumnRef.fields[0]] } };
     return Object.fromEntries(Object.entries(v).map(([k, c]) => [k, qualify(c)]));
   };
-  const select: SqlNode = { SelectStmt: { targetList: [{ ResTarget: { val: qualify(expr) } }], limitOption: "LIMIT_OPTION_DEFAULT", op: "SETOP_NONE" } };
+  const select: SqlNode = {
+    SelectStmt: {
+      targetList: [{ ResTarget: { val: qualify(expr) } }],
+      limitOption: "LIMIT_OPTION_DEFAULT",
+      op: "SETOP_NONE",
+    },
+  };
   return print(select).replace(/^SELECT\s+/i, "");
 }
 
-interface Column { readonly name: string; readonly type: string; readonly native: boolean }
-interface Desired {
-  readonly table: string;
-  readonly columns: readonly Column[];
-  readonly indexes: readonly { name: string; unique: boolean; columns: readonly string[]; sql: string }[];
-  readonly triggers: readonly { name: string; sql: string }[];
-  /** FTS5 / R*Tree tables with the SQL they must have been created with. */
-  readonly virtuals: readonly { name: string; sql: string; rebuild: string }[];
+interface Column {
+  readonly name: string;
+  readonly type: string;
+  readonly native: boolean;
 }
-
-function desired(name: string, s: StorageSchema): Desired {
+function desired(name: string, s: StorageSchema) {
   const t = q(name);
   const columns: Column[] = [
     { name: "_rid", type: "INTEGER", native: true },
@@ -52,33 +51,55 @@ function desired(name: string, s: StorageSchema): Desired {
     { name: "updated_at", type: "INTEGER", native: true },
     { name: "author_id", type: "TEXT", native: true },
     ...(s.scope ? [{ name: s.scope, type: "TEXT", native: true }] : []),
-    ...(s.publishing ? [{ name: "status", type: "TEXT", native: true }, { name: "published_at", type: "INTEGER", native: false }] : []),
+    ...(s.publishing
+      ? [
+          { name: "status", type: "TEXT", native: true },
+          { name: "published_at", type: "INTEGER", native: false },
+        ]
+      : []),
     // the scope field is a declared property too, but it is the native column above
-    ...Object.entries(s.fields).filter(([f]) => f !== s.scope).flatMap(([f, ty]): Column[] =>
-      ty === "geo" ? [{ name: `${f}_lat`, type: "REAL", native: false }, { name: `${f}_lng`, type: "REAL", native: false }] : [{ name: f, type: colType(ty), native: false }]),
+    ...Object.entries(s.fields)
+      .filter(([f]) => f !== s.scope)
+      .flatMap(([f, ty]): Column[] =>
+        ty === "geo"
+          ? [
+              { name: `${f}_lat`, type: "REAL", native: false },
+              { name: `${f}_lng`, type: "REAL", native: false },
+            ]
+          : [{ name: f, type: sqliteType(ty).toUpperCase(), native: false }],
+      ),
   ];
-  const indexes = [
-    ...(s.unique ?? []).map((u, i) => ({ name: `_mantle_uq_${name}_${i}`, unique: true, columns: s.userScopes?.length ? [...new Set([...(s.scope ? [s.scope] : []), ...s.userScopes.map(x => x.column), ...u])] : s.scope && u[0] !== s.scope ? [s.scope, ...u] : [...u] })), // the grammar already starts a scoped unique index with the scope
-    ...(s.indexes ?? []).map((cols, i) => ({ name: `_mantle_ix_${name}_${i}`, unique: false, columns: cols })),
-  ].map((i) => ({ ...i, sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})` }));
+  const indexes = indexDefinitions(name, s).map(i => ({
+    sql: `CREATE ${i.unique ? "UNIQUE " : ""}INDEX IF NOT EXISTS ${q(i.name)} ON ${t} (${i.columns.map(q).join(", ")})`,
+  }));
 
-  const triggers: { name: string; sql: string }[] = [];
+  const triggers: { sql: string }[] = [];
   (s.checks ?? []).forEach((c, i) => {
     const e = checkText(c, s);
     for (const ev of ["INSERT", "UPDATE"])
-      triggers.push({ name: `_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`, sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END` });
+      triggers.push({
+        sql: `CREATE TRIGGER ${q(`_mantle_chk_${name}_${i}_${ev[0]!.toLowerCase()}`)} BEFORE ${ev} ON ${t} WHEN NOT (${e}) BEGIN SELECT RAISE(ABORT, ${lit(`MANTLE_CHECK ${name}: ${e.replace(/\bnew\./g, "")}`)}); END`,
+      });
   });
-  const virtuals: Desired["virtuals"][number][] = [];
+  const virtuals: { sql: string }[] = [];
   if (s.search?.length) {
     const fts = q(ftsTableName(name));
     const f = s.search.map(q).join(", ");
-    const n = s.search.map((c) => `new.${q(c)}`).join(", ");
-    const o = s.search.map((c) => `old.${q(c)}`).join(", ");
-    virtuals.push({ name: ftsTableName(name), sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`, rebuild: `INSERT INTO ${fts} (${fts}) VALUES ('rebuild')` });
+    const n = s.search.map(c => `new.${q(c)}`).join(", ");
+    const o = s.search.map(c => `old.${q(c)}`).join(", ");
+    virtuals.push({
+      sql: `CREATE VIRTUAL TABLE ${fts} USING fts5(${f}, content=${lit(name)}, content_rowid='_rid', tokenize='trigram')`,
+    });
     triggers.push(
-      { name: `_mantle_fts_${name}_i`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END` },
-      { name: `_mantle_fts_${name}_d`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END` },
-      { name: `_mantle_fts_${name}_u`, sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_u`)} AFTER UPDATE OF ${f} ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END` },
+      {
+        sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_i`)} AFTER INSERT ON ${t} BEGIN INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
+      },
+      {
+        sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_d`)} AFTER DELETE ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); END`,
+      },
+      {
+        sql: `CREATE TRIGGER ${q(`_mantle_fts_${name}_u`)} AFTER UPDATE OF ${f} ON ${t} BEGIN INSERT INTO ${fts} (${fts}, rowid, ${f}) VALUES ('delete', old._rid, ${o}); INSERT INTO ${fts} (rowid, ${f}) VALUES (new._rid, ${n}); END`,
+      },
     );
   }
   // one R*Tree per geo field: near() reads the tree of the field it names
@@ -88,19 +109,25 @@ function desired(name: string, s: StorageSchema): Desired {
     const g = q(tree);
     const la = q(`${geo}_lat`);
     const ln = q(`${geo}_lng`);
-    virtuals.push({ name: tree, sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)`, rebuild: `INSERT INTO ${g} SELECT _rid, ${la}, ${la}, ${ln}, ${ln} FROM ${t} WHERE ${la} IS NOT NULL AND ${ln} IS NOT NULL` });
+    virtuals.push({ sql: `CREATE VIRTUAL TABLE ${g} USING rtree(id, minLat, maxLat, minLng, maxLng)` });
     triggers.push(
-      { name: `${tree}_i`, sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END` },
-      { name: `${tree}_d`, sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END` },
-      { name: `${tree}_u`, sql: `CREATE TRIGGER ${q(`${tree}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END` },
+      {
+        sql: `CREATE TRIGGER ${q(`${tree}_i`)} AFTER INSERT ON ${t} WHEN new.${la} IS NOT NULL AND new.${ln} IS NOT NULL BEGIN INSERT INTO ${g} VALUES (new._rid, new.${la}, new.${la}, new.${ln}, new.${ln}); END`,
+      },
+      {
+        sql: `CREATE TRIGGER ${q(`${tree}_d`)} AFTER DELETE ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; END`,
+      },
+      {
+        sql: `CREATE TRIGGER ${q(`${tree}_u`)} AFTER UPDATE OF ${la}, ${ln} ON ${t} BEGIN DELETE FROM ${g} WHERE id = old._rid; INSERT INTO ${g} SELECT new._rid, new.${la}, new.${la}, new.${ln}, new.${ln} WHERE new.${la} IS NOT NULL AND new.${ln} IS NOT NULL; END`,
+      },
     );
   }
   return { table: name, columns, indexes, triggers, virtuals };
 }
 
 /** `notNull`: the columns the initial artifact (not convergence, which never alters an existing column) also declares NOT NULL. */
-function createTable(d: Desired, notNull: ReadonlySet<string> = new Set()): string {
-  const cols = d.columns.map((c) => {
+function createTable(d: ReturnType<typeof desired>, notNull: ReadonlySet<string>): string {
+  const cols = d.columns.map(c => {
     if (c.name === "_rid") return "_rid INTEGER PRIMARY KEY";
     if (c.name === "id") return "id TEXT NOT NULL UNIQUE";
     if (c.name === "version") return "version INTEGER NOT NULL DEFAULT 1";
@@ -108,7 +135,7 @@ function createTable(d: Desired, notNull: ReadonlySet<string> = new Set()): stri
     if (c.name === "updated_at") return "updated_at INTEGER NOT NULL DEFAULT 0";
     if (c.name === "author_id") return "author_id TEXT";
     if (c.name === "status") return "status TEXT NOT NULL DEFAULT 'draft'";
-    return `${q(c.name)} ${c.type}${c.native && c.type === "TEXT" || notNull.has(c.name) ? " NOT NULL" : ""}`;
+    return `${q(c.name)} ${c.type}${(c.native && c.type === "TEXT") || notNull.has(c.name) ? " NOT NULL" : ""}`;
   });
   // `_rid` aliases rowid: FTS5's content_rowid and the R*Tree key on it, and an unaliased rowid may change on VACUUM
   return `CREATE TABLE IF NOT EXISTS ${q(d.table)} (${cols.join(", ")}) STRICT`;
@@ -124,8 +151,17 @@ const SYSTEM_DDL = [
 /** Build-time initial schema artifact. Applying or migrating it is the application's responsibility. */
 export function initialStorageSql(plan: Readonly<Record<string, StorageSchema>>): readonly string[] {
   // This initial artifact compiles with UTC, not an application-selected regional time zone.
-  return [SYSTEM_DDL[0]!, SYSTEM_DDL[1]!, SYSTEM_DDL[2]!, "INSERT OR IGNORE INTO _mantle_tz (from_us, offset_us) VALUES (-9007199254740991, 0)", ...Object.entries(plan).flatMap(([name, schema]) => {
-    const d = desired(name, schema);
-    return [createTable(d, notNullColumns(schema)), ...d.indexes.map((i) => i.sql), ...d.virtuals.map((i) => i.sql), ...d.triggers.map((i) => i.sql)];
-  })];
+  return [
+    ...SYSTEM_DDL,
+    "INSERT OR IGNORE INTO _mantle_tz (from_us, offset_us) VALUES (-9007199254740991, 0)",
+    ...Object.entries(plan).flatMap(([name, schema]) => {
+      const d = desired(name, schema);
+      return [
+        createTable(d, notNullColumns(schema)),
+        ...d.indexes.map(i => i.sql),
+        ...d.virtuals.map(i => i.sql),
+        ...d.triggers.map(i => i.sql),
+      ];
+    }),
+  ];
 }

@@ -1,0 +1,17 @@
+{
+  "./json-body": {
+    "removedIn": "0.2.2-alpha.2",
+    "replacement": "use body from @aotter/mantle/rest",
+    "removeAfter": "0.2.2"
+  },
+  "./driver/postgres": {
+    "removedIn": "0.2.2-alpha.2",
+    "replacement": "instead of transaction, run your own SQL in store(db, caller).transaction((tx, db) => ...) (handbook concepts/runtime-and-adapters.md, \"Your own SQL in a Store transaction\"); regenerate generated code",
+    "removeAfter": "0.2.2"
+  },
+  "./surface": {
+    "removedIn": "0.2.2-alpha.2",
+    "replacement": "instead of convert, use convertInput and the Conversions type from @aotter/mantle/contracts; instead of invalid, throw new ContractError(\"INPUT_VALIDATION_FAILED\", message, path) from there; decode has no replacement",
+    "removeAfter": "0.2.2"
+  }
+}

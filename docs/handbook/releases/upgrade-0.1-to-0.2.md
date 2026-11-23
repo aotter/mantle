@@ -13,7 +13,9 @@ rebuilds the project on 0.2.0 and plans a reviewed data move for it.
    references. The application owns routing, Auth, native handles and database
    migrations. Install the same exact version of `@aotter/mantle`,
    `@aotter/mantle-ui` and, when selecting Admin, `@aotter/mantle-admin`.
-   Preserve every authorization, scope and OCC requirement.
+   Preserve every authorization, scope and OCC requirement. A 0.1.x
+   `schedule` or `lifecycle` Trigger or `requires.guard` does not validate in
+   0.2: wire `scheduled()` yourself, or write a custom handler.
 2. **Move the data** into a new 0.2 database, as
    [Moving data from 0.1.x](#moving-data-from-01x) describes.
 
@@ -160,6 +162,17 @@ tables `mantle generate --auth src/auth.ts` adds to `schema.sql`
 Remove every old package and install `@aotter/mantle` at the exact target
 version. `mantle generate` names any other package it needs, with the install
 command; it never installs anything.
+
+`-web` becomes the `/web` subpath, but not its HTML head output. 0.1 composed a
+description, Open Graph tags, a Twitter card, JSON-LD and per-translation
+`hreflang` links (plus `x-default`), including for home and list pages. The
+generated 0.2 `web()` renders no HTML, and its `head()` emits only the canonical
+link, the Markdown alternate, geo tags and, for a single-language site, one
+`hreflang`. After the upgrade, the
+application's own pages write the rest: see
+[public pages](../guides/public-pages.md) and the recipes example
+(`docs/examples/recipes/src/pages.tsx`). Check each page for the tags it lost
+before cutting traffic over.
 
 ### 2. `mantle.config.json`
 

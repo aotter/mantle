@@ -73,13 +73,66 @@ export interface HeaderProps {
   readonly actions?: React.ReactNode;
 }
 
-/** `Brand`: the console's name and image at the top of the sidebar. Surface: browser. */
-export type BrandProps = AdminBrand;
+/**
+ * Where `Brand` renders: `sidebar` at the top of the console's sidebar; the others above the card of a page shown before
+ * or without the console (`sign-in`, `consent`, `connected-apps`, `access-denied`, `error`), or in the header bar of the
+ * frame shown while the session loads (`loading`).
+ */
+export type BrandPlacement =
+  | "sidebar"
+  | "sign-in"
+  | "consent"
+  | "connected-apps"
+  | "access-denied"
+  | "error"
+  | "loading";
+
+/**
+ * `Brand`: the console's name and image. Surface: browser. Outside the sidebar it renders only when an application
+ * supplies it, in a box at most 40px high; there the site settings are not read yet, so `title` is the generic console
+ * title, `image` is absent and `renderDefault` renders nothing. A component that renders nothing for a placement leaves
+ * that page as it is without a Brand. Props passed to `renderDefault` may leave `placement` out to keep this one.
+ */
+export interface BrandProps extends AdminBrand {
+  // Application seam: applications depend on this. Do not remove or narrow it because Core has no internal use (CONTRIBUTING.md, "Application seams").
+  readonly placement: BrandPlacement;
+}
 
 /** `Home`: the page at `/admin`. Surface: browser. */
 export interface HomeProps {
   readonly collections: ReadonlyArray<AdminCollectionSummary>;
   readonly site: AdminSiteSummary | undefined;
+}
+
+/** A sign-in method as `GET <auth>/methods` lists it (`authRoutes` `methods`). */
+export type SignInMethod =
+  | { readonly kind: "email-otp" }
+  | { readonly kind: "magic-link" }
+  | { readonly kind: "passkey" }
+  | { readonly kind: "social"; readonly provider: string }
+  | { readonly kind: "oauth"; readonly providerId: string; readonly displayName?: string };
+
+/**
+ * `SignIn`: the methods on `/admin/sign-in`, below the card's title. Surface: browser. Pass changed props to
+ * `renderDefault` to reorder or drop `methods` or to set `emailAutoComplete`; render your own elements around it to add a
+ * method of your own. A `passkey` method is listed for this slot: the default renders nothing for it.
+ */
+export interface SignInProps {
+  readonly methods: readonly SignInMethod[];
+  /** The same-origin path to land on after signing in (`?return=`, else `/admin`). */
+  readonly returnTo: string;
+  /** The signed OAuth authorize query when this sign-in continues an authorization (an MCP connector's), else undefined. */
+  readonly oauthQuery: string | undefined;
+  /** The email input's `autocomplete` for the email-code method; `email` by default. */
+  readonly emailAutoComplete: string;
+  /**
+   * Called once the email code has signed in, with where to go next: the OAuth authorize
+   * continuation, or `returnTo`. The default navigates there. Wrap it to run a step of your own first and then navigate
+   * to the same URL unchanged. Redirecting methods (social, OAuth, magic
+   * link) leave the page and do not call it. The signed-in method stays locked (its code is spent, its button busy), so
+   * navigate away, or replace the page, rather than leaving the sign-in card in place.
+   */
+  readonly onSignedIn: (next: string) => void;
 }
 
 /** `CollectionList`: a collection's list page, which reads its filters from the location. Surface: browser. */

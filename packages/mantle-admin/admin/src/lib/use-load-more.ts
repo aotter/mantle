@@ -6,7 +6,17 @@ import * as React from "react";
  * page follows and focus was left on the button (now gone) move it to `box`. A first page, a new filter or a new result
  * announces nothing and never takes focus.
  */
-export function useLoadMore({ count, hasMore, loading, message }: { count: number; hasMore: boolean; loading: boolean; message: (added: number) => string }) {
+export function useLoadMore({
+  count,
+  hasMore,
+  loading,
+  message,
+}: {
+  count: number;
+  hasMore: boolean;
+  loading: boolean;
+  message: (added: number) => string;
+}) {
   const box = React.useRef<HTMLDivElement>(null);
   const started = React.useRef<number | null>(null);
   const was = React.useRef(false);
@@ -22,6 +32,8 @@ export function useLoadMore({ count, hasMore, loading, message }: { count: numbe
     if (!hasMore && (active === document.body || box.current?.contains(active))) box.current?.focus();
   }, [loading]);
   /** Call when the button is pressed. */
-  const start = () => { started.current = count; };
+  const start = () => {
+    started.current = count;
+  };
   return { box, status, start };
 }

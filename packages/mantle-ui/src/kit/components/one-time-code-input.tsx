@@ -3,10 +3,7 @@ import type { ComponentProps } from "react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "./ui/input-otp.js";
 
 export function OneTimeCodeInput(
-  props: Omit<
-    ComponentProps<typeof InputOTP>,
-    "children" | "maxLength" | "minLength" | "pattern" | "render"
-  >,
+  props: Omit<ComponentProps<typeof InputOTP>, "children" | "maxLength" | "minLength" | "pattern" | "render">,
 ) {
   return (
     <InputOTP

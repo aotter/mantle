@@ -135,6 +135,20 @@ views; use the static Admin SPA or sandbox preview for the complete product.
 Applications that compile Tailwind themselves import `tokens.css` and add
 `@source` for `node_modules/@aotter/mantle-ui/dist/kit` instead of `kit.css`.
 
+An application that keeps `kit.css` and runs Tailwind only on its own
+stylesheet also imports `@aotter/mantle-ui/theme.css`: the Tailwind
+`@theme inline` mapping from the tokens to utility names. Without it, only the
+token classes the kit itself uses exist; with it, any of them compiles
+(`bg-primary/50`, `border-primary`, ...):
+
+```css
+@import "@aotter/mantle-ui/kit.css";
+@import "@aotter/mantle-ui/theme.css";
+@import "tailwindcss/theme";
+@import "tailwindcss/utilities" source(none);
+@source "./";
+```
+
 
 ## Admin package migration
 

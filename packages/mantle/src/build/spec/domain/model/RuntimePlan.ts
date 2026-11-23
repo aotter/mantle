@@ -2,11 +2,17 @@
  * The sealed plan (ADR-0032 decision 5, ADR-0034): what the CLI compiles from the manifests and Core executes.
  * Every SQL source is already IR here, so no Worker parses SQL. Pure types and constants.
  */
-import type { AuthorizationRequirements, HandlerStep, JsonSchema, LocalizedText, ProcedureMcpAnnotations, ProcedureTarget, TriggerSource } from "./ManifestGrammar.js";
+import type {
+  AuthorizationRequirements,
+  HandlerStep,
+  JsonSchema,
+  LocalizedText,
+  ProcedureMcpAnnotations,
+  ProcedureTarget,
+  TriggerSource,
+} from "./ManifestGrammar.js";
 import type { SqlLock, SqlNode, SqlPlan } from "./SqlIr.js";
 import type { UserScope, UserFieldSpec } from "./UserFields.js";
-
-export const RUNTIME_PLAN_VERSION = 6 as const;
 
 /** A Schema as storage and Store see it. Keys of `fields` and `names` are lower case: SQL folds unquoted identifiers. */
 export interface PlanSchema {
@@ -41,8 +47,23 @@ export interface PlanSchema {
   readonly indexes?: readonly (readonly string[])[];
 }
 
-/** A target's extra row terms per Schema (`restrict`): AND-ed onto that Schema's scope, never dropped by `{ all: true }`. */
-export type PlanRestrict = Readonly<Record<string, { readonly owner?: string; readonly terms: readonly UserScope[] }>>;
+/** A term of a restrict clause: `owner = auth.uid()` or `column IN auth.user(field)`. */
+export type RestrictTerm = { readonly owner: string } | UserScope;
+/**
+ * A target's extra row terms per Schema (`restrict`): AND-ed onto that Schema's scope, never dropped by `{ all: true }`.
+ * `owner` and `terms` are the single-term clauses; each `or` entry is a clause of two or more terms of which one must hold
+ * (ADR-0046, #2105). Every reader of the conjunction reads `or` too.
+ */
+export type PlanRestrict = Readonly<
+  Record<
+    string,
+    {
+      readonly owner?: string;
+      readonly terms: readonly UserScope[];
+      readonly or?: readonly (readonly RestrictTerm[])[];
+    }
+  >
+>;
 export interface PlanView extends SqlPlan {
   readonly restrict?: PlanRestrict;
   readonly title?: LocalizedText;
@@ -62,6 +83,7 @@ export interface PlanView extends SqlPlan {
 }
 
 export interface PlanProcedure {
+  readonly db?: "native";
   readonly restrict?: PlanRestrict;
   readonly trustedOnly?: true;
   readonly title?: LocalizedText;
@@ -76,7 +98,9 @@ export interface PlanProcedure {
   readonly mcp?: ProcedureMcpAnnotations;
   /** An inline handler carries its SQL (`source`: as authored, or its `steps` joined), which Admin shows; the IR is what runs.
    *  `steps` is the authored form when the handler was written as steps (#1874): statement i is step i. */
-  readonly handler: { readonly ref: string } | { readonly sql: SqlPlan; readonly source: string; readonly steps?: readonly HandlerStep[] };
+  readonly handler:
+    | { readonly ref: string }
+    | { readonly sql: SqlPlan; readonly source: string; readonly steps?: readonly HandlerStep[] };
 }
 
 export interface PlanTrigger {
@@ -93,10 +117,8 @@ export interface LoweredStatement {
   readonly verb?: "insert" | "update" | "delete";
   /** A set op whose step says `onNoRows: conflict`: writing no row is CONFLICT (#1874). Omitted otherwise. */
   readonly onNoRows?: "conflict";
-  /** Omitted when false. */
-  readonly hooked?: true;
-  /** Omitted when false. */
-  readonly publish?: true;
+  /** The authored step's `name` (#1974): its row conflict carries it as `fields.step`. Omitted otherwise. */
+  readonly step?: string;
   /** The policy AST has a RETURNING clause. */
   readonly returns?: true;
   /** A write's table, lower case (D1's unique-conflict op mapping). */
@@ -109,7 +131,12 @@ export interface LoweredStatement {
 export interface LoweredPage {
   readonly sql: string;
   /** Where each extra bind comes from on a request, after the View's own binds: a cursor key, the search pattern, an equality value or the page size + 1. */
-  readonly sources: readonly ({ readonly cursor: number } | { readonly search: true } | { readonly eq: number } | { readonly limit: true })[];
+  readonly sources: readonly (
+    | { readonly cursor: number }
+    | { readonly search: true }
+    | { readonly eq: number }
+    | { readonly limit: true }
+  )[];
   readonly flat?: true;
   readonly names: readonly string[];
   readonly nkeys: number;
@@ -126,28 +153,32 @@ export type LoweredMode = "caller" | "public" | "trusted";
 
 /** What `mantle generate` printed for the plan's dialect (ADR-0044): text, bind recipes and paging metadata, never ASTs. */
 export interface PlanLowered {
-  /** The `@aotter/mantle` version that lowered. */
-  readonly mantle: string;
-  /** The dialect's name and version, and its `lowerKey` ("" when absent): a runtime on another uses none of it. */
-  readonly dialect: { readonly name: string; readonly version: string; readonly key: string };
+  /** The dialect's name and version: a runtime on another uses none of it. */
+  readonly dialect: { readonly name: string; readonly version: string };
   readonly views: Readonly<Record<string, Readonly<Partial<Record<LoweredMode, LoweredView>>>>>;
-  readonly procedures: Readonly<Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredStatement[]>>>>>;
+  readonly procedures: Readonly<
+    Record<string, Readonly<Partial<Record<"caller" | "trusted", readonly LoweredStatement[]>>>>
+  >;
 }
 
 export interface RuntimePlan {
-  readonly access?: { readonly roles: readonly string[]; readonly userFields: Readonly<Record<string, UserFieldSpec>>; readonly warnings: readonly string[] };
-  readonly version: typeof RUNTIME_PLAN_VERSION;
+  readonly access?: {
+    readonly userFields: Readonly<Record<string, UserFieldSpec>>;
+    readonly warnings: readonly string[];
+  };
   /** The dialect the SQL was compiled for (ADR-0035 decision 5); boot refuses a storage of another. */
   readonly dialect: { readonly name: string; readonly version: string };
-  /** SHA-256 of the plan without this field (`planFingerprint`). */
-  readonly fingerprint: string;
   readonly schemas: Readonly<Record<string, PlanSchema>>;
   readonly views: Readonly<Record<string, PlanView>>;
   readonly procedures: Readonly<Record<string, PlanProcedure>>;
   readonly triggers: Readonly<Record<string, PlanTrigger>>;
-  /** Optional, covered by the fingerprint, and ignored by a runtime it does not match (ADR-0044). */
+  /** Optional, and ignored by a runtime it does not match (ADR-0044). */
   readonly lowered?: PlanLowered;
 }
 
 /** System-column type metadata for View output lineage. */
-export const NATIVE_OUTPUT_TYPES: Readonly<Record<string, string>> = { version: "integer", created_at: "timestamptz", updated_at: "timestamptz" };
+export const NATIVE_OUTPUT_TYPES: Readonly<Record<string, string>> = {
+  version: "integer",
+  created_at: "timestamptz",
+  updated_at: "timestamptz",
+};

@@ -2,16 +2,28 @@
 import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
-/** Native file response, or null for missing or invalid paths. */
+/** Native file response, or null for missing or invalid paths. Every file gets `nosniff`; Admin's content-hashed
+ * chunks under `/assets/` are cached for a year: a missing file is `null` here, so no 404 carries that header (the edge
+ * `_headers` rule on Workers is one day because the edge sends it on its own 404 too, #2088). Other files keep no cache
+ * header (`adminShell` marks the shell `no-store`). `/assets/client/` is the application's own browser entries, whose
+ * names are stable (a `bun-*` build writes no content-hashed copies), so caches must check the server before reuse. */
 export function bunAdminAssets(root: string): (path: string) => Promise<Response | null> {
   const base = resolve(root);
   return async path => {
-    try { path = decodeURIComponent(path); } catch { return null; }
+    try {
+      path = decodeURIComponent(path);
+    } catch {
+      return null;
+    }
     if (/[\u0000-\u001f\\]/.test(path)) return null;
     const target = resolve(base, `.${path}`);
     if (!target.startsWith(`${base}${sep}`)) return null;
     const physical = await realpath(target).catch(() => "");
-    if (!physical || !physical.startsWith(`${await realpath(base)}${sep}`) || !(await stat(physical)).isFile()) return null;
-    return new Response(Bun.file(physical));
+    if (!physical || !physical.startsWith(`${await realpath(base)}${sep}`) || !(await stat(physical)).isFile())
+      return null;
+    const headers = new Headers({ "x-content-type-options": "nosniff" });
+    if (path.startsWith("/assets/client/")) headers.set("cache-control", "no-cache");
+    else if (path.startsWith("/assets/")) headers.set("cache-control", "public, max-age=31536000, immutable");
+    return new Response(Bun.file(physical), { headers });
   };
 }

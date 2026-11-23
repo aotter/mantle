@@ -4,10 +4,10 @@
   skills under [`skills/`](skills/) and materialize a project outside this SDK
   checkout.
 - To change or review this SDK, read [`CONTRIBUTING.md`](CONTRIBUTING.md) and
-  the relevant accepted ADRs before editing.
+  the relevant accepted ADRs before editing; an open issue may already be merged into `develop`: check first.
 - For implementation, apply [Ponytail](.agents/skills/ponytail/SKILL.md): native
-  primitives first; deletion before new wrappers. For complexity review use
-  [Ponytail Review](.agents/skills/ponytail-review/SKILL.md), alongside correctness review.
+  primitives first; deletion before new wrappers; least logic, not fewest lines. For
+  complexity review use [Ponytail Review](.agents/skills/ponytail-review/SKILL.md), alongside correctness review.
 - To version, publish, or tag a release, additionally read the
   canonical [release skill](.agents/skills/mantle-release/SKILL.md). Do not
   release unless the user explicitly asks.
@@ -18,8 +18,8 @@ Repository safety gates:
   the default branch, so pass `--base develop` — an unspecified base targets
   `main`, which takes only promotion and hotfix PRs.
 - Keep Runtime adapter-neutral and the v2 manifest grammar closed.
-- Use the narrowest relevant check while editing; run `pnpm check` for broad
-  changes.
+- Use the narrowest check while editing. PostgreSQL is a first-class target: a PR's evidence is `pnpm check:pg`, not `pnpm check` (skips all PostgreSQL tests),
+  and its body names which ran. When to dispatch Linux Full checks, and Hyperdrive limits: [CONTRIBUTING.md](CONTRIBUTING.md#local-setup-and-checks).
 
 `CLAUDE.md` is a compatibility pointer, not a second instruction authority.
 Applications read version-matched instructions from their installed Core

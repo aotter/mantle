@@ -1,11 +1,32 @@
 import { sdkFixtureCaller } from "./apps/fixtures.js";
 import { fixtureCaller } from "./apps/fixtures.js";
-import {expect,test,spyOn} from "bun:test";
-import {Database} from "bun:sqlite";
-import {resolve} from "node:path";
-import {mkdtemp,rm} from "node:fs/promises";
-import {generateOrThrow,writeGenerated} from "./apps/link.js";
-const source=`apiVersion: cms.mantle.aotter.net/v2
+import { expect, test, spyOn } from "bun:test";
+import { Database } from "bun:sqlite";
+import { resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { generateOrThrow, writeGenerated } from "./apps/link.js";
+import type {
+  AudioContent,
+  ContentBlock as SdkContentBlock,
+  EmbeddedResource,
+  ImageContent,
+  ResourceLink,
+  TextContent,
+} from "@modelcontextprotocol/server";
+import type { McpContentBlock, ToolCall } from "../src/kernel/mcp.js";
+import { mcpClient } from "./mcp-client.js";
+import {
+  connectMethod,
+  connectParams,
+  ERAS,
+  eraRequest,
+  LEGACY_REVISION,
+  legacyInit,
+  legacyInitialize,
+  mcpInit,
+  mcpMessage,
+} from "./mcp-wire.js";
+const source = `apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: items}
 spec:
@@ -36,83 +57,321 @@ kind: Trigger
 metadata: {name: add-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: add-item}}
 `;
-const user=fixtureCaller({kind:"user",subject:"u",role:"admin", admin: true,scopes:["mcp"],credential:"oauth",credentialId:null,clientId:null});
-test("official SDK initializes, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes",async()=>{
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"mcp.yaml",text:source}]);
- const dir=await mkdtemp(resolve(import.meta.dir,".mcp-")),db=new Database(":memory:");
- let caller:any={kind:"anonymous"};
- const classifications: boolean[] = [];
- try {
-  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);
-  const {mcp}=await import(resolve(dir,"mcp.ts"));const handle=mcp({db:()=>db,caller:(_request:Request,_env:unknown,authority:{readOnly:boolean})=>{classifications.push(authority.readOnly);return caller;}});
-  const call=async(method:string,params:any={},path="/mcp",headers:Record<string,string>={})=>{
-   const response=await handle(new Request("https://app.test"+path,{method:"POST",headers:{cookie:"fixture=1","content-type":"application/json",accept:"application/json, text/event-stream",...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});
-   const text=await response.text(); const data=JSON.parse(text.startsWith("event:")?text.split("data: ")[1].split("\n")[0]:text);return {response,data,readOnly:classifications.at(-1)};
-  };
-  const initialized=await call("initialize",{protocolVersion:"2025-03-26",capabilities:{},clientInfo:{name:"test",version:"1"}});expect(initialized.response.status).toBe(200);expect(initialized.readOnly).toBe(true);
-  const listed=(await call("tools/list")).data.result.tools; expect(listed.map((t:any)=>t.name)).toEqual(["items","add_item"]);expect(listed[0].inputSchema.additionalProperties).toBe(false);
-  const denied=await call("tools/list",{},"/mcp/admin"); expect(denied.response.status).toBe(401); expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
-  const bad=await call("tools/call",{name:"add_item",arguments:{title:""}});expect(bad.data.result.isError).toBe(true);expect(JSON.parse(bad.data.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
-  const flood=await call("tools/call",{name:"add_item",arguments:{title:"x",rest:Array(10_000).fill(0)}});expect(flood.data.result.isError).toBe(true);expect(flood.data.result.content[0].text).toContain("more than the maximum of 10000 elements");
-  const ok=await call("tools/call",{name:"add_item",arguments:{title:"Hello"}});expect(ok.data.result.isError).toBeUndefined();expect(ok.readOnly).toBe(false);
-  const page=await call("tools/call",{name:"items",arguments:{limit:1}});expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");expect(page.readOnly).toBe(true);
-  caller=user;expect((await call("tools/list",{},"/mcp/admin")).data.result.tools.map((t:any)=>t.name)).toEqual(["admin_items"]);
-  caller=fixtureCaller({...user,role:null,admin:false}); const roleDenied=await call("tools/list",{},"/mcp/admin");expect(roleDenied.response.status).toBe(403);expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
-  caller=fixtureCaller({...user,scopes:[]}); const scopeDenied=await call("tools/list");expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
-  caller=fixtureCaller({...user,credential:"session"});expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{origin:"https://evil.test"})).response.status).toBe(403);
-  expect((await call("tools/call",{name:"add_item",arguments:{title:"CSRF"}},"/mcp",{"sec-fetch-site":"cross-site"})).data.result.isError).toBe(true);
-  expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({n:1});
-  expect(await handle(new Request("https://app.test/other"),{})).toBeUndefined();
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
+const user = fixtureCaller({
+  kind: "user",
+  subject: "u",
+  role: "admin",
+  admin: true,
+  scopes: ["mcp"],
+  credential: "oauth",
+  credentialId: null,
+  clientId: null,
+});
+test("official SDK discovers, lists only surface tools, calls shared validation/paging, refuses auth and cookie writes", async () => {
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "mcp.yaml", text: source }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-")),
+    db = new Database(":memory:");
+  let caller: any = { kind: "anonymous" };
+  const classifications: boolean[] = [];
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const handle = mcp({
+      db: () => db,
+      caller: (_request: Request, _env: unknown, authority: { readOnly: boolean }) => {
+        classifications.push(authority.readOnly);
+        return caller;
+      },
+    });
+    const call = async (method: string, params: any = {}, path = "/mcp", headers: Record<string, string> = {}) => {
+      const response = await handle(
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                cookie: "fixture=1",
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+          ),
+        ),
+        {},
+      );
+      const text = await response.text();
+      const data = JSON.parse(text.startsWith("event:") ? text.split("data: ")[1].split("\n")[0] : text);
+      return { response, data, readOnly: classifications.at(-1) };
+    };
+    const discovered = await call("server/discover");
+    expect(discovered.response.status).toBe(200);
+    expect(discovered.readOnly).toBe(true);
+    const listed = (await call("tools/list")).data.result.tools;
+    expect(listed.map((t: any) => t.name)).toEqual(["items", "add_item"]);
+    expect(listed[0].inputSchema.additionalProperties).toBe(false);
+    const denied = await call("tools/list", {}, "/mcp/admin");
+    expect(denied.response.status).toBe(401);
+    expect(denied.response.headers.get("www-authenticate")).toContain('scope="mcp"');
+    const bad = await call("tools/call", { name: "add_item", arguments: { title: "" } });
+    expect(bad.data.result.isError).toBe(true);
+    expect(JSON.parse(bad.data.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
+    const flood = await call("tools/call", {
+      name: "add_item",
+      arguments: { title: "x", rest: Array(10_000).fill(0) },
+    });
+    expect(flood.data.result.isError).toBe(true);
+    expect(flood.data.result.content[0].text).toContain("more than the maximum of 10000 elements");
+    const ok = await call("tools/call", { name: "add_item", arguments: { title: "Hello" } });
+    expect(ok.data.result.isError).toBeUndefined();
+    expect(ok.readOnly).toBe(false);
+    const page = await call("tools/call", { name: "items", arguments: { limit: 1 } });
+    expect(page.data.result.structuredContent.rows[0].title).toBe("Hello");
+    expect(page.readOnly).toBe(true);
+    caller = user;
+    expect((await call("tools/list", {}, "/mcp/admin")).data.result.tools.map((t: any) => t.name)).toEqual([
+      "admin_items",
+    ]);
+    caller = fixtureCaller({ ...user, role: null, admin: false });
+    const roleDenied = await call("tools/list", {}, "/mcp/admin");
+    expect(roleDenied.response.status).toBe(403);
+    expect(roleDenied.response.headers.has("www-authenticate")).toBe(false);
+    caller = fixtureCaller({ ...user, scopes: [] });
+    const scopeDenied = await call("tools/list");
+    expect(scopeDenied.response.status).toBe(403);
+    expect(scopeDenied.response.headers.get("www-authenticate")).toContain('error="insufficient_scope", scope="mcp"');
+    caller = fixtureCaller({ ...user, credential: "session" });
+    expect(
+      (
+        await call("tools/call", { name: "add_item", arguments: { title: "CSRF" } }, "/mcp", {
+          origin: "https://evil.test",
+        })
+      ).response.status,
+    ).toBe(403);
+    expect(
+      (
+        await call("tools/call", { name: "add_item", arguments: { title: "CSRF" } }, "/mcp", {
+          "sec-fetch-site": "cross-site",
+        })
+      ).data.result.isError,
+    ).toBe(true);
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
+    expect(await handle(new Request("https://app.test/other"), {})).toBeUndefined();
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 before authentication; no Origin passes; allowedOrigins parses once",async()=>{
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"origin.yaml",text:source}]);
- const dir=await mkdtemp(resolve(import.meta.dir,".mcp-origin-")),db=new Database(":memory:");
- let caller:any={kind:"anonymous"};const refusals:any[]=[],observations:any[]=[];
- try {
-  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
-  const open=mcp({db:()=>db,caller:()=>caller,onRefusal:(event:any)=>{refusals.push(event);},onObservation:(event:any)=>{observations.push(event);}});
-  const listed=mcp({db:()=>db,caller:()=>caller,allowedOrigins:["https://console.test:8443","partner.test","app.test"]});
-  const call=(handle:any,url:string,headers:Record<string,string>={},era?:string)=>handle(new Request(url,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream",...(era?{"mcp-protocol-version":era,"mcp-method":"tools/list"}:{}),...headers},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list",params:era?{_meta:{"io.modelcontextprotocol/protocolVersion":era,"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/clientInfo":{name:"test",version:"1"}}}:{}})}),{});
-  for(const who of [{kind:"anonymous"},user]) for(const path of ["/mcp","/mcp/admin"]) for(const era of [undefined,"2026-07-28"]) {
-   caller=who;const refused=await call(open,"https://app.test"+path,{origin:"https://evil.test"},era);
-   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
-   if(who===user) for(const headers of [{},{origin:"http://localhost:5173"}] as Record<string,string>[]) expect((await call(open,"https://app.test"+path,headers,era)).status).toBe(200);
+test("a service credential lists and calls only scope-gated tools, in every discovery mode", async () => {
+  const scoped = `${source}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: {name: scoped-add}
+spec:
+  requires: {auth: {all: [ctx.user, {ctx.auth.scope: "items:write"}]}}
+  input: {type: object, properties: {title: {type: string, minLength: 1}}, required: [title], additionalProperties: false}
+  output: {type: object}
+  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: scoped-add-mcp}
+spec: {source: {kind: mcp, surface: public}, target: {procedure: scoped-add}}
+`;
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "mcp.yaml", text: scoped }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const key = fixtureCaller({
+      ...user,
+      admin: false,
+      role: null,
+      credential: "api-key",
+      scopes: ["mcp", "items:write"],
+    });
+    const send = (handle: any, body: unknown) => handle(new Request("https://app.test/mcp", mcpInit(body)), {});
+    const json = async (response: Response) => {
+      const text = await response.text();
+      return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text);
+    };
+    const call = (method: string, params: unknown = {}) => ({ jsonrpc: "2.0", id: 1, method, params });
+    const add = (name: string) => call("tools/call", { name, arguments: { title: "x" } });
+    for (const options of [{}, { authorize: () => true }, { authorize: () => true, discovery: "all" }]) {
+      const handle = mcp({ db: () => db, caller: () => key, ...options });
+      const listed = await json(await send(handle, call("tools/list")));
+      expect(listed.result.tools.map((tool: any) => tool.name)).toEqual(["scoped_add"]);
+      for (const refused of [add("add_item"), call("tools/call", { name: "items", arguments: {} })]) {
+        const response = await send(handle, refused);
+        expect(response.status).toBe(403);
+        expect((await json(response)).error.code).toBe("AUTH_DENIED");
+      }
+      // A 2025-era batch: every call of it is refused before any runs, the allowed first one included.
+      const batch = await handle(
+        new Request("https://app.test/mcp", legacyInit([add("scoped_add"), add("add_item")])),
+        {},
+      );
+      expect([batch.status, (await json(batch)).error.code]).toEqual([403, "AUTH_DENIED"]);
+      // 2026-07-28 has no batches: the SDK refuses one with a 2026-07-28 element.
+      const modern = mcpInit(mcpMessage("tools/list"));
+      const enveloped = [mcpMessage("tools/call", { name: "scoped_add", arguments: { title: "x" } })];
+      expect(
+        (await handle(new Request("https://app.test/mcp", { ...modern, body: JSON.stringify(enveloped) }), {})).status,
+      ).toBe(400);
+      expect((await json(await send(handle, add("scoped_add")))).result.isError).toBeUndefined();
+    }
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 3 });
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
   }
-  // Each refusal is reported once to both callbacks.
-  expect(refusals).toHaveLength(8);expect(refusals.every(event=>event.reason==="origin"&&event.status===403)).toBe(true);
-  expect(observations.filter(event=>event.kind==="request-refused").map(event=>[event.status,event.surface])).toEqual(["public","public","admin","admin","public","public","admin","admin"].map(surface=>[403,surface]));
-  caller={kind:"anonymous"};
-  // The site's own origin is not implied: DNS rebinding sends Origin == the rebound Host, whatever CF-Connecting-IP claims.
-  for(const url of ["https://app.test/mcp","http://evil.example.com:8787/mcp"]) for(const ip of [{},{"cf-connecting-ip":"127.0.0.1"}] as Record<string,string>[]) {
-   const refused=await call(open,url,{host:new URL(url).host,origin:new URL(url).origin,...ip});
-   expect(refused.status).toBe(403);expect((await refused.json()).error.message).toBe(`Invalid Origin: ${new URL(url).hostname}`);
+});
+test("MCP answers a browser Origin only from loopback or allowedOrigins, 403 before authentication; no Origin passes; allowedOrigins parses once", async () => {
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "origin.yaml", text: source }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-origin-")),
+    db = new Database(":memory:");
+  let caller: any = { kind: "anonymous" };
+  const observations: any[] = [];
+  const refusals = () => observations.filter(event => event.kind === "request-refused");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const open = mcp({
+      db: () => db,
+      caller: () => caller,
+      onObservation: (event: any) => {
+        observations.push(event);
+      },
+    });
+    const listed = mcp({
+      db: () => db,
+      caller: () => caller,
+      allowedOrigins: ["https://console.test:8443", "partner.test", "app.test"],
+    });
+    const call = (handle: any, url: string, headers: Record<string, string> = {}, era?: string) =>
+      handle(
+        new Request(
+          url,
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/list",
+              params: era
+                ? {
+                    _meta: {
+                      "io.modelcontextprotocol/protocolVersion": era,
+                      "io.modelcontextprotocol/clientCapabilities": {},
+                      "io.modelcontextprotocol/clientInfo": { name: "test", version: "1" },
+                    },
+                  }
+                : {},
+            },
+            {
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...(era ? { "mcp-protocol-version": era, "mcp-method": "tools/list" } : {}),
+                ...headers,
+              },
+            },
+          ),
+        ),
+        {},
+      );
+    for (const who of [{ kind: "anonymous" }, user])
+      for (const path of ["/mcp", "/mcp/admin"])
+        for (const era of [undefined, "2026-07-28"]) {
+          caller = who;
+          const refused = await call(open, "https://app.test" + path, { origin: "https://evil.test" }, era);
+          expect(refused.status).toBe(403);
+          expect((await refused.json()).error.message).toBe("Invalid Origin: evil.test");
+          if (who === user)
+            for (const headers of [{}, { origin: "http://localhost:5173" }] as Record<string, string>[])
+              expect((await call(open, "https://app.test" + path, headers, era)).status).toBe(200);
+        }
+    // Each refusal is observed once, with its reason.
+    expect(refusals().every(event => event.reason === "origin" && event.status === 403)).toBe(true);
+    expect(refusals().map(event => [event.status, event.surface])).toEqual(
+      ["public", "public", "admin", "admin", "public", "public", "admin", "admin"].map(surface => [403, surface]),
+    );
+    caller = { kind: "anonymous" };
+    // The site's own origin is not implied: DNS rebinding sends Origin == the rebound Host, whatever CF-Connecting-IP claims.
+    for (const url of ["https://app.test/mcp", "http://evil.example.com:8787/mcp"])
+      for (const ip of [{}, { "cf-connecting-ip": "127.0.0.1" }] as Record<string, string>[]) {
+        const refused = await call(open, url, { host: new URL(url).host, origin: new URL(url).origin, ...ip });
+        expect(refused.status).toBe(403);
+        expect((await refused.json()).error.message).toBe(`Invalid Origin: ${new URL(url).hostname}`);
+      }
+    // A forged loopback peer does not admit a foreign Origin; the opaque `null` Origin is refused.
+    expect(
+      (await call(open, "http://127.0.0.1:8787/mcp", { origin: "https://evil.test", "cf-connecting-ip": "127.0.0.1" }))
+        .status,
+    ).toBe(403);
+    expect((await call(open, "http://127.0.0.1:8787/mcp", { origin: "null" })).status).toBe(403);
+    expect(refusals()).toHaveLength(14);
+    // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
+    const unread = new Request(
+      "https://app.test/mcp",
+      mcpInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/list" },
+        { headers: { "content-type": "application/json", origin: "https://evil.test" } },
+      ),
+    );
+    expect((await open(unread, {}, {})).status).toBe(403);
+    expect(unread.bodyUsed).toBe(true);
+    // No Origin is a server-side client: any Host passes, as behind wrangler routes or dev.host (Host rewritten, peer still loopback).
+    for (const host of ["app.example.com", "evil.example.com"])
+      expect((await call(open, `http://${host}/mcp`, { host, "cf-connecting-ip": "127.0.0.1" })).status).toBe(200);
+    // Loopback Origins pass on any port.
+    for (const host of ["localhost:8787", "127.0.0.1:3000", "[::1]:8787"])
+      expect((await call(open, "https://app.test/mcp", { origin: `http://${host}` })).status).toBe(200);
+    // allowedOrigins lists browser origins by hostname, including the site's own.
+    for (const origin of [
+      "https://app.test",
+      "https://console.test",
+      "http://partner.test:3000",
+      "http://localhost:8787",
+    ])
+      expect((await call(listed, "https://app.test/mcp", { origin })).status).toBe(200);
+    expect((await call(listed, "https://app.test/mcp", { origin: "https://evil.test" })).status).toBe(403);
+    // allowedOrigins is parsed once: full origins and bare hosts pass, anything else fails at configuration.
+    expect(() =>
+      mcp({
+        db: () => db,
+        allowedOrigins: ["https://a.test", "a.test", "localhost:8787", "[::1]", "http://[::1]:8787"],
+      }),
+    ).not.toThrow();
+    for (const bad of [
+      "https://a.test/mcp",
+      "a.test/path",
+      "https://",
+      "",
+      "https://a.test?x=1",
+      "https://user@a.test",
+    ])
+      expect(() => mcp({ db: () => db, allowedOrigins: [bad] })).toThrow(`mcp allowedOrigins: "${bad}"`);
+    // Wildcards never match an exact hostname, so they fail at configuration.
+    for (const wild of ["*", "https://*.example.com", "*.example.com"])
+      expect(() => mcp({ db: () => db, allowedOrigins: [wild] })).toThrow(
+        `mcp allowedOrigins: "${wild}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`,
+      );
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
   }
-  // A forged loopback peer does not admit a foreign Origin; the opaque `null` Origin is refused.
-  expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"https://evil.test","cf-connecting-ip":"127.0.0.1"})).status).toBe(403);
-  expect((await call(open,"http://127.0.0.1:8787/mcp",{origin:"null"})).status).toBe(403);
-  expect(refusals).toHaveLength(14);
-  // The refused POST body is read (bounded) before the 403, so the connection stays usable under wrangler dev.
-  const unread=new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",origin:"https://evil.test"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/list"})});
-  expect((await open(unread,{},{})).status).toBe(403);expect(unread.bodyUsed).toBe(true);
-  // No Origin is a server-side client: any Host passes, as behind wrangler routes or dev.host (Host rewritten, peer still loopback).
-  for(const host of ["app.example.com","evil.example.com"]) expect((await call(open,`http://${host}/mcp`,{host,"cf-connecting-ip":"127.0.0.1"})).status).toBe(200);
-  // Loopback Origins pass on any port.
-  for(const host of ["localhost:8787","127.0.0.1:3000","[::1]:8787"]) expect((await call(open,"https://app.test/mcp",{origin:`http://${host}`})).status).toBe(200);
-  // allowedOrigins lists browser origins by hostname, including the site's own.
-  for(const origin of ["https://app.test","https://console.test","http://partner.test:3000","http://localhost:8787"]) expect((await call(listed,"https://app.test/mcp",{origin})).status).toBe(200);
-  expect((await call(listed,"https://app.test/mcp",{origin:"https://evil.test"})).status).toBe(403);
-  // allowedOrigins is parsed once: full origins and bare hosts pass, anything else fails at configuration.
-  expect(()=>mcp({db:()=>db,allowedOrigins:["https://a.test","a.test","localhost:8787","[::1]","http://[::1]:8787"]})).not.toThrow();
-  for(const bad of ["https://a.test/mcp","a.test/path","https://","","https://a.test?x=1","https://user@a.test"]) expect(()=>mcp({db:()=>db,allowedOrigins:[bad]})).toThrow(`mcp allowedOrigins: "${bad}"`);
-  // Wildcards never match an exact hostname, so they fail at configuration.
-  for(const wild of ["*","https://*.example.com","*.example.com"]) expect(()=>mcp({db:()=>db,allowedOrigins:[wild]})).toThrow(`mcp allowedOrigins: "${wild}" is not an origin (https://host[:port]) or a host[:port]; wildcards never match.`);
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
-test("generated tools carry a title and read/destructive hints; declared hints win",async()=>{
- const text=source+`---
+test("generated tools carry a title and read/destructive hints; declared hints win", async () => {
+  const text =
+    source +
+    `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Schema
 metadata: {name: posts}
@@ -125,15 +384,26 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: View
 metadata: {name: posts}
 spec: {surface: admin, sql: 'SELECT id, title FROM posts ORDER BY id'}
-`+[
-  ["rename-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'",""],
-  ["upsert-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO UPDATE SET title = excluded.title'",""],
-  ["keep-item","sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO NOTHING'",""],
-  ["purge-items","sql: 'DELETE FROM items WHERE title = input.title'",""],
-  ["sendMail","ref: sendMail",""],
-  ["lookUp","ref: lookUp","  mcp: {readOnlyHint: true}\n"],
-  ["retitle-item","sql: 'UPDATE items SET title = input.title WHERE id = input.id'","  title: Retitle\n  mcp: {destructiveHint: false, openWorldHint: false}\n"],
- ].map(([name,handler,extra])=>`---
+` +
+    [
+      ["rename-item", "sql: 'UPDATE items SET title = input.title WHERE id = input.id'", ""],
+      [
+        "upsert-item",
+        "sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO UPDATE SET title = excluded.title'",
+        "",
+      ],
+      ["keep-item", "sql: 'INSERT INTO items(id, title) VALUES(input.id, input.title) ON CONFLICT(id) DO NOTHING'", ""],
+      ["purge-items", "sql: 'DELETE FROM items WHERE title = input.title'", ""],
+      ["sendMail", "ref: sendMail", ""],
+      ["lookUp", "ref: lookUp", "  mcp: {readOnlyHint: true}\n"],
+      [
+        "retitle-item",
+        "sql: 'UPDATE items SET title = input.title WHERE id = input.id'",
+        "  title: Retitle\n  mcp: {destructiveHint: false, openWorldHint: false}\n",
+      ],
+    ]
+      .map(
+        ([name, handler, extra]) => `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: ${name}}
@@ -146,116 +416,355 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: {name: ${name}-mcp}
 spec: {source: {kind: mcp, surface: admin}, target: {procedure: ${name}}}
-`).join("");
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"hints.yaml",text}]);
- const dir=await mkdtemp(resolve(import.meta.dir,".mcp-hints-"));
- try {
-  await writeGenerated(dir,files);const {tools}=await import(resolve(dir,"mcp.ts"));
-  const hints=Object.fromEntries(tools.map((t:any)=>[t.name,[t.title,t.annotations]]));
-  expect(hints).toEqual({
-   items:["Items",{readOnlyHint:true,destructiveHint:false}],admin_items:["Admin items",{readOnlyHint:true,destructiveHint:false}],
-   add_item:["Add item",{readOnlyHint:false,destructiveHint:false}],rename_item:["Rename item",{readOnlyHint:false,destructiveHint:true}],
-   upsert_item:["Upsert item",{readOnlyHint:false,destructiveHint:true}],keep_item:["Keep item",{readOnlyHint:false,destructiveHint:false}],
-   purge_items:["Purge items",{readOnlyHint:false,destructiveHint:true}],sendmail:["Send mail",{readOnlyHint:false,destructiveHint:true}],
-   lookup:["Look up",{readOnlyHint:true,destructiveHint:false}],retitle_item:["Retitle",{readOnlyHint:false,destructiveHint:false,openWorldHint:false}],
-   posts:["Posts",{readOnlyHint:true,destructiveHint:false}],publish_posts:["Publish posts",{readOnlyHint:false,destructiveHint:false}],
-   unpublish_posts:["Unpublish posts",{readOnlyHint:false,destructiveHint:false}],archive_posts:["Archive posts",{readOnlyHint:false,destructiveHint:true}],
-  });
- } finally {await rm(dir,{recursive:true,force:true});}
+`,
+      )
+      .join("");
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "hints.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-hints-"));
+  try {
+    await writeGenerated(dir, files);
+    const { tools } = await import(resolve(dir, "mcp.ts"));
+    const hints = Object.fromEntries(tools.map((t: any) => [t.name, [t.title, t.annotations]]));
+    expect(hints).toEqual({
+      items: ["Items", { readOnlyHint: true, destructiveHint: false }],
+      admin_items: ["Admin items", { readOnlyHint: true, destructiveHint: false }],
+      add_item: ["Add item", { readOnlyHint: false, destructiveHint: false }],
+      rename_item: ["Rename item", { readOnlyHint: false, destructiveHint: true }],
+      upsert_item: ["Upsert item", { readOnlyHint: false, destructiveHint: true }],
+      keep_item: ["Keep item", { readOnlyHint: false, destructiveHint: false }],
+      purge_items: ["Purge items", { readOnlyHint: false, destructiveHint: true }],
+      sendmail: ["Send mail", { readOnlyHint: false, destructiveHint: true }],
+      lookup: ["Look up", { readOnlyHint: true, destructiveHint: false }],
+      retitle_item: ["Retitle", { readOnlyHint: false, destructiveHint: false, openWorldHint: false }],
+      posts: ["Posts", { readOnlyHint: true, destructiveHint: false }],
+      publish_posts: ["Publish posts", { readOnlyHint: false, destructiveHint: false }],
+      unpublish_posts: ["Unpublish posts", { readOnlyHint: false, destructiveHint: false }],
+      archive_posts: ["Archive posts", { readOnlyHint: false, destructiveHint: true }],
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("MCP SDK stays outside startup, unused surface is tree shaken and static SDK imports are refused",async()=>{
- const {build}=await import("esbuild"); const {guardStartup,startupGraph}=await import("../src/infrastructure/bundle.js");
- const files=await generateOrThrow("cloudflare-d1",[{sourceId:"mcp.yaml",text:source}]);
- const dir=await mkdtemp(resolve(import.meta.dir,".mcp-bundle-"));
- const {writeFile}=await import("node:fs/promises");
- try {
-  await writeGenerated(dir,files);const entry=resolve(dir,"worker.ts");await writeFile(entry,'export {mcp} from "./mcp.ts";');
-  const result=await build({entryPoints:[entry],outdir:resolve(dir,"out"),bundle:true,splitting:true,format:"esm",platform:"neutral",conditions:["workerd","worker","browser"],external:["node:*"],write:false,metafile:true});
-  expect(()=>guardStartup(result.metafile!,entry)).not.toThrow();
-  const startup=startupGraph(result.metafile!,entry).flatMap(name=>Object.keys(result.metafile!.outputs[name]!.inputs));
-  expect(startup.some(input=>input.endsWith("/kernel/authorization.js"))).toBe(false);
-  expect(startup.some(name=>name.includes("@modelcontextprotocol"))).toBe(false);
-  expect(startup.some(name=>name.includes("mcp-handler"))).toBe(false);
-  expect(startup.some(name=>/host-caller|user-caller/.test(name))).toBe(false);
-  expect(Object.keys(result.metafile!.inputs).some(name=>name.includes("@modelcontextprotocol"))).toBe(true);
-  await writeFile(entry,'export {McpServer} from "@modelcontextprotocol/server";');
-  const eager=await build({entryPoints:[entry],outdir:resolve(dir,"eager"),bundle:true,splitting:true,format:"esm",platform:"neutral",conditions:["workerd","worker","browser"],external:["node:*"],write:false,metafile:true});
-  expect(()=>guardStartup(eager.metafile!,entry)).toThrow("request-time");
- }finally {await rm(dir,{recursive:true,force:true});}
+test("MCP SDK stays outside startup, unused surface is tree shaken and static SDK imports are refused", async () => {
+  const { build } = await import("esbuild");
+  const { guardStartup, startupGraph } = await import("../src/infrastructure/bundle.js");
+  const files = await generateOrThrow("cloudflare-d1", [{ sourceId: "mcp.yaml", text: source }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-bundle-"));
+  const { writeFile } = await import("node:fs/promises");
+  try {
+    await writeGenerated(dir, files);
+    const entry = resolve(dir, "worker.ts");
+    await writeFile(entry, 'export {mcp} from "./mcp.ts";');
+    const result = await build({
+      entryPoints: [entry],
+      outdir: resolve(dir, "out"),
+      bundle: true,
+      splitting: true,
+      format: "esm",
+      platform: "neutral",
+      conditions: ["workerd", "worker", "browser"],
+      external: ["node:*"],
+      write: false,
+      metafile: true,
+    });
+    expect(() => guardStartup(result.metafile!, entry)).not.toThrow();
+    const startup = startupGraph(result.metafile!, entry).flatMap(name =>
+      Object.keys(result.metafile!.outputs[name]!.inputs),
+    );
+    expect(startup.some(input => input.endsWith("/kernel/authorization.js"))).toBe(false);
+    expect(startup.some(name => name.includes("@modelcontextprotocol"))).toBe(false);
+    expect(startup.some(name => name.includes("mcp-handler"))).toBe(false);
+    expect(startup.some(name => /host-caller|user-caller/.test(name))).toBe(false);
+    expect(Object.keys(result.metafile!.inputs).some(name => name.includes("@modelcontextprotocol"))).toBe(true);
+    await writeFile(entry, 'export {McpServer} from "@modelcontextprotocol/server";');
+    const eager = await build({
+      entryPoints: [entry],
+      outdir: resolve(dir, "eager"),
+      bundle: true,
+      splitting: true,
+      format: "esm",
+      platform: "neutral",
+      conditions: ["workerd", "worker", "browser"],
+      external: ["node:*"],
+      write: false,
+      metafile: true,
+    });
+    expect(() => guardStartup(eager.metafile!, entry)).toThrow("request-time");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("MCP converts validated JSON/boolean input to native SQLite binds",async()=>{
- const text=source.replace('properties: {title: {type: string}}, required: [title]', 'properties: {title: {type: string}, flag: {type: boolean}, payload: {type: object}}, required: [title, flag, payload]').replace('properties: {title: {type: string, minLength: 1}}, required: [title]', 'properties: {title: {type: string, minLength: 1}, flag: {type: boolean}, payload: {type: object}}, required: [title, flag, payload]').replace('INSERT INTO items(title) VALUES(input.title)', 'INSERT INTO items(title, flag, payload) VALUES(input.title, input.flag, input.payload)');
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"json.yaml",text}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-bind-")),db=new Database(":memory:");
- try {
-  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
-  const response=await mcp({db:()=>db,caller:()=>user})(new Request("https://app.test/mcp",{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name:"add_item",arguments:{title:"JSON",flag:true,payload:{nested:[1,2]}}}})}),{});
-  expect(response.status).toBe(200);const text=await response.text();expect(text).not.toContain('"isError":true');
-  expect(db.query("SELECT flag,payload FROM items").get()).toEqual({flag:1,payload:'{"nested":[1,2]}'});
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
+test("MCP converts validated JSON/boolean input to native SQLite binds", async () => {
+  const text = source
+    .replace(
+      "properties: {title: {type: string}}, required: [title]",
+      "properties: {title: {type: string}, flag: {type: boolean}, payload: {type: object}}, required: [title, flag, payload]",
+    )
+    .replace(
+      "properties: {title: {type: string, minLength: 1}}, required: [title]",
+      "properties: {title: {type: string, minLength: 1}, flag: {type: boolean}, payload: {type: object}}, required: [title, flag, payload]",
+    )
+    .replace(
+      "INSERT INTO items(title) VALUES(input.title)",
+      "INSERT INTO items(title, flag, payload) VALUES(input.title, input.flag, input.payload)",
+    );
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "json.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-bind-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const response = await mcp({ db: () => db, caller: () => user })(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "add_item", arguments: { title: "JSON", flag: true, payload: { nested: [1, 2] } } },
+          },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).not.toContain('"isError":true');
+    expect(db.query("SELECT flag,payload FROM items").get()).toEqual({ flag: 1, payload: '{"nested":[1,2]}' });
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("MCP emission is selected by Views/Triggers, not internal queries or publishing alone",async()=>{
- const bare=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: View')[0]!;
- for(const text of [bare,bare.replace('lifecycle: operational','lifecycle: publishing')]) {
-  const files=await generateOrThrow("bun-sqlite",[{sourceId:"bare.yaml",text}]);
-  expect(files["mcp.ts"]).toBeUndefined();expect(Object.values(files).join('\n')).not.toContain('@modelcontextprotocol');
- }
- const internal=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replaceAll('surface: public','surface: internal').replaceAll('surface: admin','surface: internal');
- expect((await generateOrThrow("bun-sqlite",[{sourceId:"internal.yaml",text:internal}]))["mcp.ts"]).toBeUndefined();
+test("mcp.ts is always emitted: no MCP-visible operation leaves its tools table empty; publishing adds admin tools", async () => {
+  const bare = source.split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: View")[0]!;
+  const internal = source
+    .split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure")[0]!
+    .replaceAll("surface: public", "surface: internal")
+    .replaceAll("surface: admin", "surface: internal");
+  const tools = async (text: string) => {
+    const files = await generateOrThrow("bun-sqlite", [{ sourceId: "bare.yaml", text }]);
+    expect(Object.values(files).join("\n")).not.toContain("@modelcontextprotocol");
+    const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-empty-"));
+    try {
+      await writeGenerated(dir, files);
+      return (await import(resolve(dir, "mcp.ts"))).tools.map((tool: { name: string }) => tool.name);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  };
+  expect(await tools(bare)).toEqual([]);
+  expect(await tools(internal)).toEqual([]);
+  expect(await tools(bare.replace("lifecycle: operational", "lifecycle: publishing"))).toEqual([
+    "publish_items",
+    "unpublish_items",
+    "archive_items",
+  ]);
 });
 
-test("generated publishing transitions are validated admin tools; public Views use SQL visibility",async()=>{
- const text=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replace('lifecycle: operational','lifecycle: publishing');
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"publishing-mcp.yaml",text}]);
- const dir=await mkdtemp(resolve(import.meta.dir,".mcp-publishing-")),db=new Database(":memory:");let caller:any={kind:"anonymous"};
- try {
-  await writeGenerated(dir,files);db.exec(files["schema.sql"]!);db.exec("INSERT INTO items(id,version,created_at,updated_at,title) VALUES('a',1,0,0,'Draft')");
-  const {mcp}=await import(resolve(dir,"mcp.ts"));const handle=mcp({db:()=>db,caller:()=>caller});
-  const call=async(method:string,params:any={},path="/mcp/")=>{const response=await handle(new Request("https://app.test"+path,{method:"POST",headers:{"content-type":"application/json",accept:"application/json, text/event-stream"},body:JSON.stringify({jsonrpc:"2.0",id:1,method,params})}),{});const text=await response.text();return JSON.parse(text.startsWith("event:")?text.split("data: ")[1].split("\n")[0]:text);};
-  expect((await call("tools/list")).result.tools.map((tool:any)=>tool.name)).toEqual(["items"]);
-  expect((await call("tools/call",{name:"items",arguments:{}})).result.structuredContent.rows).toEqual([]);
-  caller=user;const admin=await call("tools/list",{},"/mcp/admin/");
-  expect(admin.result.tools.map((tool:any)=>tool.name)).toEqual(["admin_items","publish_items","unpublish_items","archive_items"]);
-  expect(admin.result.tools.find((tool:any)=>tool.name==='publish_items').inputSchema).toMatchObject({required:['id','expectedVersion'],additionalProperties:false});
-  const invalid=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:"1"}},"/mcp/admin/");expect(JSON.parse(invalid.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
-  const publish=await call("tools/call",{name:"publish_items",arguments:{id:"a",expectedVersion:1}},"/mcp/admin/");expect(publish.result.structuredContent.results[0][0].status).toBe('published');
-  caller={kind:"anonymous"};expect((await call("tools/call",{name:"items",arguments:{}})).result.structuredContent.rows.map((row:any)=>row.id)).toEqual(['a']);
-  caller=user;for(const [name,version,status] of [['unpublish_items',2,'draft'],['archive_items',3,'archived']]) expect((await call('tools/call',{name,arguments:{id:'a',expectedVersion:version}},'/mcp/admin/')).result.structuredContent.results[0][0].status).toBe(status);
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
+test("generated publishing transitions are validated admin tools; public Views use SQL visibility", async () => {
+  const text = source
+    .split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure")[0]!
+    .replace("lifecycle: operational", "lifecycle: publishing");
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "publishing-mcp.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-publishing-")),
+    db = new Database(":memory:");
+  let caller: any = { kind: "anonymous" };
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    db.exec("INSERT INTO items(id,version,created_at,updated_at,title) VALUES('a',1,0,0,'Draft')");
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const handle = mcp({ db: () => db, caller: () => caller });
+    const call = async (method: string, params: any = {}, path = "/mcp/") => {
+      const response = await handle(
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
+        {},
+      );
+      const text = await response.text();
+      return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1].split("\n")[0] : text);
+    };
+    expect((await call("tools/list")).result.tools.map((tool: any) => tool.name)).toEqual(["items"]);
+    expect((await call("tools/call", { name: "items", arguments: {} })).result.structuredContent.rows).toEqual([]);
+    caller = user;
+    const admin = await call("tools/list", {}, "/mcp/admin/");
+    expect(admin.result.tools.map((tool: any) => tool.name)).toEqual([
+      "admin_items",
+      "publish_items",
+      "unpublish_items",
+      "archive_items",
+    ]);
+    expect(admin.result.tools.find((tool: any) => tool.name === "publish_items").inputSchema).toMatchObject({
+      required: ["id", "expectedVersion"],
+      additionalProperties: false,
+    });
+    const invalid = await call(
+      "tools/call",
+      { name: "publish_items", arguments: { id: "a", expectedVersion: "1" } },
+      "/mcp/admin/",
+    );
+    expect(JSON.parse(invalid.result.content[0].text).diagnostics[0].code).toBe("INPUT_VALIDATION_FAILED");
+    const publish = await call(
+      "tools/call",
+      { name: "publish_items", arguments: { id: "a", expectedVersion: 1 } },
+      "/mcp/admin/",
+    );
+    expect(publish.result.structuredContent.results[0][0].status).toBe("published");
+    caller = { kind: "anonymous" };
+    expect(
+      (await call("tools/call", { name: "items", arguments: {} })).result.structuredContent.rows.map(
+        (row: any) => row.id,
+      ),
+    ).toEqual(["a"]);
+    caller = user;
+    for (const [name, version, status] of [
+      ["unpublish_items", 2, "draft"],
+      ["archive_items", 3, "archived"],
+    ])
+      expect(
+        (await call("tools/call", { name, arguments: { id: "a", expectedVersion: version } }, "/mcp/admin/")).result
+          .structuredContent.results[0][0].status,
+      ).toBe(status);
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("ref MCP Procedures require typed caller-owned handlers and enforce requires before dispatch",async()=>{
- const text=source.replace("handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",'requires: {auth: {all: [ctx.user, ctx.admin, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}');
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"ref-mcp.yaml",text}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-ref-")),db=new Database(":memory:");
- let caller:any=sdkFixtureCaller(user),calls=0;
- try {
-  await writeGenerated(dir,files,false);db.exec(files["schema.sql"]!);const {mcp}=await import(resolve(dir,"mcp.ts"));
-  const handle=mcp({db:()=>db,caller:()=>caller,handlers:{'add-item':async(ctx:any,input:any)=>{calls++;expect(ctx.caller.subject).toBe('u');await ctx.store.collection('items').insert(input);return {title:input.title};}}});
-  const call=async()=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'add_item',arguments:{title:'Ref'}}})}),{});const text=await response.text();return {response,data:JSON.parse(text.startsWith('event:')?text.split('data: ')[1].split('\n')[0]:text)};};
-  const scopeDenied=await call();expect(scopeDenied.response.status).toBe(403);expect(scopeDenied.response.headers.get('www-authenticate')).toContain('items:write');expect(calls).toBe(0);
-  caller=sdkFixtureCaller({...user,scopes:['mcp','items:write'],role:'contributor',admin:false});expect((await call()).data.result.isError).toBe(true);expect(calls).toBe(0);
-  caller=sdkFixtureCaller({...user,scopes:['mcp','items:write']});expect((await call()).data.result.structuredContent).toEqual({title:'Ref'});expect(calls).toBe(1);
-
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
+test("ref MCP Procedures require typed caller-owned handlers and enforce requires before dispatch", async () => {
+  const text = source.replace(
+    "handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",
+    "requires: {auth: {all: [ctx.user, ctx.admin, {ctx.auth.scope: items:write}]}}\n  handler: {ref: app.addItem}",
+  );
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "ref-mcp.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-ref-")),
+    db = new Database(":memory:");
+  let caller: any = sdkFixtureCaller(user),
+    calls = 0;
+  try {
+    await writeGenerated(dir, files, false);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const handle = mcp({
+      db: () => db,
+      caller: () => caller,
+      handlers: {
+        "add-item": async (ctx: any, input: any) => {
+          calls++;
+          expect(ctx.caller.subject).toBe("u");
+          await ctx.store.collection("items").insert(input);
+          return { title: input.title };
+        },
+      },
+    });
+    const call = async () => {
+      const response = await handle(
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "add_item", arguments: { title: "Ref" } },
+            },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
+        {},
+      );
+      const text = await response.text();
+      return { response, data: JSON.parse(text.startsWith("event:") ? text.split("data: ")[1].split("\n")[0] : text) };
+    };
+    const scopeDenied = await call();
+    expect(scopeDenied.response.status).toBe(403);
+    expect(scopeDenied.response.headers.get("www-authenticate")).toContain("items:write");
+    expect(calls).toBe(0);
+    caller = sdkFixtureCaller({ ...user, scopes: ["mcp", "items:write"], role: "contributor", admin: false });
+    expect((await call()).data.result.isError).toBe(true);
+    expect(calls).toBe(0);
+    caller = sdkFixtureCaller({ ...user, scopes: ["mcp", "items:write"] });
+    expect((await call()).data.result.structuredContent).toEqual({ title: "Ref" });
+    expect(calls).toBe(1);
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("unknown tool and caller failures log the surface and original error, redact responses and never challenge a resolver exception",async()=>{
- const files=await generateOrThrow("bun-sqlite",[{sourceId:"errors.yaml",text:source}]);const dir=await mkdtemp(resolve(import.meta.dir,".mcp-errors-"));
- const logging=spyOn(console,'error').mockImplementation(()=>{}),token='unlogged-bearer-secret',cause=new Error('hidden database failure', {cause: new Error('database cause')});
- try {
-  await writeGenerated(dir,files);const {mcp}=await import(resolve(dir,"mcp.ts"));const request=()=>new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',authorization:'Bearer '+token},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'items',arguments:{}}})});
-  const response=await mcp({db:()=>({query(){throw cause;}}),caller:()=>({kind:'anonymous'})})(request(),{});
-  const body=await response.text();expect(body).toContain('INTERNAL_ERROR');expect(body).not.toContain(cause.message);expect(logging.mock.calls[0]).toEqual(["[mantle mcp items] unhandled failure",cause]);
-  const thrown=new Error('application caller failed', {cause: new Error('caller cause')});const failure=await mcp({db:()=>({}),caller:()=>{throw thrown;}})(request(),{});
-  expect(failure.status).toBe(500);expect(failure.headers.has('www-authenticate')).toBe(false);expect(await failure.text()).not.toContain(thrown.message);
-  expect(logging.mock.calls).toHaveLength(2);expect(logging.mock.calls[1]![0]).toBe("[mantle mcp /mcp] unhandled failure");expect((logging.mock.calls[1]![1] as Error).cause).toBe(thrown);expect(logging.mock.calls.flat().map(String).join(' ')).not.toContain(token);
- } finally {logging.mockRestore();await rm(dir,{recursive:true,force:true});}
+test("unknown tool and caller failures log the surface and original error, redact responses and never challenge a resolver exception", async () => {
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "errors.yaml", text: source }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-errors-"));
+  const logging = spyOn(console, "error").mockImplementation(() => {}),
+    token = "unlogged-bearer-secret",
+    cause = new Error("hidden database failure", { cause: new Error("database cause") });
+  try {
+    await writeGenerated(dir, files);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const request = () =>
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "items", arguments: {} } },
+          {
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              authorization: "Bearer " + token,
+            },
+          },
+        ),
+      );
+    const response = await mcp({
+      db: () => ({
+        query() {
+          throw cause;
+        },
+      }),
+      caller: () => ({ kind: "anonymous" }),
+    })(request(), {});
+    const body = await response.text();
+    expect(body).toContain("INTERNAL_ERROR");
+    expect(body).not.toContain(cause.message);
+    expect(logging.mock.calls[0]).toEqual(["[mantle mcp items] unhandled failure", cause]);
+    const thrown = new Error("application caller failed", { cause: new Error("caller cause") });
+    const failure = await mcp({
+      db: () => ({}),
+      caller: () => {
+        throw thrown;
+      },
+    })(request(), {});
+    expect(failure.status).toBe(500);
+    expect(failure.headers.has("www-authenticate")).toBe(false);
+    expect(await failure.text()).not.toContain(thrown.message);
+    expect(logging.mock.calls).toHaveLength(2);
+    expect(logging.mock.calls[1]![0]).toBe("[mantle mcp /mcp] unhandled failure");
+    expect((logging.mock.calls[1]![1] as Error).cause).toBe(thrown);
+    expect(logging.mock.calls.flat().map(String).join(" ")).not.toContain(token);
+  } finally {
+    logging.mockRestore();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("canonical publishing tool names refuse a colliding declared admin Procedure",async()=>{
- const text=source.split('---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure')[0]!.replace('lifecycle: operational','lifecycle: publishing')+`---
+test("canonical publishing tool names refuse a colliding declared admin Procedure", async () => {
+  const text =
+    source
+      .split("---\napiVersion: cms.mantle.aotter.net/v2\nkind: Procedure")[0]!
+      .replace("lifecycle: operational", "lifecycle: publishing") +
+    `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: publish-items}
@@ -266,54 +775,388 @@ kind: Trigger
 metadata: {name: publish-items-mcp}
 spec: {source: {kind: mcp, surface: admin}, target: {procedure: publish-items}}
 `;
- const {generateFromSources}=await import('../src/infrastructure/generate.js');
- const result=await generateFromSources({target:'bun-sqlite',sources:{sources:[{sourceId:'collision.yaml',text}]}});
- expect(result).toMatchObject({ok:false,diagnostics:[{code:'GENERATE_UNSUPPORTED',path:'procedures/items.publish',message:'MCP tool name publish_items collides on admin.'}]});
+  const { generateFromSources } = await import("../src/infrastructure/generate.js");
+  const result = await generateFromSources({
+    target: "bun-sqlite",
+    sources: { sources: [{ sourceId: "collision.yaml", text }] },
+  });
+  expect(result).toMatchObject({
+    ok: false,
+    diagnostics: [
+      {
+        code: "GENERATE_UNSUPPORTED",
+        path: "procedures/items.publish",
+        message: "MCP tool name publish_items collides on admin.",
+      },
+    ],
+  });
 });
 
-test("MCP parity advertises localized metadata and native SQL output; callbacks cannot change execution",async()=>{
- const text=source.replace("spec: {surface: public, sql:","spec: {title: {en: Items, zh: 項目}, surface: public, sql:").replace("  output: {type: object}","  title: {en: Add item, zh: 新增項目}\n  description: {en: Add a row, zh: 新增資料}\n  mcp: {readOnlyHint: false, destructiveHint: true, openWorldHint: false}\n  output: {type: object}");
- const files=await generateOrThrow('bun-sqlite',[{sourceId:'parity.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-parity-')),db=new Database(':memory:');
- let caller:any=fixtureCaller({...user,scopes:['custom']});const observations:any[]=[],refusals:any[]=[];
- try {
-  await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
-  const handle=mcp({db:()=>db,caller:()=>caller,locale:'zh',instructions:'Use these tools.',serverInfo:{name:'example',title:'Example',version:'7'},requiredScopes:['custom'],resourceMetadata:'https://proxy.test/resource',onObservation:(event:any)=>{observations.push(event);if(event.kind==='invocation'){expect(Object.isFrozen(event.caller)).toBe(true);expect(Object.isFrozen(event.caller.scopes)).toBe(true);}return Promise.reject(new Error('ignored listener'));},onRefusal:(event:any)=>{refusals.push(event);throw Error('ignored listener');}});
-  const call=async(method:string,params:any={},path='/mcp',headers:any={})=>{const response=await handle(new Request('https://app.test'+path,{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream',...headers},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return {response,data:JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body)};};
-  const init=await call('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}});expect(init.data.result.instructions).toBe('Use these tools.');expect(init.data.result.serverInfo).toMatchObject({name:'example',version:'7'});
-  const listed=(await call('tools/list')).data.result.tools;
-  expect(listed[0]).toMatchObject({title:'項目',description:expect.stringMatching(/^項目 \(tool version [0-9a-f]{8}\)$/),annotations:{readOnlyHint:true}});
-  expect(listed[1]).toMatchObject({title:'新增項目',description:expect.stringMatching(/^新增資料 \(tool version [0-9a-f]{8}\)$/),annotations:{destructiveHint:true},outputSchema:{required:['results']}});
-  const ok=await call('tools/call',{name:'add_item',arguments:{title:'Works'}});expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
-  const bad=await call('tools/call',{name:'add_item',arguments:{title:''}});expect(bad.data.result.isError).toBe(true);expect(bad.data.result.structuredContent).toBeUndefined();
-  expect(observations.filter(event=>event.phase==='completion').map(event=>event.outcome)).toEqual(['succeeded','failed']);
-  caller=fixtureCaller({...user,scopes:[]});const denied=await call('tools/list');expect(denied.response.status).toBe(403);expect(denied.response.headers.get('www-authenticate')).toContain('scope="custom"');expect(denied.response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
-  caller={kind:'anonymous'};expect((await call('initialize',{},'/mcp/admin')).response.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/resource"');
-  caller=fixtureCaller({...user,credential:'session'});await call('tools/call',{name:'add_item',arguments:{title:'CSRF'}},'/mcp',{origin:'https://evil.test'});
-  expect(refusals.map(event=>event.reason)).toEqual(['credential','credential','origin']);expect(db.query('SELECT COUNT(*) n FROM items').get()).toEqual({n:1});
-  for(const locale of [undefined,'constructor','toString','fr']) {
-   const response=await mcp({db:()=>db,caller:()=>caller,locale})(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})}),{});
-   const body=await response.text(),data=JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);expect(data.result.tools[0].title).toBe('Items');expect(data.result.tools[1].description).toStartWith('Add a row (tool version ');
+test("MCP parity advertises localized metadata and native SQL output; callbacks cannot change execution", async () => {
+  const text = source
+    .replace("spec: {surface: public, sql:", "spec: {title: {en: Items, zh: 項目}, surface: public, sql:")
+    .replace(
+      "  output: {type: object}",
+      "  title: {en: Add item, zh: 新增項目}\n  description: {en: Add a row, zh: 新增資料}\n  mcp: {readOnlyHint: false, destructiveHint: true, openWorldHint: false}\n  output: {type: object}",
+    );
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "parity.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-parity-")),
+    db = new Database(":memory:");
+  let caller: any = fixtureCaller({ ...user, scopes: ["custom"] });
+  const observations: any[] = [];
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const handle = mcp({
+      db: () => db,
+      caller: () => caller,
+      locale: "zh",
+      instructions: "Use these tools.",
+      serverInfo: { name: "example", title: "Example", version: "7" },
+      requiredScopes: ["custom"],
+      resourceMetadata: "https://proxy.test/resource",
+      onObservation: (event: any) => {
+        observations.push(event);
+        if (event.kind === "invocation") {
+          expect(Object.isFrozen(event.caller)).toBe(true);
+          expect(Object.isFrozen(event.caller.scopes)).toBe(true);
+        }
+        return Promise.reject(new Error("ignored listener"));
+      },
+    });
+    const call = async (method: string, params: any = {}, path = "/mcp", headers: any = {}) => {
+      const response = await handle(
+        new Request(
+          "https://app.test" + path,
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            {
+              headers: {
+                "content-type": "application/json",
+                accept: "application/json, text/event-stream",
+                ...headers,
+              },
+            },
+          ),
+        ),
+        {},
+      );
+      const body = await response.text();
+      return { response, data: JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body) };
+    };
+    const discovered = await call("server/discover");
+    expect(discovered.data.result.instructions).toBe("Use these tools.");
+    expect(discovered.data.result._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+      name: "example",
+      version: "7",
+    });
+    const listed = (await call("tools/list")).data.result.tools;
+    expect(listed[0]).toMatchObject({
+      title: "項目",
+      description: expect.stringMatching(/^項目 \(tool version [0-9a-f]{8}\)$/),
+      annotations: { readOnlyHint: true },
+    });
+    expect(listed[1]).toMatchObject({
+      title: "新增項目",
+      description: expect.stringMatching(/^新增資料 \(tool version [0-9a-f]{8}\)$/),
+      annotations: { destructiveHint: true },
+      outputSchema: { required: ["results"] },
+    });
+    const ok = await call("tools/call", { name: "add_item", arguments: { title: "Works" } });
+    expect(ok.data.result.structuredContent.results[0][0].id).toBeString();
+    const bad = await call("tools/call", { name: "add_item", arguments: { title: "" } });
+    expect(bad.data.result.isError).toBe(true);
+    expect(bad.data.result.structuredContent).toBeUndefined();
+    expect(observations.filter(event => event.phase === "completion").map(event => event.outcome)).toEqual([
+      "succeeded",
+      "failed",
+    ]);
+    caller = fixtureCaller({ ...user, scopes: [] });
+    const denied = await call("tools/list");
+    expect(denied.response.status).toBe(403);
+    expect(denied.response.headers.get("www-authenticate")).toContain('scope="custom"');
+    expect(denied.response.headers.get("www-authenticate")).toContain(
+      'resource_metadata="https://proxy.test/resource"',
+    );
+    caller = { kind: "anonymous" };
+    expect((await call("server/discover", {}, "/mcp/admin")).response.headers.get("www-authenticate")).toContain(
+      'resource_metadata="https://proxy.test/resource"',
+    );
+    caller = fixtureCaller({ ...user, credential: "session" });
+    await call("tools/call", { name: "add_item", arguments: { title: "CSRF" } }, "/mcp", {
+      origin: "https://evil.test",
+    });
+    expect(observations.filter(event => event.kind === "request-refused").map(event => event.reason)).toEqual([
+      "credential",
+      "credential",
+      "origin",
+    ]);
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
+    // An Origin the endpoint admits still fails the session Origin rule on a tool call: observed as a refusal too.
+    const admitted: any[] = [];
+    const lenient = mcp({
+      db: () => db,
+      caller: () => caller,
+      allowedOrigins: ["https://evil.test"],
+      onObservation: (event: any) => {
+        admitted.push(event);
+      },
+    });
+    await lenient(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "add_item", arguments: { title: "CSRF" } },
+          },
+          {
+            headers: {
+              "content-type": "application/json",
+              accept: "application/json, text/event-stream",
+              origin: "https://evil.test",
+            },
+          },
+        ),
+      ),
+      {},
+    );
+    expect(admitted.filter(event => event.kind === "request-refused")).toEqual([
+      { kind: "request-refused", at: expect.any(Number), surface: "public", status: 403, reason: "origin" },
+    ]);
+    expect(admitted.find(event => event.phase === "completion")).toMatchObject({
+      outcome: "denied",
+      code: "AUTH_DENIED",
+    });
+    expect(db.query("SELECT COUNT(*) n FROM items").get()).toEqual({ n: 1 });
+    for (const locale of [undefined, "constructor", "toString", "fr"]) {
+      const response = await mcp({ db: () => db, caller: () => caller, locale })(
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method: "tools/list" },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
+        {},
+      );
+      const body = await response.text(),
+        data = JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body);
+      expect(data.result.tools[0].title).toBe("Items");
+      expect(data.result.tools[1].description).toStartWith("Add a row (tool version ");
+    }
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
   }
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
 });
 
-test("MCP preflights all batch calls before any work and reports expired caller challenges",async()=>{
- const {mcp}=await import('../src/kernel/mcp.js');const {ContractError}=await import('../src/kernel/contracts.js');let runs=0;
- const tools=[{name:'open',surface:'public',description:'Open',inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}},{name:'closed',surface:'public',description:'Closed',closed:true,scopes:['write'],inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>{runs++;return{};}}];
- const request=(body:any)=>new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify(body)});
- const handle=mcp(tools,{db:()=>({}),caller:()=>({kind:'anonymous'})});
- const response=await handle(request(['open','closed'].map((name,id)=>({jsonrpc:'2.0',id,method:'tools/call',params:{name,arguments:{}}}))),{});expect(response!.status).toBe(401);expect(runs).toBe(0);expect(response!.headers.get('www-authenticate')).toContain('scope="mcp write"');
- const expired=await mcp(tools,{db:()=>({}),caller:()=>{throw new ContractError('UNAUTHENTICATED','Expired.','request:authorization');},resourceMetadata:'https://proxy.test/metadata'})(request({jsonrpc:'2.0',id:1,method:'tools/list'}),{});expect(expired!.status).toBe(401);expect(expired!.headers.get('www-authenticate')).toContain('resource_metadata="https://proxy.test/metadata"');
+test("MCP preflights all batch calls before any work and reports expired caller challenges", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { ContractError } = await import("../src/kernel/contracts.js");
+  let runs = 0;
+  const tools = [
+    {
+      name: "open",
+      surface: "public",
+      description: "Open",
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => {
+        runs++;
+        return {};
+      },
+    },
+    {
+      name: "closed",
+      surface: "public",
+      description: "Closed",
+      closed: true,
+      scopes: ["write"],
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => {
+        runs++;
+        return {};
+      },
+    },
+  ];
+  const request = (body: any) => new Request("https://app.test/mcp", mcpInit(body));
+  const handle = mcp(tools, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
+  const message = (name: string, id = 1) => ({
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name, arguments: {} },
+  });
+  const response = await handle(request(message("closed")), {});
+  expect(response!.status).toBe(401);
+  expect(response!.headers.get("www-authenticate")).toContain('scope="mcp write"');
+  // A 2025-era batch: the closed second call is challenged before the open first one runs.
+  const batch = await handle(
+    new Request("https://app.test/mcp", legacyInit([message("open", 0), message("closed", 1)])),
+    {},
+  );
+  expect(batch!.status).toBe(401);
+  expect(batch!.headers.get("www-authenticate")).toContain('scope="mcp write"');
+  // 2026-07-28 has no batches: the SDK refuses one with a 2026-07-28 element, so no call of it runs.
+  const modern = await handle(
+    new Request("https://app.test/mcp", {
+      ...mcpInit(mcpMessage("tools/list")),
+      body: JSON.stringify([mcpMessage("tools/call", { name: "open", arguments: {} })]),
+    }),
+    {},
+  );
+  expect(modern!.status).toBe(400);
+  expect(runs).toBe(0);
+  const expired = await mcp(tools, {
+    db: () => ({}),
+    caller: () => {
+      throw new ContractError("UNAUTHENTICATED", "Expired.", "request:authorization");
+    },
+    resourceMetadata: "https://proxy.test/metadata",
+  })(request({ jsonrpc: "2.0", id: 1, method: "tools/list" }), {});
+  expect(expired!.status).toBe(401);
+  expect(expired!.headers.get("www-authenticate")).toContain('resource_metadata="https://proxy.test/metadata"');
 });
 
-test("MCP tools advertise input rules as description sentences and enforce them",async()=>{
- const text=source+`---
+test("a 2025-era batch whose second call the caller may not make runs neither call", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { user } = await import("./apps/fixtures.js");
+  let runs = 0;
+  const tool = (name: string, extra: object = {}) => ({
+    name,
+    surface: "public",
+    description: name,
+    target: { kind: "procedure", name },
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => {
+      runs++;
+      return { ran: name };
+    },
+    ...extra,
+  });
+  const tools = [tool("allowed"), tool("forbidden"), tool("scoped", { scopes: ["extra"] })];
+  const authorized: string[] = [];
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ ...user("person"), credential: "oauth", scopes: ["mcp"] }),
+    authorize: target => {
+      authorized.push(target.name);
+      return target.name !== "forbidden";
+    },
+  });
+  const send = (names: string[]) =>
+    handle(
+      new Request(
+        "https://app.test/mcp",
+        legacyInit(
+          names.map((name, id) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: {} } })),
+        ),
+      ),
+      {},
+    );
+  // Application `authorize` refuses the second call: neither runs, and `authorize` decided both before any ran.
+  const denied = (await send(["allowed", "forbidden"]))!;
+  expect(denied.status).toBe(403);
+  expect(authorized).toEqual(["allowed", "forbidden"]);
+  // The credential lacks the second call's scope: refused before `authorize` or any call.
+  authorized.length = 0;
+  const scoped = (await send(["allowed", "scoped"]))!;
+  expect(scoped.status).toBe(403);
+  expect(scoped.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  expect(authorized).toEqual([]);
+  expect(runs).toBe(0);
+  // Both allowed: both run, and `authorize` decided the tool once.
+  authorized.length = 0;
+  expect((await send(["allowed", "allowed"]))!.status).toBe(200);
+  expect(runs).toBe(2);
+  expect(authorized).toEqual(["allowed"]);
+  // A batch over the SDK's limit of 100 is refused as the SDK refuses it, before any call is authorized or runs.
+  authorized.length = 0;
+  const oversized = (await send(Array.from({ length: 101 }, () => "allowed")))!;
+  expect([oversized.status, await oversized.json()]).toEqual([
+    400,
+    {
+      jsonrpc: "2.0",
+      error: { code: -32600, message: "Invalid Request: Batch must not exceed 100 messages" },
+      id: null,
+    },
+  ]);
+  expect([authorized, runs]).toEqual([[], 2]);
+  // 100 messages are still a batch the SDK serves.
+  expect((await send(Array.from({ length: 100 }, () => "allowed")))!.status).toBe(200);
+  expect([authorized, runs]).toEqual([["allowed"], 102]);
+});
+
+test("gateway: an empty or malformed body is the client's parse error, not a server fault", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  const targets = { "procedure:peek": { targetHash: "h" } };
+  const events: { outcome: string; reason?: string }[] = [];
+  const handle = mcp(
+    [
+      {
+        name: "peek",
+        surface: "public",
+        readOnly: true,
+        target: { kind: "procedure", name: "peek" },
+        description: "peek",
+        inputSchema: { type: "object" },
+        validate: (raw: any) => raw,
+        run: async () => ({}),
+      },
+    ] as never,
+    {
+      gateway: { tenant: "example" },
+      accessTargets: async () => targets,
+      db: () => ({}),
+      onAccess: e => void events.push(e),
+    },
+  );
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    for (const body of ["", "{not json"]) {
+      events.length = 0;
+      const response = (await handle(new Request("https://app.test/mcp", legacyInit(body)), {}, {
+        props: { mantle: await pinned(mantleProps(), targets, "procedure:peek") },
+      } as never))!;
+      expect([JSON.stringify(body), response.status, await response.json()]).toEqual([
+        JSON.stringify(body),
+        400,
+        { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error: Invalid JSON" } },
+      ]);
+      expect(events.map(e => [e.outcome, e.reason])).toEqual([["error", "INPUT_VALIDATION_FAILED"]]);
+    }
+    expect(logged.mock.calls).toEqual([]);
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test("MCP tools advertise input rules as description sentences and enforce them", async () => {
+  const text =
+    source +
+    `---
 apiVersion: cms.mantle.aotter.net/v2
 kind: Procedure
 metadata: {name: log-item}
 spec:
   description: Log an item.
-  input: {type: object, properties: {title: {type: string}, weight: {type: number}, unit: {type: string}}, dependentRequired: {weight: [unit]}, anyOf: [{required: [title]}, {required: [weight]}], additionalProperties: false}
+  input:
+    type: object
+    properties:
+      title: {type: string}
+      weight: {type: number}
+      unit: {type: string}
+      labels: {type: object, maxProperties: 2, propertyNames: {not: {enum: [private]}}, additionalProperties: {type: string}}
+    dependentRequired: {weight: [unit]}
+    anyOf: [{required: [title]}, {required: [weight]}]
+    additionalProperties: false
   output: {type: object}
   handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}
 ---
@@ -321,79 +1164,817 @@ apiVersion: cms.mantle.aotter.net/v2
 kind: Trigger
 metadata: {name: log-item-mcp}
 spec: {source: {kind: mcp, surface: public}, target: {procedure: log-item}}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: log-item-rest}
+spec: {source: {kind: http, method: POST, path: /api/log-items}, target: {procedure: log-item}}
 `;
- const files=await generateOrThrow('bun-sqlite',[{sourceId:'rules.yaml',text}]);const dir=await mkdtemp(resolve(import.meta.dir,'.mcp-rules-')),db=new Database(':memory:');
- try {
-  await writeGenerated(dir,files);db.exec(files['schema.sql']!);const {mcp}=await import(resolve(dir,'mcp.ts'));
-  const handle=mcp({db:()=>db,caller:()=>({kind:'anonymous'})});
-  const call=async(method:string,params:any={})=>{const response=await handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
-  const tool=(await call('tools/list')).result.tools.find((t:any)=>t.name==='log_item');
-  expect(tool.description).toMatch(/^Log an item\. 'unit' is required when 'weight' is present\. At least one of 'title', 'weight' is required\. \(tool version [0-9a-f]{8}\)$/);
-  expect(Object.keys(tool.inputSchema).sort()).toEqual(['additionalProperties','properties','type']);
-  const bad=await call('tools/call',{name:'log_item',arguments:{title:'A',weight:1}});
-  expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({code:'INPUT_VALIDATION_FAILED',path:'procedures/log-item/input/unit',message:"'unit' is required when 'weight' is present."});
-  expect((await call('tools/call',{name:'log_item',arguments:{title:'A'}})).result.isError).toBeUndefined();
- } finally {db.close();await rm(dir,{recursive:true,force:true});}
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "rules.yaml", text }]);
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-rules-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const handle = mcp({ db: () => db, caller: () => ({ kind: "anonymous" }) });
+    const call = async (method: string, params: any = {}) => {
+      const response = await handle(
+        new Request(
+          "https://app.test/mcp",
+          mcpInit(
+            { jsonrpc: "2.0", id: 1, method, params },
+            { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+          ),
+        ),
+        {},
+      );
+      const body = await response.text();
+      return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body);
+    };
+    const tool = (await call("tools/list")).result.tools.find((t: any) => t.name === "log_item");
+    expect(tool.description).toContain("At least one of 'title', 'weight' is required.");
+    expect(tool.description).toContain("Object at '/labels' accepts at most 2 properties.");
+    expect(tool.inputSchema.properties.labels).toEqual({ additionalProperties: { type: "string" }, type: "object" });
+    const bad = await call("tools/call", { name: "log_item", arguments: { title: "A", weight: 1 } });
+    expect(JSON.parse(bad.result.content[0].text).diagnostics[0]).toMatchObject({
+      code: "INPUT_VALIDATION_FAILED",
+      path: "procedures/log-item/input/unit",
+      message: "'unit' is required when 'weight' is present.",
+    });
+    const badLabels = { title: "A", labels: { private: "no" } };
+    const refused = await call("tools/call", { name: "log_item", arguments: badLabels });
+    expect(JSON.parse(refused.result.content[0].text).diagnostics[0]).toMatchObject({
+      code: "INPUT_VALIDATION_FAILED",
+      path: "procedures/log-item/input/labels/private",
+    });
+    const { rest } = await import(resolve(dir, "rest.ts"));
+    const handleRest = rest({ db: () => db, caller: () => ({ kind: "anonymous" }) });
+    const restRefusal = await handleRest(
+      new Request("https://app.test/api/log-items", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://app.test" },
+        body: JSON.stringify(badLabels),
+      }),
+      {},
+    );
+    expect(restRefusal.status).toBe(400);
+    expect((await restRefusal.json()).error).toMatchObject({ code: "INPUT_VALIDATION_FAILED" });
+    expect((await call("tools/call", { name: "log_item", arguments: { title: "A" } })).result.isError).toBeUndefined();
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
-test("An anonymous closed surface challenges from initialize; an open tool or a signed-in caller does not",async()=>{
- const {mcp}=await import('../src/kernel/mcp.js');const {user}=await import('./apps/fixtures.js');
- const tool=(name:string,closed?:boolean)=>({name,surface:'public',description:name,...(closed?{closed:true}:{}),inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({})});
- const post=(handle:any,method:string,params:any={})=>handle(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});
- const init={protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'t',version:'1'}};
- const allClosed=(caller:any)=>mcp([tool('a',true),tool('b',true)],{db:()=>({}),caller:()=>caller,authorize:()=>true});
- const challenged=await post(allClosed({kind:'anonymous'}),'initialize',init);
- expect(challenged!.status).toBe(401);expect(challenged!.headers.get('www-authenticate')).toMatch(/^Bearer .*scope="mcp"/);
- expect((await post(allClosed(user('person')),'initialize',init))!.status).toBe(200);
- const mixed=mcp([tool('open'),tool('closed',true)],{db:()=>({}),caller:()=>({kind:'anonymous'}),authorize:()=>true});
- expect((await post(mixed,'initialize',init))!.status).toBe(200);
- const listed=await post(mixed,'tools/list');expect(listed!.status).toBe(200);
- expect(((await listed!.text()).match(/"name":"(\w+)"/g)??[]).join()).toBe('"name":"open"');
+test("An anonymous closed surface challenges from the connect step of either era; an open tool or a signed-in caller does not", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { user } = await import("./apps/fixtures.js");
+  const tool = (name: string, closed?: boolean) => ({
+    name,
+    surface: "public",
+    description: name,
+    ...(closed ? { closed: true } : {}),
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => ({}),
+  });
+  const post = (handle: any, method: string, params: any = {}) =>
+    handle(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+  const allClosed = (caller: any) =>
+    mcp([tool("a", true), tool("b", true)], { db: () => ({}), caller: () => caller, authorize: () => true });
+  // The connect step of either era (`initialize` on a 2025 revision, `server/discover` on 2026-07-28): anonymous on a
+  // closed surface, the RFC 9728 challenge with the surface's scope floor and its protected-resource metadata.
+  for (const era of ERAS) {
+    const connect = (handle: any) =>
+      handle(eraRequest(era, "https://app.test/mcp", connectMethod(era), connectParams(era)), {});
+    const challenged = await connect(allClosed({ kind: "anonymous" }));
+    expect([era, challenged!.status]).toEqual([era, 401]);
+    expect(challenged!.headers.get("www-authenticate")).toBe(
+      'Bearer scope="mcp", resource_metadata="https://app.test/.well-known/oauth-protected-resource/mcp"',
+    );
+    expect([era, (await connect(allClosed(user("person"))))!.status]).toEqual([era, 200]);
+  }
+  const get = (handle: any) => handle(new Request("https://app.test/mcp"), {});
+  // The caller rules answer before the SDK: an anonymous GET on a closed surface is challenged; a signed-in one gets
+  // the SDK's 405.
+  expect((await get(allClosed({ kind: "anonymous" })))!.status).toBe(401);
+  expect((await get(allClosed(user("person"))))!.status).toBe(405);
+  const mixed = mcp([tool("open"), tool("closed", true)], {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    authorize: () => true,
+  });
+  expect((await post(mixed, "server/discover"))!.status).toBe(200);
+  expect((await mixed(new Request("https://app.test/mcp", legacyInit(legacyInitialize)), {}))!.status).toBe(200);
+  expect((await get(mixed))!.status).toBe(405);
+  const listed = await post(mixed, "tools/list");
+  expect(listed!.status).toBe(200);
+  expect(((await listed!.text()).match(/"name":"(\w+)"/g) ?? []).join()).toBe('"name":"open"');
 });
 
-test("Tool.meta lists visibility, App template and file params; withResultMeta keeps its meta out of content",async()=>{
- const {mcp,withResultMeta,callTool}=await import('../src/kernel/mcp.js');
- const secret='https://upload.test/put?signature=SECRET';
- const tool=(name:string,extra:any={})=>({name,surface:'public',description:name,inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({ok:true}),...extra});
- const tools=[
-  tool('model',{meta:{ui:{visibility:['model']},'openai/fileParams':['image']}}),
-  tool('both',{meta:{ui:{visibility:['model','app']}}}),
-  tool('app',{meta:{ui:{visibility:['app']}}}),
-  tool('card',{meta:{ui:{resourceUri:'ui://app/card'},'openai/outputTemplate':'ui://app/card'}}),
-  tool('sign',{meta:{ui:{visibility:['app']}},run:async()=>withResultMeta({id:'u1'},{uploadUrl:secret,requiredHeaders:{'content-type':'image/png'},'net.aotter.mantle/tool':'other'})}),
-  tool('fail',{run:async()=>{throw new Error('boom');}}),
-  tool('plain'),
- ];
- const handle=mcp(tools,{db:()=>({}),caller:()=>({kind:'anonymous'})});
- const ui={'io.modelcontextprotocol/clientCapabilities':{extensions:{'io.modelcontextprotocol/ui':{mimeTypes:['text/html;profile=mcp-app']}}}};
- const call=async(method:string,params:any={},api:any=handle)=>{const response=await api(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
- const listed=(await call('tools/list',{_meta:ui})).result.tools,meta=Object.fromEntries(listed.map((t:any)=>[t.name,t._meta]));
- expect(meta).toEqual({model:{ui:{visibility:['model']},'openai/fileParams':['image']},both:{ui:{visibility:['model','app']}},app:{ui:{visibility:['app']}},card:{ui:{resourceUri:'ui://app/card'},'openai/outputTemplate':'ui://app/card'},sign:{ui:{visibility:['app']}},fail:undefined,plain:undefined});
- expect((await call('tools/list',{_meta:{'io.modelcontextprotocol/clientCapabilities':{}}})).result.tools.map((t:any)=>t.name)).toEqual(['model','both','card','fail','plain']);
- const signed=(await call('tools/call',{name:'sign',arguments:{},_meta:ui})).result;
- expect(signed.content).toEqual([{type:'text',text:'{"id":"u1"}'}]);expect(signed.structuredContent).toEqual({id:'u1'});
- expect(signed._meta).toEqual({uploadUrl:secret,requiredHeaders:{'content-type':'image/png'},'net.aotter.mantle/tool':'sign'});
- expect(JSON.stringify({...signed,_meta:undefined})).not.toContain('SECRET');
- const failed=(await call('tools/call',{name:'fail',arguments:{}})).result;
- expect(Object.keys(failed).sort()).toEqual(['content','isError','structuredContent']);expect(failed.structuredContent.diagnostics[0].code).toBe('INTERNAL_ERROR');
- expect((await call('tools/call',{name:'plain',arguments:{}})).result).toEqual({content:[{type:'text',text:'{"ok":true}'}],structuredContent:{ok:true}});
- const direct:any=await callTool(tools[4] as any,{},{},{kind:'anonymous'},undefined as never);
- expect(direct.data).toEqual({id:'u1'});expect(direct._meta.uploadUrl).toBe(secret);expect(JSON.stringify(direct.data)).not.toContain('SECRET');
+test("Tool.meta lists visibility, App template and file params; withResultMeta keeps its meta out of content", async () => {
+  const { mcp, withResultMeta, callTool } = await import("../src/kernel/mcp.js");
+  const secret = "https://upload.test/put?signature=SECRET";
+  const tool = (name: string, extra: any = {}) => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => ({ ok: true }),
+    ...extra,
+  });
+  const tools = [
+    tool("model", { meta: { ui: { visibility: ["model"] }, "openai/fileParams": ["image"] } }),
+    tool("both", { meta: { ui: { visibility: ["model", "app"] } } }),
+    tool("app", { meta: { ui: { visibility: ["app"] } } }),
+    tool("card", { meta: { ui: { resourceUri: "ui://app/card" }, "openai/outputTemplate": "ui://app/card" } }),
+    tool("sign", {
+      meta: { ui: { visibility: ["app"] } },
+      run: async () =>
+        withResultMeta(
+          { id: "u1" },
+          { uploadUrl: secret, requiredHeaders: { "content-type": "image/png" }, "net.aotter.mantle/tool": "other" },
+        ),
+    }),
+    tool("fail", {
+      run: async () => {
+        throw new Error("boom");
+      },
+    }),
+    tool("plain"),
+  ];
+  const handle = mcp(tools, { db: () => ({}), caller: () => ({ kind: "anonymous" }) });
+  const ui = {
+    "io.modelcontextprotocol/clientCapabilities": {
+      extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } },
+    },
+  };
+  const call = async (method: string, params: any = {}, api: any = handle) => {
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+    const body = await response.text();
+    return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body);
+  };
+  const listed = (await call("tools/list", { _meta: ui })).result.tools,
+    meta = Object.fromEntries(listed.map((t: any) => [t.name, t._meta]));
+  expect(meta).toEqual({
+    model: { ui: { visibility: ["model"] }, "openai/fileParams": ["image"] },
+    both: { ui: { visibility: ["model", "app"] } },
+    app: { ui: { visibility: ["app"] } },
+    card: { ui: { resourceUri: "ui://app/card" }, "openai/outputTemplate": "ui://app/card" },
+    sign: { ui: { visibility: ["app"] } },
+    fail: undefined,
+    plain: undefined,
+  });
+  expect(
+    (await call("tools/list", { _meta: { "io.modelcontextprotocol/clientCapabilities": {} } })).result.tools.map(
+      (t: any) => t.name,
+    ),
+  ).toEqual(["model", "both", "card", "fail", "plain"]);
+  const signed = (await call("tools/call", { name: "sign", arguments: {}, _meta: ui })).result;
+  expect(signed.content).toEqual([{ type: "text", text: '{"id":"u1"}' }]);
+  expect(signed.structuredContent).toEqual({ id: "u1" });
+  expect(signed._meta).toEqual({
+    "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }),
+    uploadUrl: secret,
+    requiredHeaders: { "content-type": "image/png" },
+    "net.aotter.mantle/tool": "sign",
+  });
+  expect(JSON.stringify({ ...signed, _meta: undefined })).not.toContain("SECRET");
+  const failed = (await call("tools/call", { name: "fail", arguments: {} })).result;
+  expect(Object.keys(failed).sort()).toEqual(["_meta", "content", "isError", "resultType", "structuredContent"]);
+  // The SDK's own 2026-07-28 result keys; nothing of the tool's meta.
+  expect(Object.keys(failed._meta)).toEqual(["io.modelcontextprotocol/serverInfo"]);
+  expect(failed.structuredContent.diagnostics[0].code).toBe("INTERNAL_ERROR");
+  expect((await call("tools/call", { name: "plain", arguments: {} })).result).toEqual({
+    _meta: { "io.modelcontextprotocol/serverInfo": expect.objectContaining({ name: "aotter.mantle" }) },
+    content: [{ type: "text", text: '{"ok":true}' }],
+    resultType: "complete",
+    structuredContent: { ok: true },
+  });
+  const direct: any = await callTool(tools[4] as any, {}, {}, { kind: "anonymous" }, undefined as never);
+  expect(direct.data).toEqual({ id: "u1" });
+  expect(direct._meta.uploadUrl).toBe(secret);
+  expect(JSON.stringify(direct.data)).not.toContain("SECRET");
 });
 
-test("tools/list pages with toolsPageSize and an opaque cursor bound to the catalogue; the default is one page",async()=>{
- const {mcp}=await import('../src/kernel/mcp.js');
- const table=(names:string[])=>names.map(name=>({name,surface:'public',description:name,inputSchema:{type:'object'},validate:(raw:any)=>raw,run:async()=>({})}));
- const options={db:()=>({}),caller:()=>({kind:'anonymous'}) as const};
- const call=async(api:any,params:any={})=>{const response=await api(new Request('https://app.test/mcp',{method:'POST',headers:{'content-type':'application/json',accept:'application/json, text/event-stream'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params})}),{});const body=await response.text();return JSON.parse(body.startsWith('event:')?body.split('data: ')[1].split('\n')[0]:body);};
- const whole=(await call(mcp(table(['a','b','c','d','e']),options))).result;expect(whole.tools.length).toBe(5);expect(whole.nextCursor).toBeUndefined();
- const paged=mcp(table(['a','b','c','d','e']),{...options,toolsPageSize:2}),names:string[][]=[];
- let cursor:string|undefined;
- do { const page=(await call(paged,cursor?{cursor}:{})).result;names.push(page.tools.map((t:any)=>t.name));cursor=page.nextCursor; } while(cursor);
- expect(names).toEqual([['a','b'],['c','d'],['e']]);
- const first=(await call(paged)).result.nextCursor;
- expect((await call(paged,{cursor:first})).result.tools.map((t:any)=>t.name)).toEqual(['c','d']);
- for(const bad of ['nope',first.replace(/:\d+$/,':3'),first.replace(/:\d+$/,':6')]) expect((await call(paged,{cursor:bad})).error.code).toBe(-32602);
- expect((await call(mcp(table(['a','b','c','x']),{...options,toolsPageSize:2}),{cursor:first})).error.code).toBe(-32602);
- for(const size of [0,-1,1.5]) await expect(call(mcp(table(['a']),{...options,toolsPageSize:size}))).rejects.toThrow('toolsPageSize must be a positive integer');
+// The SDK's own block types are application inputs of withResult without a cast.
+const sdkBlocks: readonly McpContentBlock[] = [] as (
+  | SdkContentBlock
+  | TextContent
+  | ImageContent
+  | AudioContent
+  | ResourceLink
+  | EmbeddedResource
+)[];
+
+test("withResult sends native content blocks after Core's blocks; a block the SDK refuses fails the call", async () => {
+  const { mcp, withResult, callTool } = await import("../src/kernel/mcp.js");
+  const blocks: McpContentBlock[] = [
+    { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+    { type: "audio", data: "aGVsbG8=", mimeType: "audio/wav" },
+    { type: "resource_link", uri: "https://files.test/a.pdf", name: "a.pdf", mimeType: "application/pdf" },
+    { type: "resource", resource: { uri: "https://files.test/b.txt", mimeType: "text/plain", text: "b" } },
+    { type: "text", text: "for the user", annotations: { audience: ["user"], priority: 0.5 }, _meta: { "x/y": 1 } },
+    ...sdkBlocks,
+  ];
+  const tool = (name: string, run: () => Promise<unknown>, extra: object = {}) => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run,
+    ...extra,
+  });
+  const tools = [
+    tool("pic", async () => withResult({ id: "p1" }, { content: blocks, _meta: { "example/result": 1 } }), {
+      version: "v1",
+      outputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+    }),
+    tool("bad", async () =>
+      withResult({ ok: true }, { content: [{ type: "image", data: "not base64!", mimeType: "image/png" }] }),
+    ),
+    tool("unknown", async () => withResult({ ok: true }, { content: [{ type: "hologram", uri: "x" }] })),
+    tool("notlist", async () => withResult({ ok: true }, { content: { type: "text", text: "x" } as never })),
+    tool("only", async () => withResult(undefined, { content: [blocks[0]!] })),
+    tool("boom", async () => {
+      throw new Error("boom");
+    }),
+  ];
+  const completions: any[] = [];
+  const handle = mcp(tools, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => {
+      if (event.kind === "invocation" && event.phase === "completion") completions.push(event);
+    },
+  });
+  const quiet = console.error;
+  console.error = () => {};
+  try {
+    const client = await mcpClient(handle);
+    await client.listTools(); // the official client then checks structuredContent against the outputSchema
+    const pic = await client.callTool({ name: "pic", arguments: {} });
+    expect(pic.isError).toBeUndefined();
+    expect(pic.content as unknown[]).toEqual([
+      { type: "text", text: '{"id":"p1"}' },
+      { type: "text", text: "tool version v1" },
+      ...blocks,
+    ]);
+    expect(pic.structuredContent).toEqual({ id: "p1" });
+    expect(pic._meta).toMatchObject({ "example/result": 1, "net.aotter.mantle/tool": "pic" });
+    // A tool that returns blocks alone still answers valid JSON text first.
+    const only = await client.callTool({ name: "only", arguments: {} });
+    expect(only.content as unknown[]).toEqual([{ type: "text", text: "null" }, blocks[0]]);
+    for (const name of ["bad", "unknown", "notlist", "boom"]) {
+      const failed = await client.callTool({ name, arguments: {} });
+      expect(failed.isError).toBe(true);
+      // Core's envelope only: the diagnostic and the input contract.
+      expect((failed.content as { type: string }[]).map(c => c.type)).toEqual(["text", "text"]);
+      expect((failed.structuredContent as any).diagnostics[0].code).toBe("INTERNAL_ERROR");
+    }
+    await client.close();
+  } finally {
+    console.error = quiet;
+  }
+  expect(completions.map(e => [e.tool, e.outcome, e.code])).toEqual([
+    ["pic", "succeeded", undefined],
+    ["only", "succeeded", undefined],
+    ["bad", "failed", "INTERNAL_ERROR"],
+    ["unknown", "failed", "INTERNAL_ERROR"],
+    ["notlist", "failed", "INTERNAL_ERROR"],
+    ["boom", "failed", "INTERNAL_ERROR"],
+  ]);
+  // callTool returns what the tool returned.
+  const direct: any = await callTool(tools[0] as any, {}, {}, { kind: "anonymous" }, undefined as never);
+  expect(direct.data).toEqual({ id: "p1" });
+  expect(direct.content).toBe(blocks);
+});
+
+test("a hosted withResult call carries its blocks; a refused block is a failed access event", async () => {
+  const { mcp, withResult } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  let ran = 0;
+  const tool = (name: string, content: McpContentBlock[]) => ({
+    name,
+    surface: "admin",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: async () => (ran++, withResult({ ok: true }, { content })),
+  });
+  const targets = {
+    "admin:tool:pic": { targetHash: "pic-hash" },
+    "admin:tool:bad": { targetHash: "bad-hash" },
+  };
+  const events: any[] = [];
+  const handle = mcp(
+    [tool("pic", [{ type: "image", data: "aGVsbG8=", mimeType: "image/png" }]), tool("bad", [{ type: "image" }])],
+    {
+      db: () => ({}),
+      gateway: { tenant: "example" },
+      accessTargets: async () => targets,
+      onAccess: e => void events.push(e),
+    },
+  );
+  const call = async (name: string) => {
+    const response = await handle(
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps(), targets, `admin:tool:${name}`) } },
+    );
+    const text = await response!.text();
+    return JSON.parse(text.startsWith("event:") ? text.split("data: ")[1]!.split("\n")[0]! : text).result;
+  };
+  expect((await call("pic")).content.map((c: any) => c.type)).toEqual(["text", "image"]);
+  expect(ran).toBe(1);
+  const quiet = console.error;
+  console.error = () => {};
+  const bad = await call("bad").finally(() => (console.error = quiet));
+  expect(bad.isError).toBe(true);
+  expect(bad.structuredContent.diagnostics[0].code).toBe("INTERNAL_ERROR");
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    ["admin:tool:pic", "allow", undefined],
+    ["admin:tool:bad", "error", "INTERNAL_ERROR"],
+  ]);
+});
+
+test("tools and App resources list their icons and annotations; server/discover lists serverInfo and no resource list changes", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const icon = { src: "https://app.test/icon.png", mimeType: "image/png", sizes: ["48x48"], theme: "light" as const };
+  const tools = [
+    {
+      name: "pic",
+      surface: "public",
+      description: "pic",
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => ({}),
+      icons: [icon],
+      annotations: { title: "Picture", readOnlyHint: true },
+    },
+  ];
+  const resource = {
+    uri: "ui://app/pic",
+    name: "pic-app",
+    html: "<!doctype html>",
+    renders: ["pic"],
+    icons: [icon],
+    annotations: { audience: ["user" as const], priority: 1 },
+  };
+  const serverInfo = { title: "App", description: "An app.", websiteUrl: "https://app.test", icons: [icon] };
+  const options = { db: () => ({}), caller: () => ({ kind: "anonymous" }) as const, serverInfo };
+  const withApps = mcp(tools, { ...options, apps: { public: { resources: [resource] } } }),
+    without = mcp(tools, options);
+  const ui = { extensions: { "io.modelcontextprotocol/ui": { mimeTypes: ["text/html;profile=mcp-app"] } } };
+  const rpc = async (api: typeof without, method: string, params: object = {}) => {
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method, params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+    const body = await response!.text();
+    return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1]!.split("\n")[0]! : body).result;
+  };
+  const declares = (capabilities: object) => ({
+    _meta: { "io.modelcontextprotocol/clientCapabilities": capabilities },
+  });
+  const discovered = await rpc(withApps, "server/discover", declares(ui));
+  expect(discovered._meta["io.modelcontextprotocol/serverInfo"]).toMatchObject({
+    name: "aotter.mantle",
+    ...serverInfo,
+  });
+  expect(discovered.capabilities).toMatchObject({
+    tools: { listChanged: false },
+    resources: { listChanged: false },
+  });
+  // No resource is registered, so no resources capability is advertised.
+  expect((await rpc(without, "server/discover", declares(ui))).capabilities.resources).toBeUndefined();
+  expect((await rpc(withApps, "server/discover", declares({}))).capabilities.resources).toBeUndefined();
+  const meta = { _meta: { "io.modelcontextprotocol/clientCapabilities": ui } };
+  const [listed] = (await rpc(withApps, "tools/list", meta)).tools;
+  expect(listed).toMatchObject({ icons: [icon], annotations: { title: "Picture", readOnlyHint: true } });
+  const [app] = (await rpc(withApps, "resources/list", meta)).resources;
+  expect(app).toMatchObject({ uri: "ui://app/pic", icons: [icon], annotations: { audience: ["user"], priority: 1 } });
+});
+
+test("tools/list pages with toolsPageSize and an opaque cursor bound to the catalogue; the default is one page", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const table = (names: string[]) =>
+    names.map(name => ({
+      name,
+      surface: "public",
+      description: name,
+      inputSchema: { type: "object" },
+      validate: (raw: any) => raw,
+      run: async () => ({}),
+    }));
+  const options = { db: () => ({}), caller: () => ({ kind: "anonymous" }) as const };
+  const call = async (api: any, params: any = {}) => {
+    const response = await api(
+      new Request(
+        "https://app.test/mcp",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/list", params },
+          { headers: { "content-type": "application/json", accept: "application/json, text/event-stream" } },
+        ),
+      ),
+      {},
+    );
+    const body = await response.text();
+    return JSON.parse(body.startsWith("event:") ? body.split("data: ")[1].split("\n")[0] : body);
+  };
+  const whole = (await call(mcp(table(["a", "b", "c", "d", "e"]), options))).result;
+  expect(whole.tools.length).toBe(5);
+  expect(whole.nextCursor).toBeUndefined();
+  const paged = mcp(table(["a", "b", "c", "d", "e"]), { ...options, toolsPageSize: 2 }),
+    names: string[][] = [];
+  let cursor: string | undefined;
+  do {
+    const page = (await call(paged, cursor ? { cursor } : {})).result;
+    names.push(page.tools.map((t: any) => t.name));
+    cursor = page.nextCursor;
+  } while (cursor);
+  expect(names).toEqual([["a", "b"], ["c", "d"], ["e"]]);
+  const first = (await call(paged)).result.nextCursor;
+  expect((await call(paged, { cursor: first })).result.tools.map((t: any) => t.name)).toEqual(["c", "d"]);
+  for (const bad of ["nope", first.replace(/:\d+$/, ":3"), first.replace(/:\d+$/, ":6")])
+    expect((await call(paged, { cursor: bad })).error.code).toBe(-32602);
+  expect(
+    (await call(mcp(table(["a", "b", "c", "x"]), { ...options, toolsPageSize: 2 }), { cursor: first })).error.code,
+  ).toBe(-32602);
+  for (const size of [0, -1, 1.5])
+    await expect(call(mcp(table(["a"]), { ...options, toolsPageSize: size }))).rejects.toThrow(
+      "toolsPageSize must be a positive integer",
+    );
+});
+
+test("a ref handler's withResult reaches an official client on both protocol eras; Store and REST callers get the data", async () => {
+  const text = source.replace(
+    "  output: {type: object}\n  handler: {sql: 'INSERT INTO items(title) VALUES(input.title) RETURNING id'}",
+    "  output: {type: object, required: [title], additionalProperties: false, properties: {title: {type: string}}}\n  handler: {ref: app.addItem}",
+  );
+  const http = `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: add-item-http}
+spec: {source: {kind: http, method: POST, path: /api/items}, target: {procedure: add-item}}
+`;
+  const files = await generateOrThrow("bun-sqlite", [
+    { sourceId: "ref-result.yaml", text },
+    { sourceId: "ref-result-http.yaml", text: http },
+  ]);
+  const { withResult } = await import("../src/kernel/mcp.js");
+  const dir = await mkdtemp(resolve(import.meta.dir, ".mcp-ref-result-")),
+    db = new Database(":memory:");
+  const block = { type: "image", data: "aGVsbG8=", mimeType: "image/png" } as const;
+  const handlers = {
+    "add-item": async (ctx: any, input: { title: string }) => {
+      await ctx.store.collection("items").insert(input);
+      return withResult({ title: input.title }, { content: [block], _meta: { "example/card": input.title } });
+    },
+  };
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    const { mcp } = await import(resolve(dir, "mcp.ts"));
+    const { rest } = await import(resolve(dir, "rest.ts"));
+    const { store } = await import(resolve(dir, "generated.ts"));
+    const caller = sdkFixtureCaller(user);
+    expect(await store(db, caller, { handlers }).procedures["add-item"]({ title: "Store" })).toEqual({
+      title: "Store",
+    });
+    const posted = await rest({ db: () => db, caller: () => caller, handlers })(
+      new Request("https://app.test/api/items", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "Rest" }),
+      }),
+      {},
+    );
+    expect(await posted.json()).toEqual({ title: "Rest" });
+    const handle = mcp({ db: () => db, caller: () => caller, handlers });
+    for (const era of ERAS) {
+      const client = await mcpClient(handle, undefined, { era });
+      // The client checks structuredContent against the listed outputSchema (no additional properties): the data, not the wrapper.
+      const listed = (await client.listTools()).tools.find(tool => tool.name === "add_item")!;
+      expect(listed.outputSchema).toMatchObject({ additionalProperties: false, required: ["title"] });
+      const result = await client.callTool({ name: "add_item", arguments: { title: "Mcp" } });
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toEqual({ title: "Mcp" });
+      expect(result.content as unknown[]).toEqual([
+        { type: "text", text: '{"title":"Mcp"}' },
+        { type: "text", text: expect.stringMatching(/^tool version /) },
+        block,
+      ]);
+      expect(result._meta).toMatchObject({ "example/card": "Mcp", "net.aotter.mantle/tool": "add_item" });
+      await client.close();
+    }
+    expect(db.query("SELECT title FROM items ORDER BY title").all()).toEqual([
+      { title: "Mcp" },
+      { title: "Mcp" },
+      { title: "Rest" },
+      { title: "Store" },
+    ]);
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("ToolCall.signal aborts only while the call runs; a cancel is observed, not logged; progress reaches a client that sent a progressToken", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { steps } = await import("./seams/tool-call.js");
+  const within = <T>(promise: Promise<T>, what: string) =>
+    Promise.race([
+      promise,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${what}`)), 5_000)),
+    ]);
+  const aborted: string[] = [];
+  let cancelled: unknown, observedBeforeResume: boolean | undefined;
+  let started = () => {},
+    abortSeen = () => {},
+    completed: (event: unknown) => void = () => {};
+  const tool = (name: string, run: (call: ToolCall) => Promise<unknown>) => ({
+    name,
+    surface: "public",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => {
+      call.signal!.addEventListener("abort", () => {
+        aborted.push(name);
+        abortSeen();
+      });
+      return run(call);
+    },
+  });
+  const tools = [
+    steps,
+    // Returns normally: its signal never aborts, also when the SDK tears the request down after the result.
+    tool("done", async call => {
+      await call.progress?.(1, 1);
+      return { done: true };
+    }),
+    // The documented pattern: wait, then throw the abort reason.
+    tool("wait", async call => {
+      await new Promise(resolve => {
+        call.signal!.addEventListener("abort", resolve);
+        started();
+      });
+      // Workers runs nothing after this `await` once the client is gone: the observation came in the abort event.
+      observedBeforeResume = cancelled !== undefined;
+      call.signal!.throwIfAborted();
+      return {};
+    }),
+    tool("offered", async call => ({ progress: typeof call.progress, signal: call.signal instanceof AbortSignal })),
+  ];
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    caller: () => ({ kind: "anonymous" }),
+    onObservation: event => {
+      if (event.kind === "invocation" && event.phase === "completion" && event.tool === "wait") {
+        cancelled = event;
+        completed(event);
+      }
+    },
+  });
+  const logged = spyOn(console, "error");
+  try {
+    for (const era of ERAS) {
+      cancelled = observedBeforeResume = undefined;
+      const client = await mcpClient(handle, undefined, { era });
+      // Progress: notifications on the call's SSE stream, before its result.
+      const progress: unknown[] = [];
+      const done = await client.callTool({ name: "seam_steps", arguments: {} }, { onprogress: p => progress.push(p) });
+      expect(done.structuredContent).toEqual({ steps: 2 });
+      expect(progress).toEqual([
+        { progress: 1, total: 2, message: "step 1" },
+        { progress: 2, total: 2, message: "step 2" },
+      ]);
+      // Without a progressToken the tool is offered no progress.
+      expect((await client.callTool({ name: "offered", arguments: {} })).structuredContent).toEqual({
+        progress: "undefined",
+        signal: true,
+      });
+      // A call that finished normally, with and without progress.
+      expect(
+        (await client.callTool({ name: "done", arguments: {} }, { onprogress: () => {} })).isError,
+      ).toBeUndefined();
+      expect((await client.callTool({ name: "done", arguments: {} })).isError).toBeUndefined();
+      // A 2026-07-28 client cancels by closing the request, which aborts the signal. A 2025-era client sends
+      // notifications/cancelled as another request, which a stateless server cannot relate to the call, so the
+      // signal aborts only when that client closes its connection.
+      const cancel = new AbortController();
+      const running = new Promise<void>(resolve => (started = resolve)),
+        abort = new Promise<void>(resolve => (abortSeen = resolve)),
+        completion = new Promise<unknown>(resolve => (completed = resolve));
+      const call = client.callTool({ name: "wait", arguments: {} }, { signal: cancel.signal }).catch(String);
+      await within(running, "the tool to start");
+      cancel.abort("stop");
+      expect(await call).toContain("stop");
+      if (era === LEGACY_REVISION) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(aborted).toEqual([]);
+        await client.close();
+      }
+      await within(abort, "the tool's signal to abort");
+      // A cancel is no failure of the tool: observed with its own code, never logged as an unhandled failure, and
+      // observed in the abort event itself, before the tool's code resumes.
+      expect(await within(completion, "the completion observation")).toMatchObject({
+        outcome: "failed",
+        code: "REQUEST_CANCELLED",
+      });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect([era, observedBeforeResume] as unknown[]).toEqual([era, true]);
+      await client.close();
+      // Negative: neither finished call's signal aborted with the teardown.
+      expect([era, aborted]).toEqual([era, ["wait"]]);
+      aborted.length = 0;
+    }
+    expect(logged.mock.calls.filter(args => String(args[0]).includes("unhandled failure"))).toEqual([]);
+  } finally {
+    logged.mockRestore();
+  }
+});
+
+test("gateway: a call cancelled before it settles is recorded as cancelled once, in the access event and the observation alike", async () => {
+  const { mcp } = await import("../src/kernel/mcp.js");
+  const { mantleProps, pinned } = await import("./gateway-fixture.js");
+  let started = () => {};
+  const untilAborted = (call: ToolCall) =>
+    new Promise(resolve => {
+      call.signal!.addEventListener("abort", resolve);
+      started();
+    });
+  const tool = (name: string, run: (call: ToolCall) => Promise<unknown>) => ({
+    name,
+    surface: "admin",
+    description: name,
+    inputSchema: { type: "object" },
+    validate: (raw: any) => raw,
+    run: (_db: unknown, _caller: unknown, _input: unknown, _handlers: unknown, call: ToolCall) => run(call),
+  });
+  const ran: string[] = [];
+  let recordedBeforeResume: boolean | undefined;
+  const tools = [
+    // Ignores the signal and finishes its work although the client went away (a runtime that keeps running it).
+    tool("finish", async call => {
+      await untilAborted(call);
+      recordedBeforeResume = events.length === 1;
+      ran.push("finish");
+      return { ok: true };
+    }),
+    tool("stop", async call => {
+      await untilAborted(call);
+      call.signal!.throwIfAborted();
+      return {};
+    }),
+    tool("never", async () => {
+      ran.push("never");
+      return {};
+    }),
+  ];
+  const targets = Object.fromEntries(tools.map(({ name }) => [`admin:tool:${name}`, { targetHash: `${name}-hash` }]));
+  const events: { target: string; outcome: string; reason?: string }[] = [];
+  const completions: unknown[][] = [];
+  const handle = mcp(tools as never, {
+    db: () => ({}),
+    gateway: { tenant: "example" },
+    accessTargets: async () => targets,
+    onAccess: event => void events.push(event),
+    onObservation: event => {
+      if (event.kind === "invocation")
+        completions.push(event.phase === "completion" ? [event.tool, event.outcome, event.code] : [event.tool]);
+    },
+  });
+  const forward = async (name: string, cancel: AbortController) =>
+    handle(
+      new Request(
+        "https://app.test/mcp/admin",
+        mcpInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          {
+            signal: cancel.signal,
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+          },
+        ),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
+  for (const name of ["finish", "stop"]) {
+    const cancel = new AbortController(),
+      running = new Promise<void>(resolve => (started = resolve));
+    const response = forward(name, cancel);
+    await running;
+    cancel.abort("stop");
+    await response.then(answer => answer?.text()).catch(() => {});
+    await settle();
+  }
+  // Recorded in the abort event, before the tool resumed: what a Worker, which runs nothing after the disconnect, records.
+  expect(recordedBeforeResume).toBe(true);
+  // `finish` completed its work, yet both records say the call was cancelled: its result was not delivered.
+  expect(ran).toEqual(["finish"]);
+  // A request the client left before it was served: the SDK answers 499 and runs no step of the call.
+  const gone = new AbortController();
+  gone.abort("gone");
+  expect((await forward("never", gone))!.status).toBe(499);
+  await settle();
+  expect(ran).toEqual(["finish"]);
+  const cancelled = (name: string) => [`admin:tool:${name}`, "error", "REQUEST_CANCELLED"];
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    cancelled("finish"),
+    cancelled("stop"),
+    cancelled("never"),
+  ]);
+  // One completion per invocation, never a second when the tool settles later; no invocation for the call never run.
+  expect(completions).toEqual([
+    ["finish"],
+    ["finish", "failed", "REQUEST_CANCELLED"],
+    ["stop"],
+    ["stop", "failed", "REQUEST_CANCELLED"],
+  ]);
+  // The same in the 2025 form a host may forward: closing the request cancels the call, recorded once.
+  events.length = completions.length = ran.length = 0;
+  recordedBeforeResume = undefined;
+  for (const name of ["finish", "stop"]) {
+    const cancel = new AbortController(),
+      running = new Promise<void>(resolve => (started = resolve));
+    const response = handle(
+      new Request(
+        "https://app.test/mcp/admin",
+        legacyInit(
+          { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: {} } },
+          { signal: cancel.signal },
+        ),
+      ),
+      {},
+      { props: { mantle: await pinned(mantleProps({}), targets, `admin:tool:${name}`) } },
+    );
+    await running;
+    cancel.abort("stop");
+    await response.then(answer => answer?.text()).catch(() => {});
+    await settle();
+  }
+  expect(recordedBeforeResume as boolean | undefined).toBe(true);
+  // A request already aborted runs no step of its call here either; the stateless transport still starts the
+  // invocation, so it is recorded, cancelled.
+  await handle(
+    new Request(
+      "https://app.test/mcp/admin",
+      legacyInit(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "never", arguments: {} } },
+        { signal: gone.signal },
+      ),
+    ),
+    {},
+    { props: { mantle: await pinned(mantleProps({}), targets, "admin:tool:never") } },
+  );
+  await settle();
+  expect(ran).toEqual(["finish"]);
+  expect(events.map(e => [e.target, e.outcome, e.reason])).toEqual([
+    cancelled("finish"),
+    cancelled("stop"),
+    cancelled("never"),
+  ]);
+  expect(completions).toEqual([
+    ["finish"],
+    ["finish", "failed", "REQUEST_CANCELLED"],
+    ["stop"],
+    ["stop", "failed", "REQUEST_CANCELLED"],
+    ["never"],
+    ["never", "failed", "REQUEST_CANCELLED"],
+  ]);
 });

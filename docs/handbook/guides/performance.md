@@ -68,6 +68,8 @@ no regression in accessibility, SEO or best practices.
 - When a bottleneck appears only because the measuring environment lacks
   something (a GPU, a fast CPU), fix it only in a way that also helps real users
   without it. Never detect the measuring tool to serve it a different page.
+- A cache in front of the Worker removes the render from repeat visits; [caching](caching.md) gives the headers it
+  needs and what it must never store.
 - After every change, prove nothing else moved: the page looks the same, links,
   forms and in-page anchors still work, and the
   [public-page checks](public-pages.md#check-before-you-report-done)
@@ -110,7 +112,11 @@ fast at a realistic volume, and no hot path scans a table that grows.
   the largest tables at 100,000 rows or 10 times the expected first-year volume,
   whichever is larger. Seed with SQL straight into that database, setting the
   native columns as [reserved entry columns](../reference/schema.md#reserved-entry-columns)
-  describes: it is test data, not an application write.
+  describes: it is test data, not an application write. Seed the database the
+  app's local dev server uses, not the one a test harness creates and throws
+  away, and generate the rows inside the database in one short statement rather
+  than sending a long list of values: local D1 refuses a single statement over
+  about 100 KB. [Seed in bulk](../reference/schema.md#seed-in-bulk) shows both.
 - **Load:** call every View and Procedure through the same callers and surfaces
   the application uses, as each role. The app's local test harness already
   starts it on a fresh database, signs each role in and calls routes and MCP

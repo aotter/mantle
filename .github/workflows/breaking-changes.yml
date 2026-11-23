@@ -1,0 +1,37 @@
+name: Breaking changes
+
+# A breaking change is a checked state (CONTRIBUTING.md, "Breaking changes"): scripts/check-breaking.mjs compares the
+# PR merge commit with its first parent and needs each detected item declared in the PR body's Migration section, with
+# the `breaking-change` label. It reads the body and labels from the event payload, so it also runs when they change
+# (a re-run replays the old payload). Kept apart from ci.yml so a body or label edit never cancels or reruns the package
+# tests; its own concurrency group per PR. It needs only Node and git: no install, no build. The check is required only
+# once the repository owner adds "Breaking changes declared" to the branch ruleset.
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+
+concurrency:
+  group: breaking-changes-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  declared:
+    name: Breaking changes declared
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # The default pull_request checkout is the merge commit; HEAD^1 is the current base and HEAD^2 the PR head.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Check declared breaking changes
+        run: node scripts/check-breaking.mjs --self-test && node scripts/check-breaking.mjs --event "$GITHUB_EVENT_PATH"

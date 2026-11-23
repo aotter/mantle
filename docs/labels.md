@@ -17,6 +17,7 @@ Labels keep issues and PRs sortable for humans and cold-start AI agents. Apply t
 | `wontfix` | Valid but intentionally not planned. | Maintainer. | Usually never; close with reason. |
 | `epic` | Tracks a multi-issue initiative. | Maintainer. | The epic closes. |
 | `spike` | Exploratory work, not guaranteed to land. | Triager or maintainer. | The work becomes a concrete proposal or implementation issue. |
+| `pending-release` | Issue closed by a PR merged into `develop`; not in a release yet. | `issue-status` workflow, on merge. | The release workflow's `issues` job removes it and comments `Released in <version>.`. |
 | `dependencies` | Dependency update; its own section in generated release notes. | Dependabot (`.github/dependabot.yml`). | Usually never. |
 
 ## Area
@@ -43,7 +44,7 @@ For package README or package-local docs changes, prefer the matching area label
 |---|---|---|---|
 | `release-gate` | Blocks a public release or release-quality claim. | Must be resolved or explicitly deferred before release. | The gate is closed or deferred by maintainer decision. |
 | `v0.1.0` | Required for the v0.1.0 release gate. | Track in the v0.1.0 release pass. | The item lands or is moved out of v0.1.0. |
-| `breaking-change` | Semver-relevant breaking change. | Generated release notes must call it out. | The change is redesigned to be non-breaking. |
+| `breaking-change` | Semver-relevant breaking change. | Generated release notes must call it out; the PR body's Migration section declares each item, and the "Breaking changes declared" PR check requires both when it detects one (CONTRIBUTING.md, "Breaking changes"). | The change is redesigned to be non-breaking. |
 | `skip-release-notes` | Release bookkeeping with no user-facing change. | Excluded from generated GitHub Release notes. | The PR contains a user-facing change. |
 | `needs-adr` | Architecture, trust boundary, package boundary, or long-lived decision needs an ADR or ADR-lite proposal. | Do not merge implementation until the decision is captured. | ADR/proposal lands or maintainer confirms an existing ADR covers it. |
 | `needs-grammar-revise` | Manifest grammar or closed-enum change. | Requires grammar-revise round before code/types change. | Grammar decision lands or the change no longer affects grammar. |
@@ -69,4 +70,5 @@ gh label create "needs-adr" --description "Requires an ADR or ADR-lite decision 
 gh label create "needs-grammar-revise" --description "Requires manifest grammar review before implementation" --color "d93f0b"
 gh label create "needs-discussion" --description "Not converged enough for implementation" --color "fbca04"
 gh label create "spike" --description "Exploratory work, not guaranteed to land" --color "bfdadc"
+gh label create "pending-release" --description "Merged into develop; not in a release yet" --color "ededed"
 ```

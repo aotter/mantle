@@ -17,9 +17,15 @@ its docs one topic at a time.
    "Build from a product brief". Follow it rather than this file, an SDK checkout or an online copy.
 2. **Work in the user's application.** Read its `package.json` and lockfile for the exact Mantle version and keep using
    that version's docs until the user asks to upgrade (`mantle help releases/index`). Preserve existing code, identity,
-   versions and resources.
+   versions and resources. For a multilingual app, adapt example locales and copy to the user's preferred languages.
 3. **Plan once, then run to the end.** For a new app, first reply with the entry page's plan, in plain business terms
    and with the questions the brief leaves open, and wait for one go-ahead. Then build, show the Developer UI, accept
-   and measure without stopping. Never report done without acceptance and performance; end with what each found and
-   changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
-4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.**
+   and measure without stopping. Read `mantle help agent-workflow-acceptance` for independent acceptance, including
+   actual Admin browser workflows, and `mantle help performance` for measurement. Never report done without them;
+   end with what each found and changed, and each layer as CONVERGED, BLOCKED or UNVERIFIED.
+4. **Deploy, delete remote data or publish nothing unless the user asks for that exact action.** Before a first
+   deploy, `mantle help deploy-and-operate` takes the user through choosing how their users sign in, a Cloudflare
+   account and `wrangler login`; the user types secrets into Wrangler, never into chat.
+5. **Hit a limit? Read `mantle help core-boundary` before proposing a change to Mantle.** Most limits are the app's to
+   solve with a documented pattern. Schema migrations are yours to write from the `schema.sql` diff
+   (`mantle help migrations`).

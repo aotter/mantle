@@ -63,6 +63,15 @@ describe("member navigation", () => {
     expect(urls()).toEqual(expect.arrayContaining(["/admin/media", "/admin/settings"]));
   });
 
+  it("hides Members and Admins when the deployment manages no identities here", () => {
+    const urls = (identity?: boolean) => buildNavGroups([], [], "en", null, true, false, { siteSettings: true, media: true, invitationEmail: false, statistics: false, identity })
+      .flatMap(({ items }) => items).flatMap((item) => "url" in item ? [item.url] : []);
+    expect(urls(false)).not.toContain("/admin/members");
+    expect(urls(false)).not.toContain("/admin/admin");
+    expect(urls(false)).toContain("/admin/settings");
+    expect(urls()).toEqual(expect.arrayContaining(["/admin/members", "/admin/admin"]));
+  });
+
   it("keeps developer navigation out of Content Admin", () => {
     expect(JSON.stringify(buildNavGroups([], [], "en", null, true))).not.toContain("/admin/dev");
     const items = buildDeveloperNavGroups("en")[0]?.items ?? [];
@@ -244,6 +253,14 @@ describe("sidebar placement (uiSchema.nav and defineAdmin nav)", () => {
       ["Catalog", ["types", "categories"]],
     ]);
     expect(JSON.stringify(groups)).not.toContain("/admin/c/audit");
+  });
+
+  it("leaves a hidden parent and its hidden folded child out, exactly as without the child's placement (#1977)", () => {
+    const parent = collection("quotes", "operational", { hidden: true }),
+      child = (nav?: object) => ({ ...(collection("lines", "operational", nav) as object), parent: { collection: "quotes", parentField: "id", childField: "quoteId" } }) as never;
+    const groups = buildNavGroups([parent, child({ hidden: true }), collection("customers", "operational")], [], "en", null, false);
+    expect(groups).toEqual(buildNavGroups([parent, child(), collection("customers", "operational")], [], "en", null, false));
+    expect(shape(groups).slice(1)).toEqual([["Records", ["customers"]]]);
   });
 
   it("shows no empty Content heading once a project moves every collection out of it", () => {

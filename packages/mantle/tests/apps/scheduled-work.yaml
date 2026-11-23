@@ -1,0 +1,39 @@
+# The manifest in docs/handbook/cloudflare/deploy-and-operate.md#scheduled-work.
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: login_codes }
+spec:
+  title: Login codes
+  lifecycle: operational
+  ttl: { field: expiresAt, expireAfterSeconds: 0 }
+  schema:
+    type: object
+    required: [code, expiresAt]
+    properties:
+      code: { type: string }
+      expiresAt: { type: string, format: date-time }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Schema
+metadata: { name: carts }
+spec:
+  title: Carts
+  lifecycle: operational
+  schema:
+    type: object
+    required: [cartState]
+    properties:
+      cartState: { type: string, enum: [open, closed] }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Procedure
+metadata: { name: close-stale-carts }
+spec:
+  description: Close the carts nobody touched for 24 hours. Run by the scheduler as the system caller.
+  input: { type: object, additionalProperties: false, properties: {} }
+  output: { type: object }
+  handler:
+    sql: |
+      UPDATE carts SET cartState = 'closed'
+        WHERE cartState = 'open' AND updated_at < now() - CAST('24 hours' AS interval)
+        RETURNING id

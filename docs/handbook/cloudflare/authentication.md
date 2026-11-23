@@ -5,7 +5,7 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 
 | Mantle | What it does |
 | --- | --- |
-| `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `postgresAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. `postgresAdapter` takes the PostgreSQL client the data layer uses, postgres.js (`cloudflare-postgres`, usually through Hyperdrive) or Bun.SQL; on Workers create that client per request, or per isolate with `max: 1`. Both pass Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
+| `@aotter/mantle/auth/adapter` | `d1Adapter(env.DB)` / `postgresAdapter(sql)`: Better Auth's `database` on the same native handle as your data, no Kysely. `postgresAdapter` takes the PostgreSQL client the data layer uses, postgres.js (`cloudflare-postgres`, usually through Hyperdrive) or Bun.SQL; on Workers create the client per request and give a Better Auth instance kept for the isolate a handle that resolves the current request's client ([PostgreSQL through Hyperdrive](postgres-hyperdrive.md#better-auth-on-postgresql)); a postgres.js client kept at module scope fails on the next request. Both pass Better Auth's official adapter suite (`@better-auth/test-utils/adapter`). |
 | `mantle generate … --auth ./auth.ts` | Adds the tables Better Auth declares for your options (`getSchema`) to `schema.sql`. |
 | `@aotter/mantle/generate/auth` | Programmatic `generateFromSources({ target, sources, auth: authOptions, ... })`; the selected entry types `auth` as Better Auth options. |
 | `@aotter/mantle/auth` | `authLoader` and `resolveCaller(request, loader, { audience })`: the `Caller` that generated queries take. |
@@ -13,6 +13,9 @@ Mantle supplies the database adapter, schema generation and caller resolution:
 ## `auth.ts`
 
 > **Verification status:** the GitHub social-provider and magic-link recipes have not yet been exercised end to end against real deployed provider flows.
+
+To choose between the email code, GitHub sign-in, and email and password, with a recipe for each, see
+[Choose how users sign in](sign-in-methods.md).
 
 Copy `src/auth.ts` from the [app shell](../../examples/app-shell/README.md), which CI runs from the packed packages;
 installed, it is `node_modules/@aotter/mantle/docs/examples/app-shell/src/auth.ts`. Its essentials:
@@ -41,10 +44,19 @@ Mantle reads the official admin plugin’s `adminRoles` when auth loads (default
 `@aotter/mantle/auth/hardening` supplies optional helpers:
 
 - `hashEmailOtp(secret, otp)` is keyed HMAC-SHA-256. Pass it as emailOTP's `storeOTP.hash`; an unkeyed hash permits enumeration of six-digit codes after a database leak.
-- `authHardening({ipAddressHeaders, baseURL, errorURL})` refuses missing host-trusted ingress headers and cross-origin error redirects, and enables Better Auth's rate limiter with `storage: "database"`, which the Better Auth docs recommend for serverless: counts are shared across isolates, and Better Auth's defaults and plugin rules (for example 3 per minute per email-OTP path) set the limits. The generated schema includes the `rateLimit` table. Never assume client X-Forwarded-For is trusted.
+- `authHardening({ipAddressHeaders, baseURL, errorURL})` refuses missing host-trusted ingress headers and cross-origin error redirects, and enables Better Auth's rate limiter with `storage: "database"`, which the Better Auth docs recommend for serverless: counts are shared across isolates, and Better Auth's defaults and plugin rules (for example 3 per minute per email-OTP path) set the limits. GET and HEAD of the OAuth discovery documents for the default `/mcp` resource and `/api/auth` base (`/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server[/api/auth]`, `/api/auth/.well-known/oauth-authorization-server` and `/api/auth/.well-known/openid-configuration`) skip the limiter through its own `customRules`: they are fixed public metadata, so they cost no database round trip; other methods, trailing-slash or extended paths and JWKS stay limited. The generated schema includes the `rateLimit` table. Never assume client X-Forwarded-For is trusted.
 - `guardGithubLogin(user, context, trustedProviders)` goes in user create/update before-hooks. Only explicitly trusted provider callbacks can populate this field. GitHub maps `githubLogin: profile.login`; generic OAuth ids need trusted profile mappers.
 - `withAuthTasks(ctx.waitUntil.bind(ctx), () => auth.handler(request))` retains background sends/cleanup for the current request, with concurrent requests isolated. `authHardening` installs `retainAuthTask` as Better Auth's background handler. Failure logs are generic and contain no OTPs/credentials.
 - `authSetupIncomplete()` returns 503/no-store while secrets/providers are unconfigured; do not authenticate by fallback.
+
+`authRoutes` also gives public OTP validation failures one JSON response (400,
+`INVALID_OTP`, private/no-store), including error headers. Better Auth still enforces
+expiry and attempt limits. Success cookies, HTTP 429 and other protocol errors are
+preserved. This matches error codes rather than URL spelling and does not equalize
+response time or replace rate limiting. An application mounting `auth.handler`
+directly can call `normalizeEmailOtpResponse(await auth.handler(request))` from
+`@aotter/mantle/auth/routes`; apply host CORS and security headers outside this
+normalizer. It does not alter the application's native Better Auth hooks.
 
 Better Auth config is app-owned, so restrict who may sign up (an allowlist, an invitation) with a
 `databaseHooks.user.create.before` hook that throws `APIError("FORBIDDEN")` from `better-auth/api` (the app shell calls
@@ -62,6 +74,30 @@ or `oauthProvider` for ordinary OAuth. These are optional app dependencies behin
 Use the live grant/session hooks and route wiring in [OAuth](../guides/oauth.md); merge verification hooks with the app shell's
 user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 
+### Passkeys
+
+`authRoutes` may list `{ kind: "passkey" }` in `methods` when the app adds Better Auth's `@better-auth/passkey` plugin
+in its own `auth.ts`, pinned to the same version as `better-auth`. Admin lists the method to its `SignIn` slot
+([Customising Admin](../guides/native-admin.md#sign-in)) and renders no passkey sign-in of its own; the sign-in
+experience is the application's.
+
+- **`rpID` is the auth host.** Every origin under the `rpID` may ask for assertions with those passkeys, so use a parent
+  domain only when the deployment owns the whole registrable domain.
+- **User verification is not enforced.** The plugin verifies sign-in with `requireUserVerification: false`, so a tap
+  without biometrics or a PIN signs in. Its sign-in endpoint does not prove the person is present; do not use it to
+  approve an action.
+- `mantle generate --auth src/auth.ts` adds the plugin's `passkey` table to `schema.sql`.
+
+### Verifying access tokens on Workers
+
+For a co-located Better Auth issuer with locally managed JWT keys, `resolveCaller` reads the public key set through
+`auth.api.getJwks()`. Better Auth caches it per auth instance and refreshes it when a token uses an unknown key ID.
+The SDK verifies the configured issuer and audience, enforces the DPoP binding and shared replay store, and checks
+the live grant. Configured remote JWKS still use Better Auth's resource client.
+
+Existing apps can remove the old app-shell `withInProcessJwks` fetch wrapper once they update the SDK. The public
+JWKS endpoint still serves external verifiers.
+
 ## Identity helpers
 
 `@aotter/mantle/auth/identity` exports `d1Identity(db, auth, caller, request.headers)` and
@@ -69,7 +105,7 @@ user hooks. `genericOAuth` is a login plugin, distinct from the OAuth provider.
 Better Auth table/field names. Every operation requires a current admin cookie session.
 
 Methods: `listUsers()` lists all admin; `listMembers({search,limit,cursor,cursorDirection})` searches id/name/email
-(literal LIKE), pages 1–100 and supports forward/backward opaque cursors bound to normalized search;
+(literal LIKE, at most 48 characters: D1 caps a LIKE pattern at 50 bytes), pages 1–100 and supports forward/backward opaque cursors bound to normalized search;
 `setUserRole(id, "admin" | null)`, `inviteUser(email)`, `revokeInvite(id)`, `deleteUser(id)`.
 Only identity fields reach outputs, never tokens/internal columns. Self-demotion/deletion is refused. Inviting an existing
 member grants admin only after email verification; an unverified existing account is refused. Revocation deletes only an unverified admin invitation with no linked account. Deletion clears OTP
@@ -99,7 +135,9 @@ The metafile startup guard rejects static Better Auth imports; keep auth behind
 
 `mantle generate <target> <out> <manifest>… --auth ./auth.ts` calls the module's `authOptions` with an empty env
 (the tables depend on plugins and options, not env values; nothing is constructed) and appends Better Auth's tables to `schema.sql`. Nothing runs DDL at runtime; migrations
-are yours (#1463).
+are yours (#1463). Under Node the CLI imports a TypeScript module as Node runs it (type stripping), except that a
+relative `./db.js` it imports resolves to `./db.ts` when no `db.js` exists, as TypeScript and Bun resolve it; the
+module's other imports must load at generation time too.
 
 For programmatic auth generation, import `generateFromSources` from
 `@aotter/mantle/generate/auth`, not the bare `/generate` entry. Both use the
@@ -122,11 +160,16 @@ session: {
 }
 ```
 
-A valid signed cache hit avoids Caller DB reads. Missing, tampered, expired or version-mismatched snapshots fall back to primary authority. The SDK accepts this opt-in only without secondaryStorage, with explicit maxAge from 1 to 60 seconds and refreshCache:false. KV gains no cache-authority guarantee; bearer grant checks remain live.
+A valid signed cache hit skips the session database lookup. Mantle still reads
+the current user row on each request to check the user's ban and role. Missing,
+tampered, expired or version-mismatched snapshots fall back to the primary
+session lookup. The SDK accepts this opt-in only without `secondaryStorage`,
+with an explicit `maxAge` from 1 to 60 seconds and `refreshCache: false`.
 
-Revocation, bans and role changes reach cached reads within `maxAge` (at most
-60 seconds). Sign-out clears both the session-token and cache cookies. Bearer
-tokens still use their live grant query on every request.
+Session revocation can take up to `maxAge` (at most 60 seconds) to reach cached
+reads. Bans and role changes apply on the next request. Sign-out clears both the
+session-token and cache cookies. Bearer tokens still check their grant on every
+request.
 
 Generated REST, MCP and web boundaries pass `{ readOnly }` as the third argument
 to the application's caller callback. Forward it to `resolveCaller`:
@@ -139,10 +182,10 @@ const caller = (request: Request, _env: Env, authority = { readOnly: false }) =>
 REST permits cached authority only on GET/HEAD Views; HEAD returns no body.
 Web permits it only on GET/HEAD page and index reads. For Cookie requests without
 an Authorization header, MCP classifies parsed
-`initialize`, `tools/list`, `resources/list`, `resources/read`, generated View
+`initialize`, `server/discover`, `tools/list`, `resources/list`, `resources/read`, generated View
 tools and generated native Admin media reads before resolving Caller. Generated
 metadata identifies Views versus Procedures; names and `readOnlyHint` annotations
-never make a Procedure eligible. A batch uses cached authority only if every
+never make a Procedure eligible. A 2025-era batch uses cached authority only if every
 message is a known read. Unknown/malformed methods or tools, mutations,
 publishing transitions and Admin writes use fresh authority. Dynamic admin tool
 implementations still load only after the admin gate; their read catalogue is

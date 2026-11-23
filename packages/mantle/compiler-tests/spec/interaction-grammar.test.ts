@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  requiredMantleRefFields,
-  type Manifest,
-  type ProcedureManifest,
-  type SchemaManifest,
-} from "../compiler.js";
+import { requiredMantleRefFields, type Manifest, type ProcedureManifest, type SchemaManifest } from "../compiler.js";
 import { parseManifests, validateManifests } from "./parse.js";
 
 /** ADR-0029 D4: `x-mantle-ref` object form and `Procedure.spec.target`. */
@@ -53,7 +48,7 @@ function review(spec: Partial<ProcedureManifest["spec"]> = {}): ProcedureManifes
 }
 
 function errors(manifests: Manifest[]) {
-  return validateManifests({ manifests }).diagnostics.filter((d) => d.severity === "error");
+  return validateManifests({ manifests }).diagnostics.filter(d => d.severity === "error");
 }
 
 describe("x-mantle-ref object form", () => {
@@ -71,7 +66,10 @@ describe("x-mantle-ref object form", () => {
           target: undefined,
           input: {
             ...byNumber.spec.input,
-            properties: { ...input, requisitionId: { type: "string", "x-mantle-ref": { schema: "requisitions", field: "requestNumber" } } },
+            properties: {
+              ...input,
+              requisitionId: { type: "string", "x-mantle-ref": { schema: "requisitions", field: "requestNumber" } },
+            },
           },
         },
       } as ProcedureManifest,
@@ -87,30 +85,47 @@ describe("x-mantle-ref object form", () => {
   ])("rejects %j", (ref, suffix, message) => {
     const procedure = review({ target: undefined });
     const properties = { ...procedure.spec.input.properties!, requisitionId: { type: "string", "x-mantle-ref": ref } };
-    const found = errors([requisitions(), { ...procedure, spec: { ...procedure.spec, input: { ...procedure.spec.input, properties } } } as ProcedureManifest]);
-    expect(found).toEqual([expect.objectContaining({
-      code: "MANTLE_REF_INVALID",
-      path: expect.stringContaining(`/spec/input/properties/requisitionId/x-mantle-ref${suffix}`),
-      message: expect.stringContaining(message),
-    })]);
+    const found = errors([
+      requisitions(),
+      {
+        ...procedure,
+        spec: { ...procedure.spec, input: { ...procedure.spec.input, properties } },
+      } as ProcedureManifest,
+    ]);
+    expect(found).toEqual([
+      expect.objectContaining({
+        code: "MANTLE_REF_INVALID",
+        path: expect.stringContaining(`/spec/input/properties/requisitionId/x-mantle-ref${suffix}`),
+        message: expect.stringContaining(message),
+      }),
+    ]);
   });
 
   it("validates Schema properties and keeps parent scopes to id references", () => {
-    const lines = (ref: unknown): SchemaManifest => ({
-      apiVersion,
-      kind: "Schema",
-      metadata: { name: "lines" },
-      spec: {
-        title: "Lines",
-        schema: { type: "object", properties: { parent: { type: "string", "x-mantle-ref": ref } }, required: ["parent"] },
-      },
-    } as SchemaManifest);
-    expect(errors([requisitions(), lines({ schema: "requisitions", field: "item" })]))
-      .toEqual([expect.objectContaining({ code: "MANTLE_REF_INVALID" })]);
-    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "id" }).spec.schema))
-      .toEqual([{ field: "parent", collection: "requisitions" }]);
+    const lines = (ref: unknown): SchemaManifest =>
+      ({
+        apiVersion,
+        kind: "Schema",
+        metadata: { name: "lines" },
+        spec: {
+          title: "Lines",
+          schema: {
+            type: "object",
+            properties: { parent: { type: "string", "x-mantle-ref": ref } },
+            required: ["parent"],
+          },
+        },
+      }) as SchemaManifest;
+    expect(errors([requisitions(), lines({ schema: "requisitions", field: "item" })])).toEqual([
+      expect.objectContaining({ code: "MANTLE_REF_INVALID" }),
+    ]);
+    expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "id" }).spec.schema)).toEqual([
+      { field: "parent", collection: "requisitions" },
+    ]);
     expect(requiredMantleRefFields(lines({ schema: "requisitions", field: "requestNumber" }).spec.schema)).toEqual([]);
-    expect(requiredMantleRefFields(lines("requisitions").spec.schema)).toEqual([{ field: "parent", collection: "requisitions" }]);
+    expect(requiredMantleRefFields(lines("requisitions").spec.schema)).toEqual([
+      { field: "parent", collection: "requisitions" },
+    ]);
   });
 });
 
@@ -125,16 +140,23 @@ describe("Procedure.spec.target", () => {
     [{ target: { schema: "requisitions", id: "requisitionId", version: "decision" } }, "/spec/target/version"],
   ])("rejects %j", (spec, pointer) => {
     const found = errors([requisitions(), review(spec as Partial<ProcedureManifest["spec"]>)]);
-    expect(found).toEqual(expect.arrayContaining([expect.objectContaining({
-      code: "PROCEDURE_TARGET_INVALID",
-      path: expect.stringMatching(new RegExp(`${pointer}$`)),
-    })]));
+    expect(found).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "PROCEDURE_TARGET_INVALID",
+          path: expect.stringMatching(new RegExp(`${pointer}$`)),
+        }),
+      ]),
+    );
   });
 
-  it.each([[{ schema: "requisitions" }], [{ schema: "requisitions", id: "" }], ["requisitions"], [{ schema: "r", id: "i", lock: "v" }]])(
-    "rejects the malformed shape %j at parse time",
-    (target) => {
-      const doc = `apiVersion: ${apiVersion}
+  it.each([
+    [{ schema: "requisitions" }],
+    [{ schema: "requisitions", id: "" }],
+    ["requisitions"],
+    [{ schema: "r", id: "i", lock: "v" }],
+  ])("rejects the malformed shape %j at parse time", target => {
+    const doc = `apiVersion: ${apiVersion}
 kind: Procedure
 metadata: { name: review }
 spec:
@@ -143,8 +165,7 @@ spec:
   handler: { ref: review }
   target: ${JSON.stringify(target)}
 `;
-      const { diagnostics } = parseManifests(doc);
-      expect(diagnostics[0]?.path).toContain("/spec/target");
-    },
-  );
+    const { diagnostics } = parseManifests(doc);
+    expect(diagnostics[0]?.path).toContain("/spec/target");
+  });
 });

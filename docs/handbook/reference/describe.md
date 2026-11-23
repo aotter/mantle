@@ -27,27 +27,39 @@ The schemaVersion 1 report contains:
   `inputSchema`, `annotations` and `_meta`. View and Procedure names follow
   MCP naming. Route inputs are plain objects with a name selector for known
   dispatcher variants; their `variants` retain the selected input schemas.
+  Like `title` and `description`, localized `title` and `description`
+  keywords inside these input schemas are resolved to English (else the first
+  locale), so a host can list a target as an MCP tool unchanged; `targetHash`
+  still covers every locale. A label-only edit in another locale therefore
+  shows in `diffApp` as `{ field: "behavior", direction: "changed" }`, without
+  before and after values.
 
 Each target’s `_meta` contains:
+
+- The tool's own metadata, including `openai/fileParams` for attachment inputs on `upload_media`.
+  Describe's reserved access fields below take precedence. Built-in media tools use their real tool titles and descriptions.
 
 - `id`: `view:<name>`, `procedure:<name>`, `rest:<METHOD> <path>` or
   `admin:<METHOD> <path template>`. Parameters use `:name`; Admin paths are
   relative to the API base. Publishing ids use `procedure:<schema>.<verb>`;
   media tool ids use `admin:tool:<name>`.
 - `targetHash`: a hash of behavior, inputs, requirements, restrictions,
-  related Schema definitions, surfaces, Triggers and reachable hooks.
+  related Schema definitions, surfaces and Triggers.
   Optional lowering caches do not affect it. Ref registration keys are
   included; application-owned handler implementations are not.
 - `scope` and `restrict`: per-Schema owner and user-field terms. Owner terms
-  use `owner`; user-field terms name their `column`, `field` and `type`.
+  use `owner`; user-field terms name their `column`, `field` and `type`. A
+  restrict's OR-clauses are listed under `or`, each a list of such terms of
+  which one must hold; the single terms stay in `owner` and `terms`.
 - `readOnly`: true only when all reachable statements are reads. Ref handlers
   and routes without known dependencies are false.
 - `trustedOnly`, `opaque`, `unscopedReads`: trusted-only execution, ref-handler
   opacity and reads of Schemas without row scope. Opaque code conservatively
   includes every Schema available to its Store.
+- `nativeDatabase`: whether the Procedure declares `spec.db: native`; routes summarize their variants. A warning-phase deployment can report false and still provide a native handle. Ref calls through `store.procedures` are not statically summarized.
 - `surfaces` and `triggers`: every declared exposure and each Trigger’s id
   and source. Views include `admin` for developer previews.
-- `requires`: conjunctive predicates in `all` and an optional `guard` name.
+- `requires`: conjunctive predicates in `all`.
   Admin-only targets include the admin gate.
 - `variants`: each selectable target’s id, input schema, requirements, flags
   and row policies. Route restrictions contain terms common to all variants.
@@ -62,6 +74,11 @@ router additions and optional module mounting remain application-owned.
 `null` when they serve none. It reads only the JSON this command prints: it
 imports no application, opens no database and makes no network call, so a
 gateway can compute `props.mantle.target` and `targetHash` before forwarding.
+
+A gateway can keep a trimmed description. The matcher reads the target's
+`name`, `_meta.id`, `_meta.surfaces`, and `_meta.variants[0]?.id`, and preserves
+the caller's metadata type on return. Without surfaces a target has no MCP
+endpoint, and a REST target without variants has no implicit `HEAD` match.
 
 ```ts
 import { matchTarget, type AppDescription } from "@aotter/mantle/describe";
@@ -91,6 +108,11 @@ and Admin routers for every route of the example apps:
   limit the match to that endpoint's tools. Without a path, a name that the two
   endpoints map to different targets matches nothing.
 
+A host rule keyed on a request (for example "these targets need a step-up")
+must key on the target `matchTarget` returns, or apply the same normalisation
+itself. A rule on the raw pathname can be bypassed by an equivalent spelling
+such as `/api/views/%6Frders` or a trailing slash.
+
 Media tools (`admin:tool:<name>`) and the optional Admin developer and
 statistics routes match even when the application does not mount them; the
 application then answers `NOT_FOUND`. Routes and tools the application adds
@@ -99,7 +121,27 @@ return `null`. Web and site pages (pinned by `view:<name>`) and auth routes are
 outside `matchTarget`.
 
 Diff records contain `id`, `field`, `direction` and optional `before`/`after`.
-Removing a scope or restrict term widens access; adding one narrows it.
+Removing a scope or restrict term widens access; adding one narrows it. A restrict is an AND of
+OR-clauses; a single term is a clause of one, so a clause left with one term, which moves from `or`
+to the single terms, is compared as the same rule. Each Schema's direction is decided in two steps:
+
+1. Rows. If a clause of the old policy follows from no clause of the new one (a clause follows from
+   another whose disjuncts are a subset of its own), rows may be added: `widened`, whatever else
+   changed. Adding a disjunct, removing a clause and swapping a term are widenings. Otherwise, if a
+   new clause follows from no old one, rows are removed; otherwise the rows are the same.
+2. Callers refused before SQL. A user-field term (`IN auth.user(...)`) refuses a caller holding
+   `{ all: true }` for its field (`AUTH_DENIED`) and, under gateway mode, a host that did not
+   forward the field (`HOST_CONTRACT`), also inside an OR-clause (where an application caller's
+   missing or empty field only makes the term false). When rows are removed, the direction is
+   `narrowed`, unless a user-field term of the old policy appears nowhere in the new one: those
+   callers are now admitted, so it is `changed`. When the rows are the same, a user-field term that
+   disappears makes it `widened`, one that appears `narrowed`, both or neither `changed`.
+
+So dropping the `= auth.uid()` disjunct of `author_id = auth.uid() OR org IN auth.user('ownerOrgIds')`
+narrows, and dropping the `org` one is `changed`. A target's restrict, scope or variants are
+`narrowed` only when every Schema's direction is, and `widened` when any is. `changed` does not mean
+"no effect": it means neither direction can be stated, and some callers may now reach rows they could
+not; review it as you would a widening.
 Reading another Schema, dropping requirements, adding surfaces or Triggers,
 removing `readOnly` or `trustedOnly`, or enabling `opaque` or `unscopedReads`
 widens access. Variants are compared separately. Adding a target widens;
