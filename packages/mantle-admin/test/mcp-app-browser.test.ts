@@ -158,9 +158,8 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     await app.getByRole("button", { name: "Review: r1" }).click();
     // A row action must choose its required boolean. Both optional checkboxes can be unset after an edit.
     const notify = app.getByRole("combobox", { name: "Notify" });
-    expect(await notify.getAttribute("data-placeholder")).not.toBeNull();
-    await notify.click();
-    await app.getByRole("option", { name: "False", exact: true }).click();
+    expect(await notify.inputValue()).toBe("");
+    await notify.selectOption("false");
     await app.getByRole("checkbox", { name: "Optional flag" }).click();
     await app.getByRole("checkbox", { name: "Nullable flag" }).click();
     await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en" }));
