@@ -23,10 +23,14 @@ const catalog = {
       title: "Review",
       inputSchema: {
         type: "object",
+        required: ["notify"],
         properties: {
           id: { type: "string" },
           expectedVersion: { type: "number" },
           date: { type: "string", format: "date-time", title: "Date" },
+          notify: { type: "boolean", title: "Notify" },
+          optionalFlag: { type: "boolean", title: "Optional flag" },
+          nullableFlag: { type: ["boolean", "null"], title: "Nullable flag" },
         },
       },
       bind: [{ input: "id", field: "id" }],
@@ -152,6 +156,17 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
     expect(await page.evaluate(() => (window as any).host.modes)).toEqual(["fullscreen", "inline"]);
     expect(await back.count()).toBe(1);
     await app.getByRole("button", { name: "Review: r1" }).click();
+    // A row action must choose its required boolean. Both optional checkboxes can be unset after an edit.
+    const notify = app.getByRole("combobox", { name: "Notify" });
+    expect(await notify.getAttribute("data-placeholder")).not.toBeNull();
+    await notify.click();
+    await app.getByRole("option", { name: "False", exact: true }).click();
+    await app.getByRole("checkbox", { name: "Optional flag" }).click();
+    await app.getByRole("checkbox", { name: "Nullable flag" }).click();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "en" }));
+    await app.getByRole("button", { name: "Not set", exact: true }).first().click();
+    await app.getByRole("button", { name: "Not set", exact: true }).click();
+    await page.evaluate(() => (window as any).host.bridge.setHostContext({ locale: "zh-TW" }));
     await app.getByRole("button", { name: "Date", exact: true }).click();
     const date = app.locator('input[type="date"]');
     await date.waitFor();
@@ -189,7 +204,11 @@ it("interoperates with the official ext-apps AppBridge: context, results, native
         },
       ]);
     expect(await page.evaluate(() => (window as any).host.messages)).toEqual([]);
-    expect(state.calls[0]).toMatchObject({ name: "review_requisition", arguments: { id: "r1", expectedVersion: 3 } });
+    expect(state.calls[0]).toMatchObject({
+      name: "review_requisition",
+      arguments: { id: "r1", expectedVersion: 3, notify: false, nullableFlag: null },
+    });
+    expect(state.calls[0].arguments).not.toHaveProperty("optionalFlag");
     expect(state.calls[0].arguments.date).toBe(await page.evaluate(() => new Date(2026, 9, 15, 12, 34).toISOString()));
     expect(state.calls[1]).toMatchObject({ name: "pending", arguments: { limit: 5 } });
     expect(["number", "string"]).toContain(typeof state.calls[0]._meta.progressToken);

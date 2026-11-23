@@ -22,6 +22,7 @@ import type { AdminLanguage } from "../../app/preferences";
 import { t } from "../../app/i18n";
 import {
   idempotencyFields,
+  operationInitialInput,
   parentRefScopes,
   parentScopeInteraction,
   type ParentScope,
@@ -495,7 +496,11 @@ export function createOperationController(
       : {}),
     invoke: (values, signal) => invokeOperation(operation.name, values, signal),
     // Minted once per dialog, so a retry after an uncertain write reuses it.
-    initialInput: Object.fromEntries(automatic.map(field => [field, crypto.randomUUID()])),
+    initialInput: operationInitialInput(
+      operation.input,
+      automatic,
+      !!(interaction?.bind.length || interaction?.version),
+    ),
     automatic,
   });
 }

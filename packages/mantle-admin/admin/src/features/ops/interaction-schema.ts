@@ -1,3 +1,4 @@
+import { enumOptions, type FieldSchema } from "@aotter/mantle-ui";
 import { isFoldedFieldChild } from "../../lib/collection-nav";
 import { mantleRefOf, type AdminOperationInteraction, type Collection, type JsonSchema } from "../../lib/types";
 
@@ -9,15 +10,59 @@ export function idempotencyFields(schema: JsonSchema): string[] {
 }
 
 /** The operation's input without the fields Admin binds or fills itself. */
-export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[]): JsonSchema {
+export function operationFormSchema(schema: JsonSchema, hiddenFields: readonly string[], bound = false): JsonSchema {
   const hidden = new Set(hiddenFields);
   const properties = { ...(schema.properties ?? {}) };
   for (const name of hidden) delete properties[name];
-  return {
-    ...schema,
-    properties,
-    required: (schema.required ?? []).filter(name => !hidden.has(name)),
-  };
+  return operationForm(
+    {
+      ...schema,
+      properties,
+      required: (schema.required ?? []).filter(name => !hidden.has(name)),
+    },
+    bound,
+  );
+}
+
+function requiredCheckbox(field: FieldSchema | undefined): field is FieldSchema {
+  return (
+    !!field &&
+    (field.type === "boolean" ||
+      (Array.isArray(field.type) && field.type.length === 1 && field.type[0] === "boolean")) &&
+    field.nullable !== true &&
+    !field.readOnly &&
+    typeof field["x-mantle-bind"] !== "string" &&
+    field.const === undefined &&
+    !field.enum &&
+    !enumOptions(field)
+  );
+}
+
+/** A bound operation needs an explicit choice; guessing can overwrite a value in the reviewed row. */
+export function operationForm<T extends FieldSchema>(schema: T, bound: boolean): T {
+  if (!bound) return schema;
+  const properties = { ...schema.properties };
+  for (const name of schema.required ?? []) {
+    const field = properties[name];
+    if (requiredCheckbox(field)) properties[name] = { ...field, enum: [true, false] };
+  }
+  return { ...schema, properties };
+}
+
+/** Match the initial state of an editable, required checkbox in Admin and the Admin MCP App. */
+export function operationInitialInput(
+  schema: FieldSchema,
+  automatic: readonly string[],
+  bound: boolean,
+): Record<string, unknown> {
+  const entries: [string, unknown][] = automatic.map(field => [field, crypto.randomUUID()]);
+  if (!bound) {
+    for (const name of schema.required ?? []) {
+      const field = schema.properties?.[name];
+      if (requiredCheckbox(field) && !automatic.includes(name)) entries.push([name, field.default === true]);
+    }
+  }
+  return Object.fromEntries(entries);
 }
 
 /**

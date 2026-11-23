@@ -45,6 +45,7 @@ import type { CellProps } from "../app/slot-props";
 import type { HostRequestOutcome } from "../app/hooks";
 import { appLabels, type AppLabels } from "./locale";
 import { csvText } from "../../../src/csv";
+import { operationForm, operationInitialInput } from "../features/ops/interaction-schema";
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -614,7 +615,7 @@ function RowAction(props: {
           // reopens the action from the refreshed list
           invoke: (values, signal) => invokeTool(call, action.capability, values, signal),
           // One key per opened action, so a retry after an uncertain write reuses it.
-          initialInput: Object.fromEntries(automatic.map(field => [field, crypto.randomUUID()])),
+          initialInput: operationInitialInput(action.inputSchema, automatic, !!(action.bind.length || action.version)),
           automatic,
         }),
       };
@@ -692,7 +693,7 @@ function RowActionPanel(props: {
         {/* Admin's own form: option titles, money and date previews, a field's widget from the Procedure's uiSchema */}
         {visible ? (
           <SchemaFields
-            schema={action.inputSchema as FieldSchema}
+            schema={operationForm(action.inputSchema, !!(action.bind.length || action.version))}
             uiSchema={action.uiSchema ?? null}
             value={state.draft}
             onChange={next => applyFieldEdits(controller, state.draft, next)}

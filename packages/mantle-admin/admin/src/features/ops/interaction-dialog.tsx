@@ -274,7 +274,11 @@ function InteractionDialogPanel({
     );
   };
   closeRef.current = close;
-  const schema = operationFormSchema(operation.input, hidden);
+  const schema = operationFormSchema(
+    operation.input,
+    hidden,
+    hidden.some(name => !automatic.includes(name)),
+  );
   const fieldSchema = (field: string) => operation.input.properties?.[field] ?? sourceSchema?.properties?.[field];
   const fieldLabel = (field: string) => propertyLabel(field, fieldSchema(field), language, canonical);
   const fieldValue = (field: string, value: unknown) =>

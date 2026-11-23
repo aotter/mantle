@@ -210,15 +210,22 @@ function SchemaField(
         </SelectContent>
       </Select>
     ) : type === "boolean" ? (
-      <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        <Checkbox
-          {...control}
-          aria-labelledby={labelId}
-          checked={Boolean(value)}
-          onCheckedChange={checked => setValue(checked === true)}
-        />
-        {labels.boolean}
-      </label>
+      <div className="flex items-center gap-2">
+        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <Checkbox
+            {...control}
+            aria-labelledby={labelId}
+            checked={Boolean(value)}
+            onCheckedChange={checked => setValue(checked === true)}
+          />
+          {labels.boolean}
+        </label>
+        {clearable && value != null ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setValue(cleared)}>
+            {labels.clear ?? labels.clearOption ?? labels.emptyOption}
+          </Button>
+        ) : null}
+      </div>
     ) : type === "number" || type === "integer" ? (
       <div className="space-y-1">
         {timestampHint(schema) ? (
