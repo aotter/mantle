@@ -32,432 +32,128 @@ Pin every package you use to the same exact version and upgrade them together.
 From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
 move, and never booting 0.2 against a 0.1.x database.
 
-## 0.2.2 — in preparation
+## 0.2.2 (2026-11-23)
 
-### Upgrading to 0.2.2-alpha.11
+Mantle 0.2.2 supports both the 2025 and 2026-07-28 MCP protocols, optional scoped application credentials and
+managed OAuth grants, and private or downloadable media. Admin and its MCP App use the same operation forms:
+an untouched required checkbox in an unbound operation submits its displayed value; an operation bound to an existing
+row asks for a choice. Optional checkboxes can be cleared without turning an omitted value into false.
 
-Pin the three Mantle packages to `0.2.2-alpha.11` and regenerate with your application's command.
+An existing application upgrades its own code and data. A local D1 rehearsal from 0.2.1 retained rows and sessions
+and restored its pre-upgrade snapshot. It covered one application. The four native targets passed conformance,
+including Workers with a local PostgreSQL connection. The OSS release gate does not include hosted platform
+deployments or a production soak. Hyperdrive pooling and external MCP hosts need their own acceptance.
 
-- An unchecked required boolean in an unbound Admin operation is submitted as false unless the schema declares true
-  as its default. Operations bound to an existing row ask for an explicit choice, so opening the form does not reset
-  the reviewed value.
-- Optional booleans can be cleared in Admin and its MCP App. The App omits cleared optional inputs and preserves an
-  explicit null when the input allows it.
+[GitHub Release](https://github.com/aotter/mantle/releases/tag/v0.2.2) lists the full change history since v0.2.1.
 
-The task workflow needs no schema migration. Production upgrade and soak remain unverified.
+### Upgrading from 0.2.1
 
-### Upgrading to 0.2.2-alpha.10
+Pin each of the Mantle packages you use to exactly `0.2.2` and refresh the lockfile. Use the application's own
+`mantle generate` command. Check the generated SQL, types and access targets. Rehearse any application-owned migration
+on a copy and keep existing users, sessions and data; the generated `schema.sql` initializes an empty database.
+See [migrations](../guides/migrations.md) and [Upgrade an application](#upgrade-an-application).
 
-Pin the three Mantle packages to `0.2.2-alpha.10` and regenerate with your
-application's command. The handbook includes native Bun and Workers HTTP
-examples (#2144) and independent Admin browser acceptance (#2147).
+#### Breaking changes
 
-- **Breaking: the copied Purchasing example requires a rejection reason (#2149).**
-  - `reject_request({ id, expectedVersion })` → `reject_request({ id, expectedVersion, reason })`.
-  - Existing `requests` table without a rejection reason → apply the example's application-owned
-    migration for the nullable text column `rejectionreason` before running the new code.
-- **Breaking: the copied Recipes example uses English and French (#2150).**
-  - Default locale `zh-TW` → `en`.
-  - Translation locale `en` → `fr`.
-  Preserve existing content and public URLs by planning the content migration and redirects
-  before adopting the changed example locales.
+- **Peers (#2071, #2114).** Move all selected Better Auth peers from `1.7.7` to `1.7.16` together, with
+  `@better-auth/utils` at `0.5.1` when installed. If you serve MCP, move `@modelcontextprotocol/server` from
+  `2.3.1` to exact `2.4.0`. Both protocol eras remain served.
+- **Imports and generated options (#1967, #2024).** Use `body` from `@aotter/mantle/rest` for
+  `@aotter/mantle/json-body`; use the native handle in `store(db, caller).transaction((tx, db) => …)` for
+  `@aotter/mantle/driver/postgres`; use `convertInput`, `Conversions` and `ContractError` from
+  `@aotter/mantle/contracts` for `@aotter/mantle/surface`. Those three old subpaths ship throwing migration stubs
+  through this release. `surface.decode` has no replacement. Use types from `@aotter/mantle/mcp` in place of
+  `@aotter/mantle/mcp-apps`, and `userOf` for `sessionUserOf`. Generated-code plumbing moves under
+  `@aotter/mantle/internal/`; use documented public entries in application code. Drop the `fields` option from
+  generated `rest`, `mcp` and `web`; the manifest supplies those fields. Replace MCP `onRefusal` with
+  `onObservation` for `kind: "request-refused"` and its `reason`. Unused diagnostic codes have no replacement.
+- **Grammar and validation (#1967, #1964, #2118, #2123).** `schedule` and lifecycle Triggers and `requires.guard`
+  now fail at parsing, including in `mantle describe`. Wire the application's `scheduled()` or check authorization
+  in its handler. NUL and unpaired surrogates now fail input validation; `maxLength` counts code points and
+  `x-mantle-maxBytes` limits bytes. Escaped LIKE patterns over the D1 limit now fail on every target; use a shorter
+  pattern. A Store write and a flat `restrict` cannot name one column in two spellings. Use the declared
+  spelling once; complex row policy can use `OR` and parentheses.
+- **Transactions and ref handlers (#2017, #2070).** Catching a failed statement no longer lets the outer Store
+  transaction commit earlier steps or report success. Handle the rollback; use a separate transaction for an
+  independent write. Declare `spec.db: native` on a ref Procedure that reads `ctx.db` or needs the native handle
+  in its transaction callback. Prefer the caller-bound Store when direct SQL is unnecessary.
+- **Application credentials (#1979).** A Caller with `credential: "api-key"` or `"personal-token"` can reach
+  generated REST, MCP and web targets only when the target explicitly requires a scope it holds. Add
+  `ctx.auth.scope` in the target's `requires`, or `scopes` on a hand-written MCP tool. They cannot use the
+  built-in Admin endpoints. The `resolveCredential` hook no longer accepts `credential: "oauth"`; use the
+  verified OAuth flow for that identity.
+- **HTTP routing and authorizer errors (#1967, #2132, #2103).** Admin's unknown paths, methods and malformed paths
+  return 404, 405 with `Allow`, and 400 before checking authentication, with REST diagnostic paths. MCP checks
+  authorization before input validation; `nativeRest` runs a route's check and its declared target authorization.
+  An `authorize` rejection with status 429 now keeps its code, message and `retryAfter`. Gateway observation
+  records an error and Admin View batch reports `error: true`; other non-authorization errors still refuse with 403.
+  Admin entry read/write uses one Schema read authorization check where it previously used two. Treat a
+  `describe` diff for a removed user-field restriction as `changed`, and review whether it widens access.
+  Auth and MCP responses previously missing a cache policy now carry `private, no-store`. Older app shells
+  should adopt [the shell's response default](../guides/caching.md#the-shells-default) for their own routes.
+- **Host access contract (#2133).** Remove `dryRun` from forwarded host props; any value now fails
+  `HOST_CONTRACT` (412). `HostProps`, `Caller`, `AccessEvent` and the REST/web/MCP result no longer carry
+  `dryRun`. Preview policy with `mantle describe` or `describeApp`. Regenerate `access-targets.ts`;
+  `AccessTarget.opaque` and `variants` are gone, leaving `targetHash`. Remove the dry-run argument before
+  `call` in `callToolLazy`, and remove references to route `variant`/`prepare` and pipeline
+  `dryRun`/`dryRunResult`/`dryRunResponse`. There is no replacement for those hooks. An unknown identifier
+  key on host props may now be named in the 412 diagnostic.
+- **MCP results and observation (#2098, #2104, #2114).** Use `withResult(data, { content, _meta })` or
+  `withResultMeta` in place of an object literal typed as `ResultWith` or `ResultWithMeta`. REST, Admin
+  operations and Admin WebMCP answer the data itself rather than `{ data, _meta }`; WebMCP may also forward
+  `content`. The 2026 MCP wire supports a non-object `structuredContent` where the declared root schema
+  allows it; use object output for tools called by ext-apps 2.0.4. Invalid result shapes now fail before being
+  recorded. App-only calls still require the tool's own authorization and are no longer refused only because a
+  client lacks Apps capability; keep authorization independent of discovery. Cancellation records
+  `REQUEST_CANCELLED` (499); a pre-aborted call runs no step. Extend exhaustive `McpObservation` handling for
+  `request-refused` status 400 / `protocol-version`, and optional invocation `client` / `protocolVersion`.
+  A legacy batch larger than 100 messages is refused before authorization.
+- **Admin host customizations (#2004, #2005, #2117).** `useHost().sendMessage` returns a
+  `HostRequestOutcome`: handle `"accepted"`, `"refused"` and `"unknown"`. Avoid treating a timeout as a
+  refusal or repeating an uncertain write. An `AdminHost` implementation or mock now provides
+  `registerTools` and `downloadFile`; rename custom app tools with the reserved `view_` prefix. Hosts may
+  observe the `tools.listChanged` capability. `Brand` now renders on sign-in, consent, connected apps,
+  access-denied, error and loading pages as well as the sidebar. Pass through `BrandProps.placement` when
+  composing `renderDefault`, or return null on placements that should stay unbranded.
+- **Media configuration (#2035, #2051).** Replace invalid purpose MIME tokens with a supported shorthand or a
+  lowercase MIME type without parameters; e.g. `heic` becomes `image/heic` in both `required` and
+  `maxBytes`. A custom `S3Signer` must sign the requested headers including `Content-Type`, and custom
+  storage must respect `contentDisposition`. Review the
+  [safe delivery rules](../cloudflare/media-r2.md#safe-delivery) when adding non-image or wildcard types.
+  The default `mediaUploadCard()` tool is now `open_media_upload`. Use that name for the card, or explicitly
+  pass `{ tool: "upload_media" }` to retain the combined behavior. Direct `upload_media` remains available.
+- **Copied sample applications (#2149, #2150).** When adopting the new Purchasing example, supply `reason`
+  to `reject_request` and first apply the example's nullable text `rejectionreason` migration. When adopting
+  the new Recipes example, the default locale is `en` instead of `zh-TW`, and the translation locale is
+  `fr` instead of `en`. Plan any necessary content migration and redirects to preserve existing URLs.
 
-These example migrations apply when adopting the new example code. Production
-upgrade and soak remain unverified for this alpha.
+#### New options and regeneration
 
-### Upgrading to 0.2.2-alpha.9
+- Regeneration updates access targets, MCP bindings and input validators. Bare Procedures can use the
+  generated `input(raw)` validator and converter. Application credentials and opt-in managed OAuth grants are
+  covered by the [OAuth guide](../guides/oauth.md); enabling managed grants on existing data requires adding
+  the generated `oauthManagedGrant` table with an application migration.
+- Review [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md) if applicable. Keep the Better
+  Auth instance per isolate with a request-local database client, and confirm Hyperdrive query caching is
+  disabled. postgres.js sends named statements unless its client has `prepare: false`. A column-changing
+  migration can invalidate prepared statements; plan the application upgrade accordingly.
+- Media tools are `upload_media`, `find_media`, `update_media` and `delete_media`, with an optional upload
+  card. The seven deprecated names remain through 0.2.2. Private purposes use signed reads. A generated
+  Worker serves static assets directly and `mantle bundle` emits content-hashed browser entries. Review
+  existing Wrangler routing and replace longer cache rules for Admin and app chunks if appropriate.
+- The [agent workflow](../guides/agent-workflow-acceptance.md) calls for independent browser verification of
+  Admin writes. The [examples](../examples/hub.md) show native Bun and Workers routes. Run the project's
+  generation, type and behavior checks, then verify the affected UI/API, permissions, version conflicts and
+  session flows before upgrading.
 
-Pin the Mantle packages to `0.2.2-alpha.9` and regenerate: the generated `access-targets.ts` changes (#2133), and
-`generate --check` reports it until you do.
+#### Known limits
 
-- **Breaking: an `authorize` rejection with status 429 keeps its status (#2132).** Before: a `ContractError` of status
-  429 thrown from `authorize` answered 403 `AUTH_DENIED` "Target is not authorized." After: it answers 429 with its code,
-  message and `retryAfter`, on REST, MCP, web and Admin routes; no replacement for the old answer. Every other
-  non-`AUTH_DENIED` rejection still answers 403. Related answers move with it:
-  - Gateway mode access event for that request: `outcome: "deny"`, reason `AUTH_DENIED` → `outcome: "error"`, reason the
-    error's code; no replacement.
-  - Admin `view-batch` entry for a View whose `authorize` answers 429: `{ unavailable: true }` → `{ error: true }`; no
-    replacement.
-  - Admin `GET /entries/:id`, create, patch and publish asked `authorize` for the Schema read twice → once; no
-    replacement. A counter kept inside `authorize` is also advanced by `tools/list`.
-  - `describe` diff of a `restrict`: dropping the `= auth.uid()` disjunct, `widened` → `narrowed`; dropping a user-field
-    disjunct, `widened` → `changed` (review it as a widening); the same two with an added clause follow the same rule;
-    no replacement.
-- **Breaking: host contract `dryRun` is removed (#2133).** Before: a host could forward `dryRun`. After: a forwarded
-  `dryRun`, `true` or `false`, answers 412 `HOST_CONTRACT` naming `dryRun`; send props without the key. Preview access
-  from the plan with `mantle describe` (`describeApp`) instead. `mantle describe` output is unchanged. Each item below
-  is before → after:
-  - `HostProps.dryRun`, `Caller.dryRun`, `AccessEvent.dryRun` (the key is absent) → no replacement.
-  - `{ dryRun: true, event }` answers on REST, web and MCP `structuredContent`, and `DRY_RUN_UNSUPPORTED` (412) → no
-    replacement.
-  - `AccessTarget.opaque` and `AccessTarget.variants`, and the generated `access-targets.ts` → `targetHash` only;
-    regenerate.
-  - `Route.variant` and `Route.prepare` of `nativeRest`; `Pipeline.dryRun`, `dryRunResult()` and `dryRunResponse()`;
-    Admin `Route.prepare` → no replacement.
-  - `callToolLazy(tool, raw, getDb, caller, handlers, dryRun?, call?)` → `callToolLazy(tool, raw, getDb, caller,
-    handlers, call?)`; a caller that passed `undefined, call` drops the `undefined`.
-  - An unknown top-level host key that is an identifier of at most 32 characters answered the generic "Malformed host
-    contract or tenant mismatch." → `Unknown key '<key>'.` with `field`; any other unknown key keeps the generic
-    answer. A `v: 1` host that never sent `dryRun` sees no other change.
-- `pgsql-deparser` moves from 18.3.12 to 18.4.3, an exact dependency of `@aotter/mantle` (#2065). Generated output is
-  byte-identical on the repository's fixtures. #2142 slims the compiler, kernel and Admin tooling without changing
-  generated output, so it needs no regeneration; its package-level changes are the removed `./internal/authorization`
-  export key (`./internal/*` carries no promise) and `@pgsql/types` moving to a devDependency.
-- CI now runs Bun 1.4.5 (was 1.3.14) (#2136).
-- Not verified: Bun below 1.4 is no longer exercised by CI. The Admin entry routes' field-spelling pins (#2132) ran on
-  the D1 stand-in, not on workerd D1, and #2132's own run did not include the Admin browser tests. The `main` PR path of Full
-  checks and `issue-status.yml` are unobserved until a promotion (#2130). App-only tools are still listed to a 2025-era
-  client that declared no Apps support (#2129), as in alpha.8.
-
-### Upgrading to 0.2.2-alpha.8
-
-Pin the Mantle packages to `0.2.2-alpha.8`, install `@modelcontextprotocol/server` `2.4.0` beside them if you serve
-MCP, and regenerate.
-
-- **Breaking, security fix: responses that stated no `Cache-Control` now state `private, no-store` (#2103).** Before:
-  Better Auth answers passed through `authRoutes` and MCP refusals carried no `Cache-Control`, so a shared cache in
-  front of the Worker could store them. After: they carry `private, no-store`; no replacement for the old behaviour.
-  Upgrade; an advisory will follow separately. New app shells also default every response without the header to
-  `private, no-store`; a shell copied before this release does not, so add the wrapper from
-  [The shell's default](../guides/caching.md#the-shells-default).
-- **Breaking: official MCP SDK peer (#2114, #2121).** Before: `@modelcontextprotocol/server` `2.3.1`. After: `2.4.0`
-  (exact). Both protocol eras are still served: 2025-era clients, hosts that forward the 2025 form and existing
-  `smoke-kit.mjs` / `accept.mjs` copies keep working.
-- **Breaking: MCP results, calls and observations (#2114, #2121).** Each item is before → after; none has a replacement
-  to switch to.
-  - A non-object tool result on a 2026-07-28 request → sent as `structuredContent`, with the tool's `outputSchema` listed
-    whatever its root `type`. 2025-era requests are unchanged. An App called through ext-apps 2.0.4 still rejects
-    non-object `structuredContent`: give App-called tools an object output.
-  - A data value the listed `outputSchema` root does not admit → the call fails as `INTERNAL_ERROR` before it is
-    recorded.
-  - `tools/call` of an App-only tool from a client that declared capabilities without MCP Apps (refused) → runs after
-    the tool's own authorization; `tools/list` still hides it.
-  - A cancelled call → recorded once as `REQUEST_CANCELLED` (499) in the completion observation and the gateway access
-    event; a request already aborted runs no step.
-  - `McpObservation` `request-refused` → adds status `400` with reason `protocol-version`, and `invocation` adds optional
-    `client` and `protocolVersion`: an exhaustive `switch` adds the new case.
-  - A 2025-era batch of more than 100 messages → refused with 400 before any `authorize` call.
-- **Breaking: Admin's `Brand` renders before sign-in (#2117).** Before: `components.Brand` rendered only at the top of
-  the console sidebar. After: it also renders on sign-in, OAuth consent, connected apps, access denied, error and the
-  loading frame, told where by `BrandProps.placement`; return `null` for a placement to keep that page unbranded. A
-  `BrandProps` value the application builds itself (`renderDefault({ title, href })`) now needs `placement`: spread the
-  props received (`renderDefault({ ...props, title })`). A lower slot layer now receives the props passed to
-  `renderDefault` over the slot's own props. Core's consent pages take `authRoutes({ brand })`.
-- **Breaking: a Store write naming one column in two spellings is refused (#2123).** Before: `{ title, Title }` was
-  accepted on SQLite and D1, which stored one of the values. After: `INPUT_VALIDATION_FAILED`; no replacement, pass each
-  column once. A declared spelling (`orgId`) now reaches its storage column on all four targets.
-- **Breaking: a flat `restrict` naming one column twice in different case is refused (#2118).** Before:
-  `org IN auth.user('a') AND ORG IN auth.user('b')` generated. After: generation refuses it as a duplicate; no
-  replacement, name the column once. `restrict` now accepts `OR` and parentheses between its terms.
-- **Breaking: a result wrapper outside MCP answers its data (#2098).** Before: a tool or handler returning
-  `withResultMeta(...)` answered `{ data, _meta }` on Admin's WebMCP route, a REST route and an Admin operation. After:
-  those answer the data alone (WebMCP also forwards `content`); no replacement, `_meta` is for MCP Apps only.
-- **Breaking: `ResultWith` / `ResultWithMeta` carry a type brand (#2104).** Before: a hand-written `{ data, _meta }`
-  literal typechecked as `ResultWithMeta<T>`. After: it does not; use `withResult(data, { _meta })`. `withResultMeta`
-  still works.
-- MCP results carry native content blocks through `withResult(data, { content, _meta })`, from a hand-written tool or a
-  ref Procedure handler; `ToolCall` gains `signal` and `progress` (#2098, #2104). `mantle bundle` writes content-hashed
-  browser entries mapped by `@aotter/mantle/client-assets`, a one-day `immutable` rule for them and for
-  `/admin/assets/*` (shorten your own one-year rule), and React's production build (#2093, #2098, #2103, #2112).
-  `mantle generate` always emits `generated/mcp.ts`, so `generate --check` reports it until you regenerate (#2112).
-- `web()` emits `hreflang` only for a single locale, names the Markdown alternate only when the row has Markdown, and
-  sends a canonical `Link` on `.md` answers (#2093, #2115 in #2117). Composed text in View rows is typed `string`
-  (#2093). `@aotter/mantle-ui` exports `theme.css`; kit Tabs match Radix's data attributes (#2093, #2103).
-  `mantle generate --auth` resolves a `.ts` module's `./x.js` imports under Node (#2117). OAuth discovery makes no
-  database round trip (#2103). The handbook adds Core's boundary, application-owned migrations and scheduling (#2120,
-  #2122).
-- Not verified: request cancellation on a deployed Worker in the 2025 era and the cancelled access event after a
-  disconnect, third-party MCP clients beyond the official SDK, Hyperdrive pooling, and `_headers` on a dispatched user
-  Worker. App-only tools stay listed to a 2025-era client that declared no Apps support, as in alpha.7.
-
-### Upgrading to 0.2.2-alpha.7
-
-Pin the Mantle packages to `0.2.2-alpha.7` and regenerate.
-
-- **Breaking: native database access in ref handlers and transaction callbacks is opt-in (#2070).**
-  Before, the SDK handed each ref handler and transaction callback the native database handle.
-  After, only a Procedure with `spec.db: native` receives it. Declare that capability where direct SQL is
-  necessary. Use `ctx.store` and the transaction's Store argument for row-scoped operations.
-- **Breaking: Better Auth peer alignment (#2071).** Move the alpha.6 Better Auth pins at `1.7.14`
-  to `1.7.16` together, including the OAuth provider. The local issuer now verifies
-  JWKS in process.
-- `matchTarget` accepts a minimal structural description and returns the supplied metadata type (#2069).
-  Admin exports the shared MCP App host-context helper and safe-area variables (#2073).
-- Cookie-cache hits retain the current-user lookup, and anonymous OAuth discovery retains the rate limiter (#2074).
-  The wiring graph marks Store-only Procedures separately (#2076). The Hyperdrive guide records the measured
-  connection costs and stale-plan outcomes (#2077).
-- `upload_media` lists the configured purposes on an unknown-purpose error (#2078).
-  Generated View and Procedure inputs support property counts and constrained names (#2079).
-  Admin MCP Apps preserve the charset, route links through the host, and provide copyable CSV when
-  downloads are unavailable (#2080). Host-specific checks are tracked in #1119.
-
-### Upgrading to 0.2.2-alpha.6
-
-Pin the selected packages to `0.2.2-alpha.6` and regenerate.
-
-- **Breaking: the manual upload card's default tool changes (#2051).** Before: `mediaUploadCard()` rendered and called
-  `upload_media`. After: it renders and calls `open_media_upload`, with the same prepare/commit arguments. Replace
-  hard-coded default card tool names with `open_media_upload`. Explicit `mediaUploadCard({ tool: "upload_media", ... })`
-  keeps the earlier combined behavior, where Apps-capable requests move PUT targets into UI-only metadata.
-- **Direct upload keeps its targets visible to agents (#2051).** `upload_media` is independent of the optional card.
-  Host-caller 4xx responses preserve their ContractError message, and `describe` includes media tool metadata and actual
-  descriptions. The optional card shows file limits, progress, error and completion states; its layout separates
-  file selection from Upload (#2053). It uses shared UI tokens, follows host or system themes and the Admin language
-  list, and preserves the selected file and progress across theme or locale changes (#2057, #2058). An uncertain save
-  retries commit with the same upload ID. A rejected staged file can be replaced. Real Claude card completion remains
-  unverified.
-- **Ref handlers declare native database access (#2049).** Set `spec.db: native` when using `ctx.db` or its transaction
-  callback's native handle. In this warning phase undeclared native access still works and logs `NATIVE_DATABASE_UNDECLARED`; `describe` exposes
-  `_meta.nativeDatabase`, but `false` does not prove a handler cannot access the native database. Store row policies do
-  not protect native SQL. See [Procedure](../reference/procedure.md).
-
-- **Localized labels inside tool schemas are listed as strings (#2047).** A `title` or `description` given as a locale
-  map inside a Procedure or View input (or a tool's output schema) reached MCP clients, WebMCP hosts and `describe`
-  targets as a map, which JSON Schema 2020-12 forbids, so a client that validates tool schemas dropped the tool. MCP
-  and the Admin WebMCP catalogue and its refusals now list the server locale's string; `describe` lists English, like
-  a target's own title. Admin still reads the maps, and `targetHash` does not change. For `describe` consumers: a
-  report saved before this change, diffed against one generated after it, shows `inputSchema` changed on every target
-  with localized labels (`schemaVersion` stays 1); afterwards, a label-only edit in a locale other than English shows
-  as `behavior` changed. `@aotter/mantle/mcp/labels` exports the rule (`localizedSchema`, `localizedText`) for
-  schemas an application publishes itself.
-- **Built-in auth pages share Admin language and appearance controls (#2045, #2058).** Standalone OAuth consent and
-  connected-apps pages use the shared tokens and Admin language list, including right-to-left layouts. Preference
-  changes preserve the signed consent query, and the pages remain script-free. No application changes are required.
-
-### Upgrading to 0.2.2-alpha.5
-
-Pin the selected packages to `0.2.2-alpha.5` and regenerate. One breaking change; everything else is additive or a fix.
-
-- **Media purposes take any file type (#2035).** A purpose slot may name `*/*` or `type/*`, with a `maxBytes` entry of
-  its own; `upload_media` (directly, by `sourceUrl` or `file`), the upload card and the Admin media library take a PDF,
-  an archive or any other file such a purpose allows, and the library shows it as a file tile. Image purposes behave as
-  before. By default HTML, XML (SVG among them) and JavaScript are refused and a type not shown inline is delivered as
-  an attachment; `r2MediaStorage({ safeDelivery: false })` turns that off for an isolated media origin
-  ([safe delivery](../cloudflare/media-r2.md#safe-delivery)). A purpose with a wildcard or a type that is not an image
-  requires `X-Content-Type-Options: nosniff` on the media origin at the edge, and that origin must never be in a
-  `script-src` or `style-src` or a path of the application's own origin. Upload URLs now sign their `Content-Type`
-  (`S3Signer.sign` receives `headers` and `allHeaders: true`), so a PUT with another type is refused; an application
-  signer must sign the headers it is given. A custom `MediaStorage` must honour the `contentDisposition` that
-  `commitUpload` and `signRead` pass, or set `safeDelivery: false`; nothing changes for the image types it served
-  before. The Admin media item adds `filename`.
-- **Breaking: generation refuses a purpose type that is not a media type (#2035).** Before: a `required` token such as
-  `heic` (a shorthand Mantle does not expand) or `image/png;q=1` generated, and no upload could use that token. After:
-  generation fails with `invalid-mime` unless every token is a shorthand Mantle expands (`jpg`, `jpeg`, `png`, `webp`,
-  `avif`, `gif`, `svg`), a lowercase `type/subtype` without parameters, `type/*` or `*/*`. Replace the token with the
-  full type (`image/heic`, with its `maxBytes` key) or remove it.
-- **`sourceUrl` fetches send a `User-Agent` (#2035).** `upload_media` by `sourceUrl` now requests the file as
-  `Mantle (+https://github.com/aotter/mantle)`; hosts that refuse a request without one answered
-  `MEDIA_SOURCE_FAILED` before. Nothing to change.
-- **Generated Admin bindings typecheck for a Schema without `required` (#2032).** `generated/admin-bindings.ts`
-  failed `tsc` with TS2345 when a Schema declared no `required`. Regenerating fixes it; behaviour is unchanged.
-- **Choosing how users sign in, and the first deploy (handbook).**
-  [Choose how users sign in](../cloudflare/sign-in-methods.md) compares the email code, GitHub sign-in and email and
-  password, with a recipe for each from the `mantle init` app;
-  [before the first deploy](../cloudflare/deploy-and-operate.md#before-the-first-deploy) takes the user through the
-  Cloudflare account, `wrangler login`, the database and the secrets. No package changes; `init` still writes the email
-  code.
-- **The agent entry page says in which order to write app code (handbook).** `mantle help` now carries
-  [Write the least code](../start/agents.md#write-the-least-code): manifest before hand-written code, generated
-  bindings and the shipped Admin before your own, one home for each query and rule, and a `ponytail:` comment that
-  marks a deliberate shortcut. No code changes.
-- **`mantle bundle` builds the application's browser entries (#2038).** A `.ts` or `.tsx` file directly in `client/`
-  beside the Worker entry is built into `<assets>/assets/client/<name>.js` (esbuild, minified ES2022, `react` from the
-  app), served at `/assets/client/<name>.js` without running the Worker. Nothing changes for an app without a `client/`
-  entry. With such an entry `public/assets/client` is refused, as `public/admin` is. Reference:
-  [project and CLI](../start/project-and-cli.md#outputs).
-- **Example: public pages plus a React app (#2038).** The recipes example adds "my saved recipes", a React single-page
-  app under `/app` next to its server-rendered pages: a Schema owned by the member, a View, a Procedure with REST
-  Triggers, a `noindex` shell that is left out of the sitemap and `llms.txt`, and the checks in its `smoke.mjs`.
-  [Public pages](../guides/public-pages.md#a-single-page-app-beside-the-pages) and the agent guide point to it. Its React
-  app is `src/client/spa.tsx`, built by `mantle bundle` (above). The app shell now lists `@types/react-dom` as a dev
-  dependency, for that app's types.
-
-### Upgrading to 0.2.2-alpha.4
-
-Pin the selected packages to `0.2.2-alpha.4` and regenerate. One breaking change; everything else is additive or a fix.
-
-- **Breaking: a transaction in which a statement failed never commits (#2017).** Before: a multi-step Procedure that
-  failed after an earlier step wrote, inside an outer `store(db, caller).transaction`, could still commit that step when
-  the caller caught the error, and on PostgreSQL a transaction with a caught or unawaited failed statement could resolve
-  although nothing was written. After: such a transaction is rolled back and rejects with the failed statement's own
-  error on every client. No replacement: code that relied on the partial write must catch the failure inside its own
-  transaction or write in a separate one.
-- **Application SQL in a Store transaction (#2017).** `transaction((tx, db) => …, { isolation })` now declares its second
-  argument, the transaction's native handle, so an application runs its own SQL with generated Procedures atomically
-  without a cast. Code importing `transaction` from `@aotter/mantle/internal/driver/postgres` (0.2.2-alpha.2 and
-  alpha.3) switches to it. See [your own SQL in a Store
-  transaction](../concepts/runtime-and-adapters.md#your-own-sql-in-a-store-transaction).
-- **Removed subpaths name their replacement (#2024).** Importing `@aotter/mantle/json-body`,
-  `@aotter/mantle/driver/postgres` or `@aotter/mantle/surface` (removed in 0.2.2-alpha.2) now throws an error naming
-  the replacement instead of failing to resolve: `body` from `@aotter/mantle/rest`; `store(db, caller).transaction((tx,
-  db) => …)` for your own SQL; `convertInput` or `ContractError` from `@aotter/mantle/contracts`. The stubs ship until
-  0.2.2 and are deleted after it.
-- **The upload card stops waiting for tool input (#2021).** With `forward`, `mediaUploadCard` waited for the host's tool
-  input forever; now it waits at most `inputTimeoutMs` (5,000 ms by default), then calls without the forwarded
-  arguments. Pass `inputTimeoutMs: false` to keep waiting. A value that is not a positive integer up to 2,147,483,647
-  throws at configuration.
-- `body(request, limit?, refuse?)` from `@aotter/mantle/rest` takes an optional `refuse(message)` for its refusals; a
-  `limit` that is not a positive safe integer throws a `TypeError`. `convertInput(input, convert)` is exported from
-  `@aotter/mantle/contracts` (#2021).
-- **Typed input for a bare Procedure (#2023).** `validation/procedures/<name>.ts` also exports `input(raw)`, which
-  validates and converts a copy as the surfaces do, typed so the bare Procedure takes it with no cast; a JSON-bound
-  field is the branded `JsonText`. Existing generated input types are unchanged. See [the generated
-  surface](../reference/surface.md). `pages[].mcp.renders` in `defineAdmin` also accepts application tool names declared
-  by merging `interface AdminMcpTools` from `@aotter/mantle-admin/app`, and `checkMcpApp` from
-  `@aotter/mantle-admin/testing` takes `inspect({ tool, theme, frame })` (#2023).
-- **postgres.js: Mantle's statements are named prepared statements (#2020).** The driver now calls
-  `unsafe(text, values, { prepare: true })`; before, postgres.js sent every statement unnamed, which Hyperdrive's
-  transaction pooling does not reliably support. A client created with `prepare: false` keeps them unnamed; Bun.SQL is
-  unchanged. Before upgrading a `cloudflare-postgres` application, confirm its Hyperdrive configuration has query
-  caching disabled, as Mantle already requires. A migration that changes a prepared statement's result columns can
-  invalidate it. The direct test returned PostgreSQL `0A000`, and the Hyperdrive test closed the connection
-  (#2029). See [PostgreSQL through Hyperdrive](../cloudflare/postgres-hyperdrive.md).
-- **Better Auth on `cloudflare-postgres`: no postgres.js client per isolate (#2020).** A client kept per isolate with
-  `max: 1` fails every other request in workerd ("Cannot perform I/O on behalf of a different request"). Keep the
-  Better Auth instance per isolate and give `postgresAdapter` and `postgresBootstrapAdmin` a handle that resolves the
-  current request's client; the tested `src/db.ts` and `src/auth.ts` are in the PostgreSQL through Hyperdrive page.
-- `mantle bundle` uploads only the chunks the Worker entry can import (#2014).
-
-Not verified on a real host: Hyperdrive transaction pooling and named statements (local Wrangler connects directly).
-
-### Upgrading to 0.2.2-alpha.3
-
-Pin the selected packages to `0.2.2-alpha.3` and regenerate: generated output now marks scope-gated targets, and
-output from an earlier version refuses a service credential even there. This alpha has three breaking changes; work
-through **Breaking** below, then the rest applies without changes.
-
-- **Breaking: an application credential reaches only scope-gated targets.** A user Caller whose `credential` is
-  `api-key` or `personal-token` (what `resolveCaller`'s `resolveCredential` hook returns, and any such Caller an
-  application or a test builds, for example with `authenticatedAs`) is refused with `AUTH_DENIED` (403) on generated
-  REST, MCP and web surfaces unless the target's `requires` names a `ctx.auth.scope`, which it must then hold.
-  `ctx.user`-only and ungated targets no longer admit it, and its MCP `tools/list` shows only the tools it may call
-  (this includes `/mcp/admin` and the Admin and media tools there, which name no scope; `/admin/api` already refused
-  it). Add a `{ ctx.auth.scope: … }` to the `requires` of each target such a credential should reach; an application
-  tool composed into `mcp(...)` admits it only when the tool declares `scopes`. The hook may no longer return
-  `credential: "oauth"`; it is `UNAUTHENTICATED`. Sessions, OAuth access tokens, host and system callers, and
-  `nativeRest` routes are unchanged. (#1979)
-- **Breaking: `useHost().sendMessage` answers an outcome, not a boolean.** It resolves `"accepted"`, `"refused"` or
-  `"unknown"` (the type `HostRequestOutcome` is exported from `@aotter/mantle-admin/hooks`). `accepted`: the host
-  answered without an error, which is not proof of delivery. `refused`: the host answered with an error, does not offer
-  the request, the connection was already closed, or the text was refused before it was sent. `unknown`: a timeout, a
-  thrown error or a connection lost in flight; the host may still act on it, so do not report a failure or invite a
-  resend. Replace `if (await sendMessage(text))` with a comparison against `"accepted"`, and handle `"unknown"` as
-  neither success nor failure. A promise that resolved `false` for a timeout now resolves `"unknown"`. (#2004)
-- **Breaking: the Admin MCP App declares `tools: { listChanged: true }`, custom pages gain `useHost().registerTools` and
-  `useHost().downloadFile`, and tool names starting with `view_` are reserved.** `registerTools(tools)` registers a
-  page's own app tools over the App's connection and returns a cleanup function; `downloadFile(name, text, mimeType?)`
-  asks the host to save a text file and answers a `HostRequestOutcome`. A custom page or a `useHost` mock typed as
-  `AdminHost` must implement both members. An application that already exposes an app tool of its own named `view_…`
-  renames it, since `registerTools` refuses that prefix (and a name already registered). A host that lists the App's
-  tools now sees a capability that sends `notifications/tools/list_changed`. (#2005)
-
-Host-to-App tool calls (`tools/list` and `tools/call` on the App) and `ui/download-file` are defined in the MCP Apps
-draft specification rather than the stable `2026-01-26` text, and host support varies. **None of the host-facing
-changes in this alpha has been verified on a real host** (tracked in
-[#1119](https://github.com/aotter/mantle/issues/1119)); automated coverage runs against the official AppBridge in
-Chrome. Each one is opt-in or degrades when the host lacks the capability.
-
-- **Managed grants.** `oauthGrantRevocation({ managedGrants: true })` opts in to a stored grant that lets a user access
-  token from your own OAuth extension grant (for example the jwt-bearer grant of MCP enterprise-managed authorization)
-  pass Core's resource check with no consent screen, no browser session and no refresh token. It is off by default:
-  without it there is no table and nothing changes. With it, `mantle generate --auth` emits the `oauthManagedGrant`
-  table (add it by migration to an existing database; Core runs no DDL), and your grant handler calls
-  `issueManagedGrant` from `@aotter/mantle/auth/oauth` after it has validated the assertion, authenticated the client
-  and matched a verified user. The decision is an amendment to [ADR-0014](https://github.com/aotter/mantle/blob/v0.2.2-alpha.3/docs/adr/0014-auth-better-auth-and-multi-tenant-mcp.md);
-  see the [OAuth guide](../guides/oauth.md). (#1998)
-- **MCP App resources.** `McpAppResource.meta` adds host-defined keys to the `_meta` of the `resources/read` content
-  item (top level shallow, `ui` one key deep); the typed fields win. A generated View tool can be marked as a host
-  entry point in place, with a tested example and no new API. `adminMcpApps` and `mediaUploadCard` take
-  `fontDomains`, `prefersBorder` and `meta`; all are opt-in and declare nothing by default. See
-  [MCP Apps](../guides/mcp-apps.md). (#1995, #2006, #2009)
-- **Admin MCP App.** "Export CSV" saves the rows the App holds as `<tool>.csv` through `ui/download-file` when the host
-  offers `downloadFile`, with no server call (#1996). Three view-only app tools, `view_state`, `view_more` and
-  `view_focus`, let the model read and move the open View; none writes data (#1997). The upload card connects without
-  them.
-- **Fixes.**
-  - Parallel `view_more` calls and the "Load more" button load a page once; a page that repeats its cursor ends the
-    list; rows whose `id` is a number are listed and can be focused (#1999).
-  - Host bridge edges: the host origin is pinned only when the App is framed; the upload card does not expose the
-    `view_*` tools; recoverable app-tool cases (no View shown, an unknown id, no more rows) answer as normal results
-    that say what to call instead; `ui/message` text is normalised and refused when blank or over 8,000 characters;
-    download names are made safe; `view_more` gives up after 40 seconds (#2007).
-  - Layout: inline in the conversation the App no longer scrolls inside the frame. It shows the rows that fit and an
-    "N more" control that opens full screen, has a transparent background, 44 px touch targets on touch screens and a
-    "Back to the conversation" toggle (#2008).
-  - The packed-consumer install in the release gate retries and ignores versions published in the last 14 days (#1978).
-- **Dependencies.** The Better Auth family moves to 1.7.14 together (#1988, #2012): `better-auth`, `@better-auth/core`,
-  `@better-auth/oauth-provider`, `@better-auth/mcp`, `@better-auth/cimd` and the SDK's peer `better-auth`, with
-  `@better-auth/utils` 0.5.1. `@aotter/mantle` peers on exact versions and `@better-auth/oauth-provider` 1.7.14 needs
-  `better-auth` and `@better-auth/core` `^1.7.14`, so an application that pins its own Better Auth packages moves all of
-  them to 1.7.14 together; a mixed set fails to install under npm (ERESOLVE). The auth tables generated for SQLite, D1
-  and PostgreSQL are byte-identical to 1.7.12, so there is no auth DDL change and no migration.
-- **Docs.** The [quickstart](../start/quickstart-worker.md) starts from `mantle init` (#1980). The MCP Apps guide
-  describes the View budget by what Claude documents and gives per-host guidance (#2009).
-
-### Upgrading to 0.2.2-alpha.2
-
-Pin the selected packages to `0.2.2-alpha.2` and regenerate: output from an earlier version fails
-`mantle generate --check` as stale. This alpha removes design residue and has breaking changes; work through
-**Breaking** below, then the rest applies without changes.
-
-- **Breaking: generated-code plumbing moved.** The subpaths `authorization`, `binds`, `dialect/sqlite`,
-  `dialect/postgres`, `driver/postgres`, `driver/transaction-context`, `paging`, `publishing`, `scalars`, `store`,
-  `surface`, `sweep`, `translations`, `user-fields` and `validation` are now under `@aotter/mantle/internal/` and carry
-  no compatibility promise. Application code that imported one directly uses the documented entries instead; the
-  `UserFields` types are exported from `@aotter/mantle/contracts`.
-- **Breaking: removed exports and options.** `@aotter/mantle/json-body` and `@aotter/mantle/mcp-apps` (MCP App types
-  stay on `@aotter/mantle/mcp`); `sessionUserOf` (use `userOf`); the `fields` option on generated `rest(...)`,
-  `mcp(...)` and `web(...)` (the manifest's user fields apply as before); `mcp`'s `onRefusal` (read `onObservation`
-  events with `kind: "request-refused"`, which now carry `reason`); 23 diagnostic codes that were never raised.
-- **Breaking: the grammar accepts only what generates.** A `schedule` or lifecycle Trigger and `requires.guard` now
-  fail when the manifest is parsed, and in `mantle describe`, with the same guidance as before (wire `scheduled()`
-  yourself; check authorization in a handler). They previously failed at generation.
-- **Breaking: string inputs are well-formed text.** A string containing NUL or an unpaired surrogate is refused as
-  `INPUT_VALIDATION_FAILED` on every surface and dialect; SQLite and D1 previously accepted it. `maxLength` counts
-  code points; add `x-mantle-maxBytes` where a limit is in UTF-8 bytes.
-- **Breaking: `/admin/api` answers in the REST order.** An unknown path answers 404, a wrong method 405 with `Allow`
-  (including `OPTIONS`), and a malformed path 400, each before authentication; they were 401 or 403 for signed-out
-  or non-admin callers. For these three the error names `rest` instead of `admin`. See
-  [Native Admin](../guides/native-admin.md).
-- **Changed: MCP authorizes before it validates.** A tool's `requires` is checked before its input, so an
-  unauthorized call with invalid input reports the authorization refusal, and acquires no database handle.
-  `nativeRest` runs a route's `check`, and `authorize` when the route declares a target.
-- **MCP Apps.** `resolveMcpApps` from `@aotter/mantle/mcp/apps` returns contributors in one normal form, so an
-  application can wrap a resource without handling string-or-loader HTML itself. `adminMcpApps({ tools })` lets
-  Procedure tools render the Admin App. See [MCP Apps](../guides/mcp-apps.md).
-- **Procedures and SQL.** A step may take a `name`; a row conflict from a named step carries `step`. Refusals for a
-  View's `ORDER BY`, `CROSS JOIN` and comma joins now name the cause and the supported form (`JOIN … ON true`).
-  `uiSchema.nav.hidden: true` on a Schema with no sidebar entry is accepted.
-
-- **Upload card.** `mediaUploadCard({ tool, forward })` names the tool the card calls (default `upload_media`) and the
-  argument names it repeats from the rendering call's input on each of its calls (for example `server`). Without them,
-  the card behaves as before. See [MCP Apps](../guides/mcp-apps.md).
-- **Fixes.** While the session loads, Admin shows a neutral page frame instead of its sign-in card. A LIKE search whose
-  escaped pattern is longer than D1's 50-byte cap is refused as `INPUT_VALIDATION_FAILED` on every dialect, instead of
-  failing as `INTERNAL_ERROR` on D1: member search, Better Auth `contains`/`starts_with`/`ends_with` and Store `like`.
-  On PostgreSQL and bun-sqlite these searches previously ran; they are now refused too, so the result is the same on
-  every host. A longer media search still matches a whole id; alt and caption match only within the cap.
-
-### Upgrading to 0.2.2-alpha.1
-
-Pin the selected packages to `0.2.2-alpha.1` and regenerate. Nothing breaks, and existing configuration keeps working:
-
-- **Media tools.** `/mcp/admin` has four media tools: `upload_media`, `find_media`, `update_media` and
-  `delete_media`, plus an upload card. The seven older names still answer, marked "Deprecated, removed in 0.3".
-  A media purpose may be `visibility: "private"`: its assets carry no public URL, and `signRead` returns a
-  short-lived one. New media ids carry a per-database tag; another server's id is `MEDIA_NOT_OWNED` (404).
-- **MCP.** `discovery: "all"` gives every caller of an endpoint the same `tools/list`, and `authorize` still decides
-  each call. The Admin MCP App links at the fixed `ui://mantle-admin/admin` by default; the build's hash URI still
-  answers.
-- **Admin sign-in seams.** A `{ kind: "passkey" }` method, a `SignIn` component slot and an `onSignedIn` step; Admin
-  ships no passkey experience of its own.
-- **Static files at the edge.** A newly generated `run_worker_first` excludes `/admin/assets/*` and `/assets/*`, and
-  `mantle bundle` copies `public/` into the assets directory. Existing `run_worker_first` settings are not changed;
-  in a new config an app route under `/assets/` no longer reaches the Worker.
-- **Fixes.** OTP failures are normalised at the HTTP boundary; a Schema check refusal is no longer reported as a stale
-  write; media search by id works on D1.
-- **Docs.** [Bulk seeding](../reference/schema.md#seed-in-bulk), changing another member's row with an inline
-  `author_id = auth.uid()` ([SQL patterns](../guides/sql-patterns.md)), and a waiting list in the club-events example.
+The built-in Admin page and its MCP App exceed the
+[100 KB first-load JavaScript target](../guides/size-and-startup.md#native-admin-baselines). Admin tables can
+require horizontal scrolling on a narrow display. Optional checkbox inputs start unchecked and an untouched
+field preserves the stored value; read the reviewed snapshot before selecting a new state. Some 2025-era MCP
+clients still list App-only tools without declaring Apps support (#2129). The release uses the documented
+authorization boundary for all tool calls.
 
 ## 0.2.1 (2026-10-30)
 
