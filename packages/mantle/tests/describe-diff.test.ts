@@ -232,6 +232,14 @@ test("fingerprints: presentation is an explicit list that moves exposure, never 
     expect([field, moved(before, after, "procedure:rename-order")]).toEqual([field, exposure()]);
     expect([field, moved(before, after, "rest:POST /api/orders/rename")]).toEqual([field, same]);
   }
+  // A non-English edit leaves the resolved English text alone; the pin must still see it, as formula 1 did.
+  for (const field of ["title", "description"] as const) {
+    const a = copy(plan),
+      b = copy(plan);
+    a.procedures["rename-order"][field] = { en: "Rename", fr: "Renommer" };
+    b.procedures["rename-order"][field] = { en: "Rename", fr: "Changer le nom" };
+    expect([field, moved(await prints(a), await prints(b), "procedure:rename-order")]).toEqual([field, exposure()]);
+  }
   function exposure() {
     return { behavior: false, exposure: true, pin: true };
   }

@@ -69,8 +69,12 @@ const behaviorPayload = (plan: RuntimePlan, d: TargetDefinition) => ({
   trustedOnly: d.trustedOnly,
 });
 
+/**
+ * The declared presentation fields stay whole under `declared`: the resolved `title`/`description` below are English
+ * only, so spreading them over the declaration would drop every other locale from the pin.
+ */
 const presentation = (d: TargetDefinition) => ({
-  ...d.presentation,
+  declared: d.presentation,
   title: d.title,
   description: d.description,
   annotations: d.annotations,
