@@ -80,15 +80,7 @@ export function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerMan
   }
   const target = s["target"] as Record<string, unknown> | undefined;
   const targetsView = typeof target === "object" && target !== null && Object.hasOwn(target, "view");
-  if (targetsView && (sourceKind !== "http" || source["method"] !== "GET")) {
-    throw new ManifestParseError(
-      "A Trigger targeting a View must use source { kind: http, method: GET }.",
-      idx,
-      "/spec/source",
-    );
-  }
-  if (sourceKind === "http") validateHttpSource(source, idx, targetsView ? VIEW_TRIGGER_METHODS : V01_HTTP_METHODS);
-  else validateMcpSource(source, idx);
+  // The target's shape is checked before the source, so a doubled or invalid target is reported as such on any source.
   if (targetsView) {
     const view = target!["view"];
     if (Object.hasOwn(target!, "procedure") || typeof view !== "string" || view.length === 0) {
@@ -98,7 +90,17 @@ export function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerMan
         "/spec/target",
       );
     }
-  } else if (!target || typeof target["procedure"] !== "string") {
+  }
+  if (targetsView && (sourceKind !== "http" || source["method"] !== "GET")) {
+    throw new ManifestParseError(
+      "A Trigger targeting a View must use source { kind: http, method: GET }.",
+      idx,
+      "/spec/source",
+    );
+  }
+  if (sourceKind === "http") validateHttpSource(source, idx, targetsView ? VIEW_TRIGGER_METHODS : V01_HTTP_METHODS);
+  else validateMcpSource(source, idx);
+  if (!targetsView && (!target || typeof target["procedure"] !== "string")) {
     throw new ManifestParseError("Trigger.spec.target.procedure is required (string)", idx, "/spec/target/procedure");
   }
   rejectUnknownKeys(target!, ["procedure", "view"], idx, "/spec/target");
