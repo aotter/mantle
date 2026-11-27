@@ -384,3 +384,65 @@ test("REST GET View Trigger: path parameter, filters, paging, auth and strict re
     await rm(dir, { recursive: true, force: true });
   }
 });
+// A typed path parameter is coerced by the View's own reader, percent-decoded first; a bad value is refused before any read.
+test("REST GET View Trigger: an integer path parameter is coerced, and refused before any read", async () => {
+  const text = `${source}---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: note-versions}
+spec:
+ surface: public
+ input: {type: object, required: [version], properties: {version: {type: integer}}, additionalProperties: false}
+ sql: SELECT id,title FROM notes WHERE version=input.version ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: note-versions-get}
+spec:
+ source: {kind: http, method: GET, path: '/api/versions/{version}'}
+ target: {view: note-versions}
+`;
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "rest.yaml", text }]),
+    dir = await mkdtemp(join(tmpdir(), "mantle-rest-get-typed-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    for (const [id, version] of [
+      ["a", 1],
+      ["b", 2],
+    ] as const)
+      db.query("INSERT INTO notes(id,version,created_at,updated_at,title) VALUES (?,?,0,0,'t')").run(id, version);
+    let reads = 0;
+    const counted = new Proxy(db, {
+      get(target, key) {
+        if (key === "query" || key === "prepare") reads++;
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { rest } = await import(join(dir, "rest.ts")),
+      fetch = rest({ db: () => counted, caller: async () => user() });
+    const invalid = { code: "INPUT_VALIDATION_FAILED", path: "views/note-versions/input/version" };
+    for (const row of [
+      ["/api/versions/1", 200, ["a"], true],
+      ["/api/versions/%32", 200, ["b"], true],
+      ["/api/versions/3", 200, [], true],
+      ["/api/versions/x", 400, invalid, false],
+      ["/api/versions/1.5", 400, invalid, false],
+      ["/api/versions/%20", 400, invalid, false],
+      ["/api/versions/1?version=1", 400, invalid, false],
+    ] as const) {
+      reads = 0;
+      const response = await fetch(new Request("https://app.test" + row[0]), {}),
+        json = await response.json();
+      const outcome = json.error
+        ? { code: json.error.code, path: json.error.path }
+        : json.rows.map((r: { id: string }) => r.id);
+      expect([row[0], response.status, outcome, reads > 0]).toEqual([...row]);
+    }
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
