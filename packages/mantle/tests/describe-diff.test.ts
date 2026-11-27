@@ -306,6 +306,33 @@ test("diff: a URI-only REST move is one exposure line; the path-only Trigger mov
   }
 });
 
+test("diff: equal URI-only move candidates pair one-to-one in id order", async () => {
+  const two = (a: string, b: string) =>
+    base +
+    `---\n${H}kind: Trigger\nmetadata: {name: rename-a}\nspec: {source: {kind: http, method: POST, path: ${a}}, target: {procedure: rename-order}}\n` +
+    `---\n${H}kind: Trigger\nmetadata: {name: rename-b}\nspec: {source: {kind: http, method: POST, path: ${b}}, target: {procedure: rename-order}}\n`;
+  const changes = diffApp(
+    await describeApp(await compile(two("/api/orders/a", "/api/orders/b"))),
+    await describeApp(await compile(two("/api/orders/c", "/api/orders/d"))),
+  );
+  expect(changes.filter(c => c.id.startsWith("rest:POST /api/orders/") && c.field !== "triggers")).toEqual([
+    {
+      id: "rest:POST /api/orders/c",
+      field: "exposure",
+      direction: "changed",
+      before: "rest:POST /api/orders/a",
+      after: "rest:POST /api/orders/c",
+    },
+    {
+      id: "rest:POST /api/orders/d",
+      field: "exposure",
+      direction: "changed",
+      before: "rest:POST /api/orders/b",
+      after: "rest:POST /api/orders/d",
+    },
+  ]);
+});
+
 test("diff: a move that also renames {k} is not a URI-only move", async () => {
   const text = withGet
     .replace('path: "/api/docs/{id}"', 'path: "/api/docs/{doc}"')

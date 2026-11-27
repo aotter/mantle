@@ -232,7 +232,7 @@ function uriMoves(old: Map<string, DescribeTarget>, next: Map<string, DescribeTa
     added = [...next.keys()].filter(id => !old.has(id) && restMethod(id)).sort();
   for (const from of gone) {
     const key = moveKey(old.get(from)!);
-    const to = key && added.find(id => ![...moves.values()].includes(id) && moveKey(next.get(id)!) === key);
+    const to = key && added.find(id => !moves.has(id) && moveKey(next.get(id)!) === key);
     if (to) moves.set(to, from);
   }
   return moves;
