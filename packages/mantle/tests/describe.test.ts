@@ -510,3 +510,73 @@ test("@aotter/mantle/describe exports only matchTarget and statically loads no c
           })());
   expect(visit(entry)).not.toMatch(/libpg-query|from\s*"yaml"|build\/compiler|import\(/);
 });
+
+// Compatibility baselines for #2174: targetHash formula v1 as literal values, and a saved v1 report
+// (`fixtures/describe-v1-report.json`, the user-fields fixture on D1) that later readers must keep reading.
+const v1Pins: Record<string, string> = {
+  "procedure:delete-doc": "080c2bd858f12a8f2b6be5910fffd850b461b9e479ee2be429fa5ee7bf9a4b84",
+  "procedure:rename-doc": "1c203344691a8b94d8a812f043ddc3516480144cea905bd6ef23e6be60c461a6",
+  "procedure:rename-order": "79a02d3163bce5b2904aace97637de252b78e22dd668479e7408589660801116",
+  "rest:GET /api/views/my-doc": "f7a9967fc595e559850faed515d56e6b4d35dbc4d627276b1004027042c1657d",
+  "rest:GET /api/views/my-docs": "e7d09a437ee82204697f5abe23eac63f71fee1c518c20b220a63fe68087964ca",
+  "rest:POST /api/orders/rename": "c93521e00b4e37e0e3003d4b703441378c5bf371f13b3683a8541063d9dae4db",
+  "view:all-orders": "d93b1ba64588ff8a211d0d2454ce7e51c5cb7b9419c15eb7780ad5666577135a",
+  "view:member-docs": "ffffaba4d59a3294a1c1c43815fa2d1adb2680905462bff5b912f0eeae80620c",
+  "view:my-doc": "28f9dfaf1adc4a34474f21eb7a2f7ec640e51dc557dbe7c0c8e43029d3584173",
+  "view:my-docs": "50ebe9c793901a6e441af47191a1d5ad4743d75910e25eef20648e96009b472a",
+  "view:notes-list": "96458b23f893dae785c84d0e60622abad5294b9868036efeb405524d00379cb2",
+  "view:regional-orders": "5435153a1306380044f911bc1d0e1ba1a4eab8f45c3b32b20b73ed589d24dc93",
+  "view:tier-orders": "f8422b2e0348c542cbff456a5e39a308650c65b5e225392e870746bc84da2d3a",
+  "admin:GET /entries": "62ea8126ab37608dff1588b73422302e89ed9accacf06203ea50e4202f404ca0",
+  "admin:POST /operations/:name": "6c0a12174a0779b96732bb446170cbcd7ec8053675087d28778cc93d2dcd734c",
+  "admin:tool:find_media": "d66331e2aa742ee8c3a4faf5e805f51014debc0f85f51b1e57e7594b5ab6840e",
+};
+const savedV1 = async () =>
+  JSON.parse(await readFile(new URL("fixtures/describe-v1-report.json", import.meta.url), "utf8")) as Awaited<
+    ReturnType<typeof describeApp>
+  >;
+
+test("targetHash formula v1 keeps its literal values, and the saved v1 report carries them", async () => {
+  const report = await describeApp(await fixture()),
+    saved = await savedV1();
+  for (const [id, hash] of Object.entries(v1Pins)) {
+    expect([id, target(report, id).targetHash]).toEqual([id, hash]);
+    expect([id, target(saved, id).targetHash]).toEqual([id, hash]);
+  }
+});
+
+test("the saved v1 report equals today's report and diffApp reads it in both directions", async () => {
+  const report = JSON.parse(JSON.stringify(await describeApp(await fixture()))),
+    saved = await savedV1();
+  expect(saved.schemaVersion).toBe(1);
+  expect("targetHashVersion" in saved).toBe(false);
+  expect(report).toEqual(saved);
+  expect(diffApp(saved, saved)).toEqual([]);
+  expect(diffApp(saved, report)).toEqual([]);
+  expect(diffApp(report, saved)).toEqual([]);
+});
+
+test("matchTarget resolves the saved v1 report as it resolves today's report", async () => {
+  const { matchTarget } = await import("../dist/domain/describe/index.js");
+  const report = JSON.parse(JSON.stringify(await describeApp(await fixture()))),
+    saved = await savedV1();
+  const rows: [Parameters<typeof matchTarget>[1], string | null][] = [
+    [{ surface: "rest", method: "GET", path: "/api/views/my-docs" }, "rest:GET /api/views/my-docs"],
+    [{ surface: "rest", method: "HEAD", path: "/api/views/my-docs" }, "rest:GET /api/views/my-docs"],
+    [{ surface: "rest", method: "GET", path: "/api/views/my-doc" }, "rest:GET /api/views/my-doc"],
+    [{ surface: "rest", method: "POST", path: "/api/orders/rename" }, "rest:POST /api/orders/rename"],
+    [{ surface: "rest", method: "HEAD", path: "/api/orders/rename" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/orders/rename" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/views/all-orders" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/orders/5" }, null],
+    [{ surface: "admin", method: "GET", path: "/admin/api/entries" }, "admin:GET /entries"],
+    [{ surface: "mcp", tool: "my_docs", path: "/mcp" }, "view:my-docs"],
+    [{ surface: "mcp", tool: "rename_order", path: "/mcp/admin" }, "procedure:rename-order"],
+    [{ surface: "mcp", tool: "find_media", path: "/mcp/admin" }, "admin:tool:find_media"],
+    [{ surface: "mcp", tool: "all_orders", path: "/mcp" }, null],
+  ];
+  for (const [request, id] of rows) {
+    expect([request, matchTarget(saved, request)?.id ?? null]).toEqual([request, id]);
+    expect([request, matchTarget(report, request)?.id ?? null]).toEqual([request, id]);
+  }
+});

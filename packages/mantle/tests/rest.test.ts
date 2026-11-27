@@ -205,3 +205,60 @@ test("REST-only startup references exposed operations within the existing Worker
     await rm(dir, { recursive: true, force: true });
   }
 });
+// Legacy behavior pinned for #2174: the generated `/api/views/<name>` route keeps first-value-wins, ignores unknown
+// query keys, silently clamps a large limit and answers HEAD; write-Trigger paths answer only their method.
+test("REST legacy table: View route query reading, HEAD, 405 and NOT_FOUND", async () => {
+  const text = source.replace(
+    "sql: SELECT id,title FROM notes ORDER BY id",
+    "input: {type: object, required: [title], properties: {title: {type: string}}, additionalProperties: false}\n sql: SELECT id,title FROM notes WHERE title=input.title ORDER BY id",
+  );
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "rest.yaml", text }]),
+    dir = await mkdtemp(join(tmpdir(), "mantle-rest-legacy-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    for (const id of ["a", "b", "c"])
+      db.query("INSERT INTO notes(id,version,created_at,updated_at,title) VALUES (?,1,0,0,'t')").run(id);
+    const { rest } = await import(join(dir, "rest.ts")),
+      fetch = rest({ db: () => db, caller: async () => ({ kind: "anonymous" }) });
+    const all = ["a", "b", "c"],
+      invalid = (path: string) => ({ code: "INPUT_VALIDATION_FAILED", path: "views/notes/" + path });
+    // [method, path, status, Allow header, rows or error]
+    const rows: [string, string, number, string | null, string[] | { code: string; path: string } | null][] = [
+      ["GET", "/api/views/notes?title=t", 200, null, all],
+      ["GET", "/api/views/notes?title=t&title=x", 200, null, all],
+      ["GET", "/api/views/notes?title=x&title=t", 200, null, []],
+      ["GET", "/api/views/notes?title=t&unknown=1", 200, null, all],
+      ["GET", "/api/views/notes?title=t&limit=1&limit=2", 200, null, ["a"]],
+      ["GET", "/api/views/notes?title=t&limit=100000", 200, null, all],
+      ["GET", "/api/views/notes?title=t&cursor=", 200, null, all],
+      ["GET", "/api/views/notes/?title=t", 200, null, all],
+      ["GET", "/api/views/notes?title=t&limit=0", 400, null, invalid("limit")],
+      ["GET", "/api/views/notes?title=t&limit=-1", 400, null, invalid("limit")],
+      ["GET", "/api/views/notes?title=t&limit=x", 400, null, invalid("limit")],
+      ["GET", "/api/views/notes?title=t&cursor=bogus", 400, null, invalid("cursor")],
+      ["GET", "/api/views/notes", 400, null, invalid("input/title")],
+      ["HEAD", "/api/views/notes?title=t", 200, null, null],
+      ["POST", "/api/views/notes?title=t", 405, "GET", { code: "METHOD_NOT_ALLOWED", path: "rest" }],
+      ["GET", "/api/notes/a", 405, "PUT", { code: "METHOD_NOT_ALLOWED", path: "rest" }],
+      ["HEAD", "/api/notes/a", 405, "PUT", { code: "METHOD_NOT_ALLOWED", path: "rest" }],
+      ["DELETE", "/api/notes/a", 405, "PUT", { code: "METHOD_NOT_ALLOWED", path: "rest" }],
+      ["GET", "/api/unknown", 404, null, { code: "NOT_FOUND", path: "rest" }],
+      ["GET", "/api/views/secret", 404, null, { code: "NOT_FOUND", path: "rest" }],
+    ];
+    for (const row of rows) {
+      const [method, path] = row,
+        response = await fetch(new Request("https://app.test" + path, { method }), {}),
+        body = await response.text(),
+        json = body ? JSON.parse(body) : null;
+      const outcome = json?.error
+        ? { code: json.error.code, path: json.error.path }
+        : (json?.rows?.map((r: { id: string }) => r.id) ?? null);
+      expect([method, path, response.status, response.headers.get("allow"), outcome]).toEqual(row);
+    }
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
