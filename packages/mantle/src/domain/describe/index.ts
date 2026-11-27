@@ -1,7 +1,8 @@
 import type { RuntimePlan } from "../../build/compiler.js";
 import type { PlanRestrict } from "../../build/spec/domain/model/RuntimePlan.js";
 import type { UserFieldSpec } from "../../build/spec/domain/model/UserFields.js";
-import { canonical, hashDefinition } from "./target-hash.js";
+import { canonical, fingerprinter, requirements, TARGET_HASH_VERSION } from "./target-hash.js";
+import type { RestBinding } from "../binding.js";
 import { targetDefinitions, type TargetDefinition } from "./targets.js";
 import { localizedSchema } from "../../kernel/localized-schema.js";
 export { matchTarget, type TargetRequest } from "./match.js";
@@ -17,7 +18,15 @@ export interface DescribeTarget {
     surfaces: string[];
     triggers: TargetDefinition["triggers"];
     id: string;
+    /** The runtime pin (formula `targetHashVersion`). */
     targetHash: string;
+    /** ADR-0047 §7; absent in reports from before formula 2, which readers treat as unknown. */
+    behaviorHash?: string;
+    exposureHash?: string;
+    /** Formula 1's `targetHash`, carried through the 0.2.x line for diffs across the formula change. */
+    targetHashV1?: string;
+    /** How a `rest:` entry binds a request. */
+    exposure?: RestBinding;
     readOnly: boolean;
     scope: PlanRestrict;
     restrict: PlanRestrict;
@@ -43,12 +52,10 @@ export interface DescribeTarget {
 interface Requirements {
   all: readonly (string | { readonly "ctx.auth.scope": string })[];
 }
-function requirements(d: TargetDefinition, surface: string): Requirements {
-  const all = d.requires?.auth?.all ?? [];
-  return { all: surface === "admin" && !all.includes("ctx.admin") ? ["ctx.admin", ...all] : all };
-}
 export interface AppDescription {
   schemaVersion: 1;
+  /** The `targetHash` formula; absent means 1. */
+  targetHashVersion?: number;
   access: Readonly<Record<string, UserFieldSpec>>;
   targets: DescribeTarget[];
 }
@@ -66,6 +73,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
     );
   const unscopedReads = (d: TargetDefinition) =>
     d.readSchemas.some(name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length);
+  const fingerprints = fingerprinter(plan);
   const targets = await Promise.all(
     targetDefinitions(plan).map(async d => ({
       name: d.name,
@@ -79,7 +87,8 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
         surfaces: d.surfaces,
         triggers: d.triggers,
         id: d.id,
-        targetHash: await hashDefinition(plan, d),
+        ...(await fingerprints(d)),
+        ...(d.binding ? { exposure: d.binding } : {}),
         readOnly: d.readOnly,
         scope: scope(d),
         restrict: d.restrict,
@@ -103,7 +112,14 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
       },
     })),
   );
-  return JSON.parse(canonical({ schemaVersion: 1, access: plan.access?.userFields ?? {}, targets })) as AppDescription;
+  return JSON.parse(
+    canonical({
+      schemaVersion: 1,
+      targetHashVersion: TARGET_HASH_VERSION,
+      access: plan.access?.userFields ?? {},
+      targets,
+    }),
+  ) as AppDescription;
 }
 
 export interface AppChange {

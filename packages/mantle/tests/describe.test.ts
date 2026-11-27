@@ -513,6 +513,7 @@ test("@aotter/mantle/describe exports only matchTarget and statically loads no c
 
 // Compatibility baselines for #2174: targetHash formula v1 as literal values, and a saved v1 report
 // (`fixtures/describe-v1-report.json`, the user-fields fixture on D1) that later readers must keep reading.
+// Formula 2 (ADR-0047 §7) re-pinned `targetHash` once; `targetHashV1` keeps the formula-1 values.
 const v1Pins: Record<string, string> = {
   "procedure:delete-doc": "080c2bd858f12a8f2b6be5910fffd850b461b9e479ee2be429fa5ee7bf9a4b84",
   "procedure:rename-doc": "1c203344691a8b94d8a812f043ddc3516480144cea905bd6ef23e6be60c461a6",
@@ -531,29 +532,67 @@ const v1Pins: Record<string, string> = {
   "admin:POST /operations/:name": "6c0a12174a0779b96732bb446170cbcd7ec8053675087d28778cc93d2dcd734c",
   "admin:tool:find_media": "d66331e2aa742ee8c3a4faf5e805f51014debc0f85f51b1e57e7594b5ab6840e",
 };
+const v2Pins: Record<string, string> = {
+  "procedure:delete-doc": "3213af6f9ed7e44f9c552ece639e44d72fea97e29312d32dfff0b10fc0402506",
+  "procedure:rename-doc": "9f4131b558c66f515b94e38a5cbc5d28d79ac273f6a14aaa0c5ff1be47de2126",
+  "procedure:rename-order": "a036a2f5b2c1daf2b8fae6faa0ba3ad55864562c773756be5473ecf52b3bbea3",
+  "rest:GET /api/views/my-doc": "93bddebcb947260e319b280dfce594ff738f9d87e86eea95b8cb8c8f0250932b",
+  "rest:GET /api/views/my-docs": "fdbe2651753c7aa2618bd728fef84099701178a29e963b94ced6b6f7268591b6",
+  "rest:POST /api/orders/rename": "bc9dedd955fa479e8bb3eeaede5fb821ec16686c4fd6608db10eacd12fdb032b",
+  "view:all-orders": "660bcc8097646e08e9fef89360b670defd5370f48aaaefff5b0d961a2231316a",
+  "view:member-docs": "709e6c97386aa7d85183cba728a53b24ec52dcb52c6d46d5bee14068dea89251",
+  "view:my-doc": "314165d9e0332bc9e1e138664ccfded30a8351644282212082d12875860e07d0",
+  "view:my-docs": "15e569d70062ece3c800e870b32e565cb01a4e60b7f7afe1ab79e4df2760d7c1",
+  "view:notes-list": "5eac645f936de1016df345ff4657f607dc7b96f88f45fb5d0a7f9e3707da64f2",
+  "view:regional-orders": "21c6092a24a966a884033b3e21c42d4bfb782dad5683e5e2b6b8455792fba7f0",
+  "view:tier-orders": "0857ea4f0fbb04c4a17ad4b36b4997c9c7a7956b972f4d76f62b75a306db723e",
+  "admin:GET /entries": "f3fa2f867c1f05cf50dad444d95769f96ee40dad418c0f4c1e97f77e431941a2",
+  "admin:POST /operations/:name": "7da6cc07c745d5f69b5eaf5b04618bce49a18ad571933ec623172f546eaec8f0",
+  "admin:tool:find_media": "48d311026dd97fd2218805f2c66d98cf59a5f5c9cc10b284c37ca7f739e53006",
+};
 const savedV1 = async () =>
   JSON.parse(await readFile(new URL("fixtures/describe-v1-report.json", import.meta.url), "utf8")) as Awaited<
     ReturnType<typeof describeApp>
   >;
 
-test("targetHash formula v1 keeps its literal values, and the saved v1 report carries them", async () => {
+test("targetHash formula v1 keeps its literal values as targetHashV1, and the saved v1 report carries them", async () => {
   const report = await describeApp(await fixture()),
     saved = await savedV1();
+  expect(report.targetHashVersion).toBe(2);
   for (const [id, hash] of Object.entries(v1Pins)) {
-    expect([id, target(report, id).targetHash]).toEqual([id, hash]);
+    expect([id, target(report, id).targetHashV1]).toEqual([id, hash]);
     expect([id, target(saved, id).targetHash]).toEqual([id, hash]);
   }
+  for (const [id, hash] of Object.entries(v2Pins)) expect([id, target(report, id).targetHash]).toEqual([id, hash]);
+  // Every target carries the transition value, and it is formula 1 for every one of them, not only the pinned ones.
+  for (const t of saved.targets)
+    expect([t._meta.id, target(report, t._meta.id).targetHashV1]).toEqual([t._meta.id, t._meta.targetHash]);
 });
 
-test("the saved v1 report equals today's report and diffApp reads it in both directions", async () => {
+/** A formula-2 report with only the formula-1 keys: the additive keys dropped and `targetHash` read from `targetHashV1`. */
+const asFormulaV1 = (report: Awaited<ReturnType<typeof describeApp>>) => {
+  const { targetHashVersion: _, ...rest } = structuredClone(report);
+  for (const t of rest.targets) {
+    t._meta.targetHash = t._meta.targetHashV1!;
+    for (const key of ["targetHashV1", "behaviorHash", "exposureHash", "exposure"]) delete t._meta[key];
+  }
+  return rest;
+};
+
+test("the saved v1 report equals today's report read through formula 1, and diffApp reads it", async () => {
   const report = JSON.parse(JSON.stringify(await describeApp(await fixture()))),
     saved = await savedV1();
   expect(saved.schemaVersion).toBe(1);
   expect("targetHashVersion" in saved).toBe(false);
-  expect(report).toEqual(saved);
+  expect(asFormulaV1(report)).toEqual(saved);
   expect(diffApp(saved, saved)).toEqual([]);
-  expect(diffApp(saved, report)).toEqual([]);
-  expect(diffApp(report, saved)).toEqual([]);
+  expect(diffApp(report, report)).toEqual([]);
+  expect(diffApp(saved, asFormulaV1(report))).toEqual([]);
+  // Across the formula change every pin differs; until diffApp compares targetHashV1 (#2174, next slice) each target
+  // reads as a behavior change, never as silence.
+  const expected = saved.targets.map(t => ({ id: t._meta.id, field: "behavior", direction: "changed" as const }));
+  expect(diffApp(saved, report)).toEqual(expected);
+  expect(diffApp(report, saved)).toEqual(expected);
 });
 
 test("matchTarget resolves the saved v1 report as it resolves today's report", async () => {
