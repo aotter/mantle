@@ -237,7 +237,7 @@ export async function resolveCaller(
         const { oauthProviderResourceClient } = await import("@better-auth/oauth-provider/resource-client");
         const verifier = oauthProviderResourceClient({
           options: { ...instance.options, baseURL: context.baseURL, basePath: "" },
-          $context: instance.$context,
+          $context: Promise.resolve(context),
         }).getActions();
         claims = await verifier.verifyAccessTokenRequest(request, {
           verifyOptions: { audience },
