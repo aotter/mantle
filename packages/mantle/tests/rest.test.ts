@@ -257,6 +257,16 @@ test("REST legacy table: View route query reading, HEAD, 405 and NOT_FOUND", asy
         : (json?.rows?.map((r: { id: string }) => r.id) ?? null);
       expect([method, path, response.status, response.headers.get("allow"), outcome]).toEqual(row);
     }
+    // The clamp is observable only above 500 rows: a limit past the page bound answers 500 rows and a next cursor.
+    for (let i = 0; i < 498; i++)
+      db.query("INSERT INTO notes(id,version,created_at,updated_at,title) VALUES (?,1,0,0,'t')").run(
+        "d" + String(i).padStart(3, "0"),
+      );
+    for (const path of ["/api/views/notes?title=t&limit=100000", "/api/views/notes?title=t&limit=501"]) {
+      const response = await fetch(new Request("https://app.test" + path), {}),
+        page = await response.json();
+      expect([path, response.status, page.rows.length, typeof page.nextCursor]).toEqual([path, 200, 500, "string"]);
+    }
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });
