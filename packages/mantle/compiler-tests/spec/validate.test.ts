@@ -96,20 +96,11 @@ describe("validateManifests()", () => {
       { ...scoped.spec, scope: { ownerId: "$ctx.user.id" } as never }, // the 0.1.x spelling
       {
         ...scoped.spec,
-        schema: {
-          ...scoped.spec.schema,
-          properties: {
-            ownerId: { type: "string", "x-mantle-bind": "ctx.admin" },
-          },
-        },
+        schema: { ...scoped.spec.schema, properties: { ownerId: { type: "string", "x-mantle-bind": "ctx.admin" } } },
       },
       { ...scoped.spec, uniqueIndexes: [["slug"]] },
     ]) {
-      expect(
-        validateManifests({
-          manifests: [{ ...scoped, spec } as SchemaManifest],
-        }).errorCount,
-      ).toBeGreaterThan(0);
+      expect(validateManifests({ manifests: [{ ...scoped, spec } as SchemaManifest] }).errorCount).toBeGreaterThan(0);
     }
   });
 
@@ -208,20 +199,12 @@ describe("validateManifests()", () => {
     );
     const childWithTtl: SchemaManifest = {
       ...child,
-      spec: {
-        ...child.spec,
-        ttl: { field: "expiresAt", expireAfterSeconds: 0 },
-      },
+      spec: { ...child.spec, ttl: { field: "expiresAt", expireAfterSeconds: 0 } },
     };
-    const parentWithoutTtl: SchemaManifest = {
-      ...parent,
-      spec: { ...parent.spec, ttl: undefined },
-    };
-    expect(
-      validateManifests({
-        manifests: [parentWithoutTtl, childWithTtl],
-      }).diagnostics.map(d => d.code),
-    ).toContain("SCHEMA_TTL_TRANSLATION_UNSUPPORTED");
+    const parentWithoutTtl: SchemaManifest = { ...parent, spec: { ...parent.spec, ttl: undefined } };
+    expect(validateManifests({ manifests: [parentWithoutTtl, childWithTtl] }).diagnostics.map(d => d.code)).toContain(
+      "SCHEMA_TTL_TRANSLATION_UNSUPPORTED",
+    );
   });
 });
 
@@ -652,9 +635,7 @@ spec:
   cache: { sharedMaxAge: 3600 }
 `);
     expect(result.diagnostics).toEqual([]);
-    expect((result.manifests[0] as ViewManifest).spec.cache).toEqual({
-      sharedMaxAge: 3600,
-    });
+    expect((result.manifests[0] as ViewManifest).spec.cache).toEqual({ sharedMaxAge: 3600 });
   });
 
   it.each([
