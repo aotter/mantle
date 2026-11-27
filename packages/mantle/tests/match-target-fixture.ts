@@ -77,9 +77,9 @@ export async function apps(): Promise<[string, { sourceId: string; text: string 
   ];
   for (const entry of list)
     if (!entry[1].length)
-      entry[1] = (await readdir(resolve(examples, entry[0], "manifests"))).map(file =>
-        resolve(examples, entry[0], "manifests", file),
-      );
+      entry[1] = (await readdir(resolve(examples, entry[0], "manifests")))
+        .sort()
+        .map(file => resolve(examples, entry[0], "manifests", file));
   return [
     ["precedence", [{ sourceId: "precedence.yaml", text: precedence }]],
     ...(await Promise.all(
