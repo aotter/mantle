@@ -60,7 +60,6 @@ and answers GET only. Every describe target also carries `behaviorHash` and `exp
   `@aotter/mantle/json-body` → `body` from `@aotter/mantle/rest`; `@aotter/mantle/driver/postgres` → your own SQL in
   `store(db, caller).transaction((tx, db) => …)`; `@aotter/mantle/surface` → `convertInput`, `Conversions` and
   `ContractError` from `@aotter/mantle/contracts` (`decode`: no replacement).
-- The packaged examples pin `@better-auth/cimd` `1.7.20` (#2165); the Better Auth peers are unchanged.
 
 An application without a GET View Trigger regenerates byte-identical modules except `access-targets.ts`. Not verified:
 production upgrade and soak, and a host pinning targets across the formula change outside the repository's tests.

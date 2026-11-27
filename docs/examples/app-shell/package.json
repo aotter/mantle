@@ -17,7 +17,7 @@
   "dependencies": {
     "@aotter/mantle": "0.2.3-alpha.1",
     "@aotter/mantle-ui": "0.2.3-alpha.1",
-    "@better-auth/cimd": "1.7.20",
+    "@better-auth/cimd": "1.7.16",
     "@better-auth/core": "1.7.16",
     "@better-auth/mcp": "1.7.16",
     "@better-auth/oauth-provider": "1.7.16",
