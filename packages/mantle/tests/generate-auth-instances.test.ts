@@ -110,24 +110,20 @@ test("explicit plugin mappings in every instance, each with its own schema copy,
   expect(sql(result.files)).toContain('"b_jwks"');
 });
 
-test("a mapped plugin next to the default one is refused", async () => {
-  await expect(
-    generateFromSources({
-      target: "bun-postgres",
-      sources,
-      auth: [
-        instance("a", [admin({ schema: { user: { fields: { role: "staff_role" } } } })]),
-        instance("b", [admin()]),
-      ],
-    }),
-  ).rejects.toThrow("share their schema object");
-  await expect(
-    generateFromSources({
-      target: "bun-postgres",
-      sources,
-      auth: [instance("a", [jwt()]), instance("b", [jwt({ schema: { jwks: { modelName: "b_jwks" } } })])],
-    }),
-  ).rejects.toThrow("plugin jwt");
+test("a mapped plugin next to the default one keeps each instance's own names", async () => {
+  const result = await generateFromSources({
+    target: "bun-postgres",
+    sources,
+    auth: [
+      instance("a", [admin({ schema: { user: { fields: { role: "staff_role" } } } }), jwt()]),
+      instance("b", [admin(), jwt({ schema: { jwks: { modelName: "b_jwks" } } })]),
+    ],
+  });
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  expect(sql(result.files)).toMatch(/CREATE TABLE IF NOT EXISTS "a_user" \([^;]*"staff_role" text/);
+  expect(sql(result.files)).toMatch(/CREATE TABLE IF NOT EXISTS "b_user" \([^;]*"role" text/);
+  expect(sql(result.files)).toContain('CREATE TABLE IF NOT EXISTS "jwks"');
+  expect(sql(result.files)).toContain('CREATE TABLE IF NOT EXISTS "b_jwks"');
 });
 
 // Better Auth 1.7.19+ ("Schema overrides no longer leak between instances of the same plugin"): a
@@ -153,12 +149,13 @@ test("plugins that build their schema per call may map the same name in each ins
   );
 });
 
-test("an identical explicit mapping in two instances is refused, since it cannot be told from an inherited one", async () => {
+test("an identical explicit mapping in two instances is accepted", async () => {
   const build = (prefix: string) =>
-    instance(prefix, [own(admin({ schema: { user: { fields: { banReason: "ban_reason" } } } }))]);
-  await expect(
-    generateFromSources({ target: "bun-postgres", sources, auth: [build("a"), build("b")] }),
-  ).rejects.toThrow("cannot tell an identical mapping from an inherited one");
+    instance(prefix, [admin({ schema: { user: { fields: { banReason: "ban_reason" } } } })]);
+  const result = await generateFromSources({ target: "bun-postgres", sources, auth: [build("a"), build("b")] });
+  if (!result.ok) throw Error(JSON.stringify(result.diagnostics));
+  expect(sql(result.files)).toMatch(/CREATE TABLE IF NOT EXISTS "a_user" \([^;]*"ban_reason" text/);
+  expect(sql(result.files)).toMatch(/CREATE TABLE IF NOT EXISTS "b_user" \([^;]*"ban_reason" text/);
 });
 
 test("a mapped factory result is its own schema, so it needs no copy next to a mapped copy", async () => {

@@ -52,9 +52,14 @@ updates:
           - "wrangler"
           - "@cloudflare/*"
           - "miniflare"
-      runtime-libs:
+      # One PR for the whole family: the packages peer each other at the same patch, so one of them moving alone
+      # breaks npm installs of the examples and moves the SDK's published peer by itself.
+      better-auth:
         patterns:
           - "better-auth"
+          - "@better-auth/*"
+      runtime-libs:
+        patterns:
           - "yaml"
           - "marked"
           - "zod"
