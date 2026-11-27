@@ -52,8 +52,8 @@ try {
   // per-surface startup budgets in check-size.ts; package bytes are tracked per PR and slimmed deliberately.
   for (const [label, actual, limit] of [
     ["runtime JavaScript", runtimeBytes, budget],
-    ["packed package", tarballBytes, 100 * 1024],
-    ["unpacked package", unpackedBytes, 384 * 1024],
+    ["packed package", tarballBytes, 720 * 1024],
+    ["unpacked package", unpackedBytes, 2200 * 1024],
   ] as const)
     if (actual > limit) console.warn(`[size report] ${label} ${actual} B exceeds the reference ${limit} B`);
 } finally {

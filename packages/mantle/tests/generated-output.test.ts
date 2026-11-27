@@ -52,3 +52,13 @@ test("generated output is byte-identical for every compiling (app, target) pair"
   expect(Object.keys(digests)).toEqual(Object.keys(golden));
   for (const pair of Object.keys(golden)) expect([pair, digests[pair]]).toEqual([pair, golden[pair]!]);
 }, 300_000);
+
+test("generated output does not depend on the order sources are passed", async () => {
+  for (const [name, sources] of await apps()) {
+    if (sources.length < 2) continue;
+    const run = (list: typeof sources) => generateFromSources({ target: "cloudflare-d1", sources: { sources: list } });
+    const [forward, reversed] = await Promise.all([run(sources), run([...sources].reverse())]);
+    if (!forward.ok || !reversed.ok) continue;
+    expect([name, reversed.files]).toEqual([name, forward.files]);
+  }
+}, 300_000);
