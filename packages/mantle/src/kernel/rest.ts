@@ -57,6 +57,11 @@ export interface Route<Database, Handlers = never, Env = unknown> {
   readonly convert?: Conversions;
   readonly query?: (params: URLSearchParams) => { input: Record<string, unknown> } & Paging;
   readonly page?: (db: Database, caller: Caller, input: never, paging: Paging) => Promise<unknown>;
+  /**
+   * A GET View Trigger's route: its `{name}` path parameters join the query string, and a repeated, colliding or
+   * undeclared query parameter is refused before the database is opened. It answers GET only, never HEAD.
+   */
+  readonly strict?: boolean;
   readonly params?: Readonly<Record<string, "number" | "boolean">>;
   readonly validate?: (raw: unknown) => Record<string, unknown>;
   readonly run?: (db: Database, caller: Caller, input: never, handlers: Handlers) => Promise<unknown>;
