@@ -125,8 +125,9 @@ function checkNextFolderImports() {
     removed: [],
   };
   const root = join(ROOT, "packages/mantle/src");
+  // `removed` exists only while a stub is registered (CONTRIBUTING.md, "Removed public subpaths").
   for (const [folder, reach] of Object.entries(folders))
-    for (const file of listFiles(join(root, folder), p => p.endsWith(".ts"))) {
+    for (const file of existsSync(join(root, folder)) ? listFiles(join(root, folder), p => p.endsWith(".ts")) : []) {
       for (const spec of importSpecifiers(file)) {
         if (spec.startsWith(".")) {
           const target = relative(root, join(dirname(file), spec)).split(sep)[0];

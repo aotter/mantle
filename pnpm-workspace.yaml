@@ -33,7 +33,7 @@ catalog:
   '@better-auth/utils': 0.5.1
   '@better-auth/oauth-provider': 1.7.16
   '@better-auth/mcp': 1.7.16
-  '@better-auth/cimd': 1.7.20
+  '@better-auth/cimd': 1.7.16
   playwright: ^1.64.1
   playwright-core: ^1.64.0
   # Shared toolchain — every package's devDeps.

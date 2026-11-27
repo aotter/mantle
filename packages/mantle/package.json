@@ -1,6 +1,6 @@
 {
   "name": "@aotter/mantle",
-  "version": "0.2.2",
+  "version": "0.2.3-alpha.1",
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -66,10 +66,7 @@
     "./internal/surface": "./dist/kernel/surface.js",
     "./generate/auth": "./dist/infrastructure/generateAuth.js",
     "./package.json": "./package.json",
-    "./describe": "./dist/domain/describe/public.js",
-    "./json-body": "./dist/removed/json-body.js",
-    "./driver/postgres": "./dist/removed/driver-postgres.js",
-    "./surface": "./dist/removed/surface.js"
+    "./describe": "./dist/domain/describe/public.js"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && node scripts/emit-auth-presentation.mjs && tsc -p tsconfig.lib.json && node ../../scripts/strip-comments.mjs tsconfig.lib.json && node scripts/bundle-compiler.mjs && node scripts/prune-declarations.mjs",
