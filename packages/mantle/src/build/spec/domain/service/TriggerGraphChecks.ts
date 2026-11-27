@@ -90,12 +90,6 @@ export function checkSqlHandler(p: ProcedureManifest, filePaths?: ManifestFilePa
   ];
 }
 
-/**
- * Acceptance gate for GET View Triggers (ADR-0047). While false, a View Trigger that passes every other check is refused, so no
- * build accepts a GET route that has no generated route, describe entry or access target. Removed when they are served.
- */
-const GET_VIEW_TRIGGERS_SERVED = false;
-
 /** Scalar input types a GET path parameter may bind, `null` aside (ADR-0047 §2). */
 const PATH_PARAM_TYPES = ["string", "integer", "number", "boolean"] as const;
 
@@ -104,8 +98,6 @@ export function checkTriggerRefs(
   proceduresByName: ReadonlyMap<string, ProcedureManifest>,
   viewsByName: ReadonlyMap<string, ViewManifest>,
   filePaths?: ManifestFilePaths,
-  /** Test-only: opens the acceptance gate so the real diagnostics are observable before GET View Triggers are served. */
-  options: { readonly getViewTriggersServed?: boolean } = {},
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
@@ -116,18 +108,6 @@ export function checkTriggerRefs(
     if ("view" in t.spec.target) {
       const problem = checkViewTrigger(t, t.spec.target.view, viewsByName, httpRoutes, filePaths);
       if (problem) out.push(problem);
-      else if (!(options.getViewTriggersServed ?? GET_VIEW_TRIGGERS_SERVED)) {
-        out.push(
-          validateDiagnostic({
-            code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
-            severity: "error",
-            path: manifestPath("Trigger", t.metadata.name, "/spec/target/view", filePaths),
-            value: t.spec.target.view,
-            expected: "a Trigger targeting a Procedure",
-            message: "GET View Triggers are not served by this build.",
-          }),
-        );
-      }
       continue;
     }
     const procName = t.spec.target.procedure;

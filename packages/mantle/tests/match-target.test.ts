@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describeApp, matchTarget } from "../dist/domain/describe/index.js";
 import { compilePlan, d1Dialect } from "../src/build/compiler.js";
+import { routeOrder, routePath, routeSource } from "../src/kernel/route-pattern.js";
 import { generateFromSources } from "../src/infrastructure/generate.js";
 import { writeGenerated } from "./apps/link.js";
 import { mantleProps } from "./gateway-fixture.js";
@@ -141,6 +142,14 @@ test("REST precedence is the router order, not manifest order or parameter count
   expect(id("PATCH", "/api/items/x")).toBe("rest:PATCH /api/items/:id");
   expect(id("post", "/api/items/x")).toBe("rest:POST /api/items/:id");
   expect(id("POST", "/api//items/x")).toBe(null);
+  // GET View Triggers: the literal template first, GET only; a POST on the same path keeps its Procedure route.
+  expect(id("GET", "/api/items/latest")).toBe("rest:GET /api/items/latest");
+  expect(id("GET", "/api/items/x")).toBe("rest:GET /api/items/:id");
+  expect(id("GET", "/api/items/export")).toBe("rest:GET /api/items/:id");
+  expect(id("HEAD", "/api/items/latest")).toBe(null);
+  expect(id("HEAD", "/api/items/x")).toBe(null);
+  expect(id("POST", "/api/items/latest")).toBe("rest:POST /api/items/:id");
+  expect(id("HEAD", "/api/views/item-detail")).toBe("rest:GET /api/views/item-detail");
   expect(matchTarget(describe, { surface: "mcp", tool: "item" })?.id).toBe("procedure:item");
   expect(matchTarget(describe, { surface: "mcp", tool: "item", path: "/mcp" })).toBe(null);
   expect(matchTarget(describe, { surface: "mcp", tool: "upload_media", path: "/mcp/admin" })?.id).toBe(
@@ -159,6 +168,58 @@ test("REST precedence is the router order, not manifest order or parameter count
     "admin:GET /entries/:id",
   );
   expect(matchTarget(describe, { surface: "admin", method: "GET", path: "/entries/abc" })).toBe(null);
+});
+
+// ADR-0047 mixed versions: a 0.2.2 matcher reads a newer report and treats HEAD on a custom GET path as matching, while
+// Core answers 405 before any target or data. The 0.2.2 rule is frozen here; it must stay fail-closed, never served.
+test("a 0.2.2 matcher over-approximates HEAD on a GET View Trigger; the router refuses it with 405", async () => {
+  const compiled = await compilePlan(
+    { sources: [{ sourceId: "precedence.yaml", text: precedence }] },
+    d1Dialect,
+    "operational",
+  );
+  if (!compiled.ok) throw Error(JSON.stringify(compiled.diagnostics));
+  const describe = await describeApp(compiled.plan);
+  // Frozen copy of the 0.2.2 rule: in router precedence, the first GET entry whose first variant is a View answers HEAD.
+  const headOf022 = (path: string) =>
+    describe.targets
+      .filter(t => t._meta.id.startsWith("rest:GET ") && t._meta.variants[0]?.id.startsWith("view:") === true)
+      .map(t => routePath(t._meta.id.slice(9)))
+      .sort(routeOrder)
+      .find(template => new RegExp(routeSource(template).source).test(path));
+  const generated = await generateFromSources({
+    target: "bun-sqlite",
+    sources: { sources: [{ sourceId: "precedence.yaml", text: precedence }] },
+  });
+  if (!generated.ok) throw Error(JSON.stringify(generated.diagnostics));
+  const dir = await mkdtemp(resolve(import.meta.dir, ".match-head-"));
+  try {
+    await writeGenerated(dir, generated.files);
+    let acquired = 0;
+    const rest = (await import(resolve(dir, "rest.ts"))).rest({
+      db: () => {
+        acquired++;
+        throw Error("No database");
+      },
+      handlers: {},
+    });
+    for (const path of ["/api/items/x", "/api/items/latest"]) {
+      expect([path, headOf022(path)]).toEqual([
+        path,
+        path.endsWith("latest") ? "/api/items/latest" : "/api/items/{id}",
+      ]);
+      expect(matchTarget(describe, { surface: "rest", method: "HEAD", path })).toBe(null);
+      const response = await rest(new Request("https://app.test" + path, { method: "HEAD" }), {});
+      expect([path, response.status, response.headers.get("allow")?.split(", ").includes("GET")]).toEqual([
+        path,
+        405,
+        true,
+      ]);
+    }
+    expect(acquired).toBe(0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("only whole {name} segments are parameters; Trigger paths that describe could not tell apart are refused", async () => {

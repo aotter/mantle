@@ -1155,22 +1155,15 @@ spec:
     triggerYaml(get, "{ view: order-detail }"),
   ];
 
-  it("refuses a valid GET View Trigger with the temporary gate until it is served", () => {
+  it("accepts a valid GET View Trigger and links it to its View", () => {
     const { diagnostics, linked } = validateManifests({
       manifests: parseManifests(app).manifests,
     });
-    expect(linked).toBeUndefined();
-    expect(diagnostics).toEqual([
-      expect.objectContaining({
-        code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
-        severity: "error",
-        path: "/spec/target/view",
-        message: "GET View Triggers are not served by this build.",
-      }),
-    ]);
+    expect(diagnostics).toEqual([]);
+    expect(linked?.triggers.map(t => t.manifest.spec.target)).toEqual([{ view: "order-detail" }]);
   });
 
-  it("reports the path, not the gate, when a GET View Trigger fails another check", () => {
+  it("reports the path when a GET View Trigger fails another check", () => {
     const bad = [app[0]!, triggerYaml('{ kind: http, method: GET, path: "/orders/{id}" }', "{ view: order-detail }")];
     const { diagnostics } = validateManifests({
       manifests: parseManifests(bad).manifests,
@@ -1178,20 +1171,20 @@ spec:
     expect(diagnostics.map(d => d.code)).toEqual(["TRIGGER_PATH_INVALID"]);
   });
 
-  it("does not crash mantle generate on a GET View Trigger", async () => {
+  it("generates the strict route of a GET View Trigger", async () => {
     const result = await generateFromSources({
       target: "bun-sqlite",
       sources: {
         sources: app.map((text, i) => ({ sourceId: `app-${i}.yaml`, text })),
       },
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error("expected the gate to refuse");
-    expect(result.diagnostics.map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_UNSUPPORTED"]);
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    expect(result.files["rest.ts"]).toContain('id: "rest:GET /api/orders/:id"');
+    expect(result.files["rest.ts"]).toContain("strict: true");
   });
 });
 
-// ADR-0047 §3: graph diagnostics for GET View Triggers, observed with the acceptance gate forced open.
+// ADR-0047 §3: graph diagnostics for GET View Triggers.
 describe("checkTriggerRefs — GET View Triggers", () => {
   const orderDetail = view("order-detail", "orders", {
     input: {
@@ -1224,10 +1217,8 @@ describe("checkTriggerRefs — GET View Triggers", () => {
     },
   });
   // The manifest pointer, without the `manifest:Trigger/<name>#` locator.
-  const check = (triggers: TriggerManifest[], getViewTriggersServed = true) =>
-    checkTriggerRefs(triggers, procedures, views, undefined, {
-      getViewTriggersServed,
-    }).map(d => ({
+  const check = (triggers: TriggerManifest[]) =>
+    checkTriggerRefs(triggers, procedures, views).map(d => ({
       ...d,
       path: d.path.replace(/^[^#]*#/, ""),
     }));
@@ -1461,11 +1452,8 @@ describe("checkTriggerRefs — GET View Triggers", () => {
     expect(diagnostics.map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_SURFACE"]);
   });
 
-  it("keeps the acceptance gate closed by default and only after every other check", () => {
-    const valid = getTrigger("order-get", "/api/orders/{id}");
-    expect(checkTriggerRefs([valid], procedures, views).map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_UNSUPPORTED"]);
-    expect(check([valid], false).map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_UNSUPPORTED"]);
-    expect(check([getTrigger("order-get", "/api/auth/me")], false).map(d => d.code)).toEqual(["TRIGGER_PATH_RESERVED"]);
+  it("accepts a valid GET View Trigger", () => {
+    expect(check([getTrigger("order-get", "/api/orders/{id}")])).toEqual([]);
   });
 
   it("keeps write-Trigger diagnostics unchanged", () => {

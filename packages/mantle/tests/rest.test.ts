@@ -42,6 +42,22 @@ metadata: {name: edit-http}
 spec:
  source: {kind: http, method: PUT, path: '/api/notes/{id}'}
  target: {procedure: edit}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: {name: note-titles}
+spec:
+ surface: public
+ requires: {auth: {all: [ctx.user]}}
+ input: {type: object, properties: {title: {type: string}, after: {type: string}}, additionalProperties: false}
+ sql: SELECT id,title FROM notes WHERE (input.title IS NULL OR title=input.title) AND (input.after IS NULL OR id > input.after) ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: note-titles-get}
+spec:
+ source: {kind: http, method: GET, path: '/api/titles/{title}'}
+ target: {view: note-titles}
 `;
 const user = (
   role: string | null = "admin",
@@ -267,6 +283,102 @@ test("REST legacy table: View route query reading, HEAD, 405 and NOT_FOUND", asy
         page = await response.json();
       expect([path, response.status, page.rows.length, typeof page.nextCursor]).toEqual([path, 200, 500, "string"]);
     }
+  } finally {
+    db.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+// GET View Triggers (ADR-0047): a custom GET path over the View's own reader and page, strict about its query string.
+test("REST GET View Trigger: path parameter, filters, paging, auth and strict refusals before any read", async () => {
+  const files = await generateOrThrow("bun-sqlite", [{ sourceId: "rest.yaml", text: source }]),
+    dir = await mkdtemp(join(tmpdir(), "mantle-rest-get-trigger-")),
+    db = new Database(":memory:");
+  try {
+    await writeGenerated(dir, files);
+    db.exec(files["schema.sql"]!);
+    for (const [id, title] of [
+      ["a", "t"],
+      ["b", "t"],
+      ["c", "t"],
+      ["d", "u"],
+      ["e", "a b"],
+    ] as const)
+      db.query("INSERT INTO notes(id,version,created_at,updated_at,title) VALUES (?,1,0,0,?)").run(id, title);
+    // Every statement the generated page runs goes through `query` or `prepare`.
+    let reads = 0,
+      caller: any = user(null);
+    const counted = new Proxy(db, {
+      get(target, key) {
+        if (key === "query" || key === "prepare") reads++;
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const { rest } = await import(join(dir, "rest.ts")),
+      fetch = rest({ db: () => counted, caller: async () => caller });
+    const call = async (path: string, method = "GET") => {
+      reads = 0;
+      const response = await fetch(new Request("https://app.test" + path, { method }), {}),
+        text = await response.text(),
+        json = text ? JSON.parse(text) : null;
+      return { response, json, read: reads > 0 };
+    };
+    const first = await call("/api/titles/t?limit=1");
+    const builtIn = await call("/api/views/note-titles?title=t&limit=1");
+    const notes = await call("/api/views/notes?limit=1");
+    const cursor = (json: any) => encodeURIComponent(json.nextCursor);
+    const invalid = (path: string) => ({ code: "INPUT_VALIDATION_FAILED", path: "views/note-titles/" + path });
+    const methodNotAllowed = { code: "METHOD_NOT_ALLOWED", path: "rest" };
+    // [method, path, status, Allow header, rows or error, read the database]
+    const rows: [string, string, number, string | null, string[] | { code: string; path: string } | null, boolean][] = [
+      ["GET", "/api/titles/t", 200, null, ["a", "b", "c"], true],
+      ["GET", "/api/titles/t/", 200, null, ["a", "b", "c"], true],
+      ["GET", "/api/titles/u", 200, null, ["d"], true],
+      ["GET", "/api/titles/%74", 200, null, ["a", "b", "c"], true],
+      ["GET", "/api/titles/a%20b", 200, null, ["e"], true],
+      ["GET", "/api/titles/t?after=a", 200, null, ["b", "c"], true],
+      ["GET", "/api/titles/t?after=a&limit=1", 200, null, ["b"], true],
+      ["GET", `/api/titles/t?limit=1&cursor=${cursor(first.json)}`, 200, null, ["b"], true],
+      // Cursors stay bound to the View: one from its generated route continues on the custom path.
+      ["GET", `/api/titles/t?limit=1&cursor=${cursor(builtIn.json)}`, 200, null, ["b"], true],
+      ["GET", "/api/titles/t?cursor=", 200, null, ["a", "b", "c"], true],
+      ["GET", "/api/titles/t?limit=100000", 200, null, ["a", "b", "c"], true],
+      ["GET", "/api/titles/x", 200, null, [], true],
+      ["GET", "/api/titles/t?title=u", 400, null, invalid("input/title"), false],
+      ["GET", "/api/titles/t?after=a&after=b", 400, null, invalid("input/after"), false],
+      ["GET", "/api/titles/t?limit=1&limit=2", 400, null, invalid("limit"), false],
+      ["GET", "/api/titles/t?cursor=a&cursor=b", 400, null, invalid("cursor"), false],
+      ["GET", "/api/titles/t?unknown=1", 400, null, invalid("input/unknown"), false],
+      ["GET", "/api/titles/t?limit=x", 400, null, invalid("limit"), false],
+      ["GET", "/api/titles/t?limit=0", 400, null, invalid("limit"), false],
+      ["GET", "/api/titles/t?limit=-1", 400, null, invalid("limit"), false],
+      ["GET", "/api/titles/t?cursor=bogus", 400, null, invalid("cursor"), false],
+      ["GET", `/api/titles/t?cursor=${cursor(notes.json)}`, 400, null, invalid("cursor"), false],
+      ["HEAD", "/api/titles/t", 405, "GET", methodNotAllowed, false],
+      ["POST", "/api/titles/t", 405, "GET", methodNotAllowed, false],
+      ["GET", "/api/titles", 404, null, { code: "NOT_FOUND", path: "rest" }, false],
+      ["GET", "/api/titles/t/x", 404, null, { code: "NOT_FOUND", path: "rest" }, false],
+      // The View's generated route keeps its own reading and HEAD.
+      ["GET", "/api/views/note-titles?title=t&title=u&unknown=1", 200, null, ["a", "b", "c"], true],
+      ["HEAD", "/api/views/note-titles?title=t", 200, null, null, true],
+    ];
+    for (const row of rows) {
+      const [method, path] = row,
+        { response, json, read } = await call(path, method);
+      const outcome = json?.error
+        ? { code: json.error.code, path: json.error.path }
+        : (json?.rows?.map((r: { id: string }) => r.id) ?? null);
+      expect([method, path, response.status, response.headers.get("allow"), outcome, read]).toEqual(row);
+    }
+    // The View's `requires` guards the custom path too, before any read.
+    caller = { kind: "anonymous" };
+    const anonymous = await call("/api/titles/t");
+    expect([anonymous.response.status, anonymous.json.error.path, anonymous.read]).toEqual([
+      401,
+      "views/note-titles/requires/auth/all/0",
+      false,
+    ]);
+    expect(files["rest.ts"]).toContain('id: "rest:GET /api/titles/:title"');
   } finally {
     db.close();
     await rm(dir, { recursive: true, force: true });

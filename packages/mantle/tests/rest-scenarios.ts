@@ -17,6 +17,19 @@ export async function verifyRest(fetch: (request: Request) => Promise<Response |
   assert.deepEqual(page.rows, [{ id: "a", title: "a" }]);
   const second = await request("/api/views/notes?limit=1&cursor=" + encodeURIComponent(page.nextCursor));
   assert.deepEqual(((await second!.json()) as any).rows, [{ id: "b", title: "b" }]);
+  // A GET View Trigger (ADR-0047): the View's reader and page at a custom path, strict about its query string.
+  const titles = await request("/api/titles/b?limit=1");
+  assert.equal(titles!.status, 200);
+  assert.deepEqual(((await titles!.json()) as any).rows, [{ id: "b", title: "b" }]);
+  const after = await request("/api/titles/c?after=a");
+  assert.deepEqual(((await after!.json()) as any).rows, [{ id: "c", title: "c" }]);
+  for (const [path, method, status] of [
+    ["/api/titles/b?title=c", "GET", 400],
+    ["/api/titles/b?after=a&after=b", "GET", 400],
+    ["/api/titles/b?unknown=1", "GET", 400],
+    ["/api/titles/b", "HEAD", 405],
+  ] as const)
+    assert.equal((await request(path, method))!.status, status, `${method} ${path}`);
   const edit = { title: "x", version: 1 },
     editor = { "x-role": "admin" };
   for (const [path, method, body, headers, status] of [
