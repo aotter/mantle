@@ -83,7 +83,12 @@ export function parseManifestSources(
   return {
     ok: true,
     value: Object.freeze({
-      entries: Object.freeze(parsed.entries),
+      // Sorted by source id (stable, by code unit) so the generated output does not depend on the order sources are passed.
+      entries: Object.freeze(
+        parsed.entries.sort((a, b) =>
+          a.source.sourceId < b.source.sourceId ? -1 : a.source.sourceId > b.source.sourceId ? 1 : 0,
+        ),
+      ),
     }) as ParsedManifestSet,
     diagnostics: parsed.diagnostics,
   };

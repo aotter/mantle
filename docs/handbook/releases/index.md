@@ -43,6 +43,9 @@ Pin the three Mantle packages to `0.2.3-alpha.2` and move Better Auth with them.
   `@better-auth/test-utils` included) to exact `1.7.20` together, `@better-auth/utils` stays `0.5.1`; no replacement
   for `1.7.16`. The auth schema is unchanged, so no migration. An OAuth issuer configured with `http` on a non-loopback
   host is no longer advertised as `https`: configure its public HTTPS address.
+- **Generated output no longer depends on source order.** `mantle generate` reads manifests in the order of their
+  paths, whatever order the command line or a shell glob lists them in. An application that passed its manifests in
+  another order regenerates once: declarations move inside the generated files, and `access-targets.ts` is unchanged.
 
 ### Upgrading to 0.2.3-alpha.1
 
