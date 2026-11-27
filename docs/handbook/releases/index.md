@@ -32,6 +32,39 @@ Pin every package you use to the same exact version and upgrade them together.
 From 0.1.x, follow [Upgrade 0.1 to 0.2](upgrade-0.1-to-0.2.md) instead: a new database, a reviewed and rehearsed data
 move, and never booting 0.2 against a 0.1.x database.
 
+## 0.2.3 — in preparation
+
+### Upgrading to 0.2.3-alpha.1
+
+Pin the three Mantle packages to `0.2.3-alpha.1`, upgrade `@aotter/mantle/describe` wherever a gateway uses it at the
+same time as Core, and regenerate with your application's command: every generated `access-targets.ts` value changes.
+
+New: a Trigger can target a public View, `source: { kind: http, method: GET, path: /api/orders/{id} }` with
+`target: { view: order-detail }`, giving it a second, resource-shaped route beside `GET /api/views/<name>` (#2176,
+ADR-0047; [GET Triggers for a View](../reference/trigger.md#get-triggers-for-a-view)). The route reuses the View's
+input reader, `requires`, scope and `restrict`, refuses ambiguous or unknown query keys with 400 before any data read,
+and answers GET only. Every describe target also carries `behaviorHash` and `exposureHash`.
+
+- **Breaking: `targetHash` formula 2 (#2176).** Every `_meta.targetHash` value, and so every value in the generated
+  `access-targets.ts`, formula 1 → formula 2 (`hash(behaviorHash, exposureHash)`); regenerate, and a host re-reads
+  describe after upgrading. A host still holding a formula-1 pin gets 412 `TARGET_HASH_MISMATCH` before any data. The
+  formula-1 value stays readable as `_meta.targetHashV1`, and `targetHashVersion` is `2`.
+- **Breaking: describe diff results (#2176).** An http Trigger whose path alone changed, `triggers` `widened` →
+  `triggers` `changed`; a `rest:` target that only moved, one removed and one added target → one `exposure` `changed`
+  record with the old and new ids; no replacement. A diff across the formula change compares formula 1 on every
+  target ([describe](../reference/describe.md)).
+- **Breaking: an older `matchTarget` and GET View Triggers (#2176).** An older matcher over a report declaring GET View
+  Triggers matches `HEAD` on those paths, while Core answers 405 with `Allow: GET` → upgrade `matchTarget` from
+  `@aotter/mantle/describe` together with Core before declaring one. The mismatch fails closed: no data is served.
+- **Breaking: the removed-subpath stubs are deleted.** They shipped through 0.2.2 and now fail to resolve:
+  `@aotter/mantle/json-body` → `body` from `@aotter/mantle/rest`; `@aotter/mantle/driver/postgres` → your own SQL in
+  `store(db, caller).transaction((tx, db) => …)`; `@aotter/mantle/surface` → `convertInput`, `Conversions` and
+  `ContractError` from `@aotter/mantle/contracts` (`decode`: no replacement).
+- The packaged examples pin `@better-auth/cimd` `1.7.20` (#2165); the Better Auth peers are unchanged.
+
+An application without a GET View Trigger regenerates byte-identical modules except `access-targets.ts`. Not verified:
+production upgrade and soak, and a host pinning targets across the formula change outside the repository's tests.
+
 ## 0.2.2 (2026-11-23)
 
 Mantle 0.2.2 supports both the 2025 and 2026-07-28 MCP protocols, optional scoped application credentials and
