@@ -145,7 +145,8 @@ Describe stays at `schemaVersion: 1`; every addition is a new key:
   routes accept and compile into SQL; a part added later is behavior until shown otherwise. Authored SQL stays in
   behavior, so a whitespace-only SQL edit still reads as a behavior change (fail-closed). A route entry with one variant
   and no behavior of its own reuses that variant's `behaviorHash`.
-- **Exposure** is where and how it is reachable: for a canonical target its surfaces other than REST, its non-http
+- **Exposure** is where and how it is reachable: for a canonical target its surfaces other than REST (and other than
+  `internal`, which only marks that there is none, so a first http Trigger leaves it alone), its non-http
   Triggers, input schema, effective `requires`, `readOnly`, `trustedOnly` and presentation; for a route entry its
   binding, input schema, `requires`, flags and variant ids.
 - **Runtime pin.** `targetHash = hash({ behavior: behaviorHash, exposure: exposureHash })`. It still binds operation

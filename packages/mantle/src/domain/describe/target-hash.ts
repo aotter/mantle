@@ -81,13 +81,17 @@ const presentation = (d: TargetDefinition) => ({
   toolMeta: d.toolMeta,
 });
 
-/** The exposure payload: a declaration's reachability other than its http Triggers, or a route's binding. */
+/**
+ * The exposure payload: a declaration's reachability other than its http Triggers, or a route's binding. `internal` is
+ * the placeholder for no surface, so the first http Trigger leaves a declaration's exposure alone; a View's declared
+ * `surface` is behavior.
+ */
 const exposurePayload = (d: TargetDefinition) =>
   d.canonical
     ? {
         id: d.id,
         name: d.name,
-        surfaces: d.surfaces.filter(s => s !== "rest"),
+        surfaces: d.surfaces.filter(s => s !== "rest" && s !== "internal"),
         triggers: d.triggers.filter(t => t.source.kind !== "http"),
         inputSchema: d.inputSchema,
         requires: requirements(d, d.surface),

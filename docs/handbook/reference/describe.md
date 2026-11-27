@@ -57,7 +57,7 @@ Each target’s `_meta` contains:
   whitespace-only SQL edit changes it. A `rest:` or `admin:` target with one
   variant and nothing of its own has that variant's `behaviorHash`.
 - `exposureHash`: where and how the operation is reachable: surfaces other than
-  REST, non-http Triggers, input schema, requirements, flags and presentation;
+  REST and `internal`, non-http Triggers, input schema, requirements, flags and presentation;
   for a `rest:` or `admin:` target, its variant ids and, on `rest:`, its
   binding. An http
   Trigger counts toward the hashes of its own `rest:` target only, although
