@@ -56,7 +56,8 @@ Each target’s `_meta` contains:
   variant and nothing of its own has that variant's `behaviorHash`.
 - `exposureHash`: where and how the operation is reachable: surfaces other than
   REST, non-http Triggers, input schema, requirements, flags and presentation;
-  for a `rest:` or `admin:` target, its binding and variant ids. An http
+  for a `rest:` or `admin:` target, its variant ids and, on `rest:`, its
+  binding. An http
   Trigger counts toward the hashes of its own `rest:` target only, although
   `triggers` still lists it on the targets it reaches.
 - `targetHash`: the runtime pin, a hash of `behaviorHash` and `exposureHash`.
@@ -196,8 +197,8 @@ When both reports carry the fingerprints:
 
 Comparing a formula-1 report with a formula-2 one adds
 `{ id: "*", field: "targetHashVersion", direction: "changed", before: 1, after: 2 }`
-and compares each target's formula-1 value (`targetHash` in the older report,
-`targetHashV1` in the newer), reporting `behavior` `changed` when they differ, so
-a SQL change shipped with the upgrade still shows. A report without
-`targetHashV1` gives every such target
+and, for each target with nothing else reported, compares its formula-1 value
+(`targetHash` in the older report, `targetHashV1` in the newer), reporting
+`behavior` `changed` when they differ, so a SQL change shipped with the upgrade
+still shows. When either value is missing, such a target gets
 `{ field: "behavior", direction: "changed", unverified: true }`.
