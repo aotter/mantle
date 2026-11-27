@@ -6,7 +6,9 @@
 - REST retains public `GET /api/views/<name>` (and bodyless HEAD) with declared query input plus
   `limit` and `cursor`, answering `{ rows, nextCursor? }`. HTTP Triggers retain
   their own method/path; JSON bodies and path parameters form the Procedure
-  input and responses contain its result. Errors remain
+  input and responses contain its result. A GET Trigger serves a public View at its
+  own path with the same answer and strict query handling
+  ([GET Triggers for a View](trigger.md#get-triggers-for-a-view)). Errors remain
   `{ error: { code, message, path } }` with the 0.2 status. Cookie sessions cannot
   mutate across origins.
 - MCP retains public `POST /mcp`, admin `POST /mcp/admin`,
@@ -154,6 +156,11 @@ values, not credentials; authorization and row predicates run on every page.
 `(request, env) => Response | undefined`. The app supplies its native handle and
 verified Caller; requests outside `/api` fall through to the app. Public Views
 use `/api/views/<name>`; HTTP Triggers keep their declared method and path.
+On `/api/views/<name>` the first value of a repeated query key wins, unknown keys
+are ignored and a `limit` above the cap is clamped. A GET Trigger's route for a View
+refuses a repeated key, a path parameter repeated in the query and an unknown key with 400
+`INPUT_VALIDATION_FAILED` before any read, and answers GET only (`HEAD` is 405)
+([GET Triggers for a View](trigger.md#get-triggers-for-a-view)).
 Known paths with another method return 405 with an `Allow` header. All responses use
 `cache-control: private, no-store`. JSON bodies and decoded path parameters
 are validated together, with path parameters taking precedence. Bodies larger

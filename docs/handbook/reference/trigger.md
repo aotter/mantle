@@ -31,9 +31,25 @@ metadata: { name: close-ticket-mcp }
 spec:
   source: { kind: mcp, surface: admin }
   target: { procedure: close-ticket }
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: ticket-detail }
+spec:
+  surface: public
+  requires: { auth: { all: [ctx.admin] } }
+  input: { type: object, required: [id], properties: { id: { type: string } } }
+  sql: 'SELECT id, closed FROM tickets WHERE id = input.id ORDER BY id'
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: ticket-detail-get }
+spec:
+  source: { kind: http, method: GET, path: '/api/tickets/{id}' }
+  target: { view: ticket-detail }
 ```
 
-The target names a declared Procedure. `http` sources use POST/PUT/PATCH/DELETE and an `/api/` path. Path parameters bind to corresponding declared input fields and override JSON-body values. The generated REST module retains the Procedure's authorization and validates boundary input.
+`spec.target` names exactly one of a declared Procedure (`procedure`) or a public View (`view`, see [GET Triggers for a View](#get-triggers-for-a-view)). For a Procedure, `http` sources use POST/PUT/PATCH/DELETE and an `/api/` path. Path parameters bind to corresponding declared input fields and override JSON-body values. The generated REST module retains the Procedure's authorization and validates boundary input.
 
 A path parameter is a whole `{name}` segment. Other segments are literal and may not start with `:` or contain braces, since [describe](describe.md) writes `{name}` as `:name` (`TRIGGER_PATH_INVALID`). Two Triggers with the same method and the same path apart from parameter names are refused (`TRIGGER_PATH_COLLISION`).
 
@@ -45,7 +61,21 @@ When several http Triggers with the same method match a request, the generated r
 2. then, comparing segments from the left, a literal segment before a parameter;
 3. then the path text.
 
-So `POST /api/items/export` wins over `POST /api/items/{id}`, and for `/api/items/latest` the route `POST /api/items/{id}` wins over `POST /api/{kind}/latest`. A public View's `GET /api/views/<name>` route comes before every Trigger. Gateways resolve the same order from [`matchTarget`](describe.md#matching-a-request-to-its-target).
+So `POST /api/items/export` wins over `POST /api/items/{id}`, and for `/api/items/latest` the route `POST /api/items/{id}` wins over `POST /api/{kind}/latest`; likewise `GET /api/orders/latest` wins over `GET /api/orders/{id}`. A public View's `GET /api/views/<name>` route comes before every Trigger, and no GET Trigger can match a path under `/api/views/`. Gateways resolve the same order from [`matchTarget`](describe.md#matching-a-request-to-its-target).
+
+### GET Triggers for a View
+
+A Trigger with `target: { view: <name> }` gives a public View a second, resource-shaped route, such as `GET /api/tickets/{id}` above, beside its generated `GET /api/views/<name>` (ADR-0047). It reuses the View's generated input reader, paging, `requires`, scope and `restrict`, and answers `{ rows, nextCursor? }` like the View route.
+
+- The source is `{ kind: http, method: GET }`; any other method or an `mcp` source is `INVALID_MANIFEST_ENVELOPE` at `/spec/source`. A View's MCP exposure still comes from its `surface`. Declaring both `procedure` and `view` is `INVALID_MANIFEST_ENVELOPE` at `/spec/target`.
+- The View has `surface: public`. An unknown View is `TRIGGER_TARGET_VIEW_UNKNOWN`; an `admin` or `internal` one is `TRIGGER_TARGET_VIEW_SURFACE`.
+- The first segment after `/api/` is a literal other than `views` and `auth`, which Core keeps for generated View routes and Better Auth's default base (`TRIGGER_PATH_RESERVED`). A custom Better Auth `basePath` is not reserved; keep it clear yourself.
+- The path has no empty, `.` or `..` segment, no `%` and no trailing `/` (`TRIGGER_PATH_INVALID`).
+- Each `{name}` names a top-level input property of type `string`, `integer`, `number` or `boolean` (`null` allowed), at most once (`TRIGGER_PATH_PARAM_INVALID`). Inputs named `limit` or `cursor` stay refused (`VIEW_INPUT_RESERVED_NAME`).
+
+The route is strict where `/api/views/<name>` is lenient. Each of these is 400 `INPUT_VALIDATION_FAILED`, in this order, and none reads data: a path parameter also given in the query string; a query key given twice; a value the View's input rejects (the same messages as the View route); a query key that is neither `limit`, `cursor` nor a declared input; then, as on the View route, `limit` below 1 and a malformed or foreign cursor. Path values are percent-decoded and coerced to their declared type. Paging is the View's: `limit` defaults to `min(50, cap)` and a larger value is clamped, an empty `cursor` is ignored, and a cursor from one of the View's two routes works on the other. The route answers GET only: `HEAD` is 405 with `Allow: GET`.
+
+[Describe](describe.md) lists the Trigger under the View's `triggers` and adds a `rest:GET /api/tickets/:id` target whose variant is `view:ticket-detail`, so gateways pin it like any other route.
 
 An MCP source is `{ kind: mcp, surface: public }` or admin. The selected MCP module exposes the Procedure as a snake-case tool with its description, [tool hints](procedure.md#mcp-tool-hints) and requires checks.
 

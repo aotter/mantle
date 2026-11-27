@@ -21,6 +21,8 @@ It loads no compiler, SQL parser or Node API.
 
 The schemaVersion 1 report contains:
 
+- `targetHashVersion`: the `targetHash` formula, `2` since ADR-0047. A saved
+  report without it used formula 1.
 - `access`: `plan.access.userFields`, mapping declared user fields to their
   type, multiplicity and optional enum.
 - `targets`: MCP Tool-shaped objects with `name`, `title`, `description`,
@@ -32,7 +34,8 @@ The schemaVersion 1 report contains:
   locale), so a host can list a target as an MCP tool unchanged; `targetHash`
   still covers every locale. A label-only edit in another locale therefore
   shows in `diffApp` as `{ field: "behavior", direction: "changed" }`, without
-  before and after values.
+  before and after values. A target's own `title` or `description` edited in
+  another locale shows as `{ field: "exposure", direction: "changed" }`.
 
 Each target’s `_meta` contains:
 
@@ -42,11 +45,32 @@ Each target’s `_meta` contains:
 - `id`: `view:<name>`, `procedure:<name>`, `rest:<METHOD> <path>` or
   `admin:<METHOD> <path template>`. Parameters use `:name`; Admin paths are
   relative to the API base. Publishing ids use `procedure:<schema>.<verb>`;
-  media tool ids use `admin:tool:<name>`.
-- `targetHash`: a hash of behavior, inputs, requirements, restrictions,
-  related Schema definitions, surfaces and Triggers.
-  Optional lowering caches do not affect it. Ref registration keys are
-  included; application-owned handler implementations are not.
+  media tool ids use `admin:tool:<name>`. A [GET Trigger](trigger.md#get-triggers-for-a-view)
+  on a View adds a `rest:GET <path>` target, such as `rest:GET /api/orders/:id`,
+  whose one variant is `view:<name>`.
+- `behaviorHash`: what the operation does: its declaration without
+  presentation (`title`, `description`, MCP annotations and tool display
+  fields, `uiSchema`), effective requirements, restrictions, related Schema
+  definitions, user fields and flags. Authored SQL is included, so a
+  whitespace-only SQL edit changes it. A `rest:` or `admin:` target with one
+  variant and nothing of its own has that variant's `behaviorHash`.
+- `exposureHash`: where and how the operation is reachable: surfaces other than
+  REST, non-http Triggers, input schema, requirements, flags and presentation;
+  for a `rest:` or `admin:` target, its binding and variant ids. An http
+  Trigger counts toward the hashes of its own `rest:` target only, although
+  `triggers` still lists it on the targets it reaches.
+- `targetHash`: the runtime pin, a hash of `behaviorHash` and `exposureHash`.
+  Moving an http Trigger to another path changes only that Trigger's `rest:`
+  target id and pin; `procedure:<name>`, `view:<name>` and the other targets
+  keep theirs. Optional lowering caches do not affect it. Ref registration keys
+  are included; application-owned handler implementations are not.
+- `targetHashV1`: the formula-1 `targetHash`, so a report can be compared with
+  one saved before formula 2. It is carried through the 0.2.x line.
+- `exposure` (`rest:` targets): how the route binds a request:
+  `{ path, input, strict, head, response }`, where `path` maps each path
+  parameter to its type, `input` is `query` or `body`, `strict` is true for a
+  GET Trigger's route, `head` says whether `HEAD` is served and `response` is
+  `page` or `result`.
 - `scope` and `restrict`: per-Schema owner and user-field terms. Owner terms
   use `owner`; user-field terms name their `column`, `field` and `type`. A
   restrict's OR-clauses are listed under `or`, each a list of such terms of
@@ -58,7 +82,8 @@ Each target’s `_meta` contains:
   includes every Schema available to its Store.
 - `nativeDatabase`: whether the Procedure declares `spec.db: native`; routes summarize their variants. A warning-phase deployment can report false and still provide a native handle. Ref calls through `store.procedures` are not statically summarized.
 - `surfaces` and `triggers`: every declared exposure and each Trigger’s id
-  and source. Views include `admin` for developer previews.
+  and source, including a View's GET Triggers. Views include `admin` for
+  developer previews.
 - `requires`: conjunctive predicates in `all`.
   Admin-only targets include the admin gate.
 - `variants`: each selectable target’s id, input schema, requirements, flags
@@ -98,7 +123,8 @@ and Admin routers for every route of the example apps:
   matches nothing. One trailing slash is optional. Repeated slashes and a
   different letter case do not match.
 - Methods are compared as `Request.method` reports them. `HEAD` selects a
-  public View's `GET` route; Admin and Procedure routes do not serve `HEAD`.
+  public View's `GET /api/views/<name>` route; a View's GET Trigger route,
+  Admin and Procedure routes do not serve `HEAD`.
 - REST precedence is the generated router's order (see
   [http Triggers](trigger.md#route-precedence)). Admin precedence is Admin's
   declared route order, so `/entries/export` wins over `/entries/:id`.
@@ -107,6 +133,11 @@ and Admin routers for every route of the example apps:
 - MCP matches the `tools/call` name. Pass the `/mcp` or `/mcp/admin` path to
   limit the match to that endpoint's tools. Without a path, a name that the two
   endpoints map to different targets matches nothing.
+
+Upgrade the gateway's `@aotter/mantle/describe` together with Core before an
+application declares GET Triggers. An older matcher matches `HEAD`
+on a GET Trigger's path to its target, while Core answers that request 405; it
+fails closed, since Core serves no data for it.
 
 A host rule keyed on a request (for example "these targets need a step-up")
 must key on the target `matchTarget` returns, or apply the same normalisation
@@ -148,3 +179,25 @@ widens access. Variants are compared separately. Adding a target widens;
 removing one narrows. Every input schema change is `changed`, as are other
 behavior changes. Directions describe individual changes, not an overall
 proof when several fields change.
+
+When both reports carry the fingerprints:
+
+- A different `behaviorHash` is `{ field: "behavior", direction: "changed" }`,
+  even when other fields of the target were also reported.
+- A different `exposure` on a `rest:` target is `changed`, with before and after.
+  A different `exposureHash` with nothing else reported is
+  `{ field: "exposure", direction: "changed" }`.
+- An http Trigger whose path alone changed is `changed` in `triggers`, not
+  widened.
+- A `rest:` target that only moved to another path (same method, behavior,
+  binding, requirements, row policies, input schema, variants and flags) is one record
+  `{ id: <new id>, field: "exposure", direction: "changed", before: <old id>, after: <new id> }`
+  instead of one removed and one added target.
+
+Comparing a formula-1 report with a formula-2 one adds
+`{ id: "*", field: "targetHashVersion", direction: "changed", before: 1, after: 2 }`
+and compares each target's formula-1 value (`targetHash` in the older report,
+`targetHashV1` in the newer), reporting `behavior` `changed` when they differ, so
+a SQL change shipped with the upgrade still shows. A report without
+`targetHashV1` gives every such target
+`{ field: "behavior", direction: "changed", unverified: true }`.
