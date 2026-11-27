@@ -14,9 +14,21 @@ import { restBinding, type RestBinding } from "../binding.js";
 
 /**
  * Declaration fields that only present an operation (ADR-0047 §7): they move from its behavior fingerprint to its
- * exposure fingerprint. `mcp` holds the MCP tool annotations.
+ * exposure fingerprint. `mcp` holds the MCP tool annotations; of `uiSchema`, only the parts `uiBehavior` drops.
  */
 export const presentationFields = ["title", "description", "uiSchema", "mcp"] as const;
+
+/**
+ * The `uiSchema` parts Admin's generated routes act on: all but those known only to present (`nav`, `list.columns`, a
+ * Procedure's `fields` and `collectionAction`), so a part added later stays behavior until shown otherwise. A View
+ * list's `filterFields` and `searchFields` decide which filters and searches its Admin routes accept and compile into SQL.
+ */
+function uiBehavior(ui: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> | undefined {
+  const { nav, fields, collectionAction, list, ...rest } = ui ?? {};
+  const { columns, ...listed } = (list ?? {}) as Record<string, unknown>;
+  const behavior = { ...rest, ...(Object.keys(listed).length ? { list: listed } : {}) };
+  return Object.keys(behavior).length ? behavior : undefined;
+}
 
 export interface TargetDefinition {
   id: string;
@@ -233,9 +245,12 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
         variants: [],
         behavior: { declaration: p, dependencies: inspected.dependencies },
         ownBehavior: {
-          declaration: Object.fromEntries(
-            Object.entries(p).filter(([key]) => !(presentationFields as readonly string[]).includes(key)),
-          ),
+          declaration: {
+            ...Object.fromEntries(
+              Object.entries(p).filter(([key]) => !(presentationFields as readonly string[]).includes(key)),
+            ),
+            ...(uiBehavior(p.uiSchema) ? { uiSchema: uiBehavior(p.uiSchema) } : {}),
+          },
           dependencies: inspected.dependencies,
         },
         canonical: true,
