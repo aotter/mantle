@@ -1,4 +1,4 @@
-/** How a REST route binds a request to its operation (ADR-0047 §2.5): one derivation for the generator and describe. */
+/** How a REST route binds a request to its operation (ADR-0047 §6): one derivation for the generator and describe. */
 import type { RuntimePlan } from "../build/compiler.js";
 
 export interface RestBinding {
