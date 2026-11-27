@@ -176,8 +176,8 @@ Existing fields and directions stay. Added:
 5. An http Trigger whose id, kind, method and surface are equal and whose path alone differs is `changed` in
    `triggers`, not widened.
 6. **Across formula versions.** When `targetHashVersion` differs, one `{ id: "*", field: "targetHashVersion",
-   direction: "changed", before, after }` line is added, and the per-target fallback still runs: it compares the
-   formula-1 value on both sides (the formula-1 report's `targetHash` with the formula-2 report's
+   direction: "changed", before, after }` line is added, and for every target, whatever else was recorded for it,
+   diff compares the formula-1 value on both sides (the formula-1 report's `targetHash` with the formula-2 report's
    `_meta.targetHashV1`, whichever side of the diff each report is on) and reports `behavior` `changed` as today. If
    the formula-2 report has no `targetHashV1`, each target gets `{ field: "behavior", direction: "changed",
    unverified: true }` instead of silence. A SQL or projection change in the upgrade deploy is always visible.

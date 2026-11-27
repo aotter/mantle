@@ -458,6 +458,19 @@ test("diff: across the formula change, formula 1 is compared on both sides and n
     ["*", "targetHashVersion", "changed"],
     ...dropped.targets.map((t: any): Line => [t._meta.id, "behavior", "changed", true]).sort(),
   ]);
+  // A SQL change beside another recorded change still gets its behavior line, in both directions.
+  const both = copy(projected);
+  both.views["my-doc"].requires = { auth: { all: ["ctx.user"] } };
+  const strictAndProjected = await describeApp(both);
+  const behaviorOf = (c: any[]) =>
+    lines(c.filter(x => x.field === "behavior"))
+      .map(([id]) => id)
+      .sort();
+  expect(behaviorOf(diffApp(asFormulaV1(report), strictAndProjected))).toEqual([...myDocRoutes, "view:my-doc"].sort());
+  expect(behaviorOf(diffApp(strictAndProjected, asFormulaV1(report)))).toEqual([...myDocRoutes, "view:my-doc"].sort());
+  expect(
+    diffApp(asFormulaV1(report), strictAndProjected).some(c => c.id === "view:my-doc" && c.field === "requires"),
+  ).toBe(true);
 });
 
 test("diff: two formula-1 reports read as before formula 2", async () => {

@@ -323,8 +323,8 @@ export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
     if (x.exposure !== undefined && y.exposure !== undefined) record("exposure", x.exposure, y.exposure, "changed");
     if (x.behaviorHash !== undefined && y.behaviorHash !== undefined && x.behaviorHash !== y.behaviorHash)
       changes.push({ id, field: "behavior", direction: "changed" });
-    if (changes.length > start) continue;
-    if (crossFormula) {
+    else if (crossFormula) {
+      // Across the formula change formula 1 is compared whatever else was recorded, so a SQL change is never hidden.
       const left = formulaV1(x, formulaA),
         right = formulaV1(y, formulaB);
       if (left === undefined || right === undefined)
@@ -335,7 +335,9 @@ export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
           unverified: true,
         });
       else if (left !== right) changes.push({ id, field: "behavior", direction: "changed" });
-    } else if (x.exposureHash !== undefined && y.exposureHash !== undefined && x.exposureHash !== y.exposureHash)
+    }
+    if (crossFormula || changes.length > start) continue;
+    if (x.exposureHash !== undefined && y.exposureHash !== undefined && x.exposureHash !== y.exposureHash)
       changes.push({ id, field: "exposure", direction: "changed" });
     else if (x.targetHash !== y.targetHash) changes.push({ id, field: "behavior", direction: "changed" });
   }

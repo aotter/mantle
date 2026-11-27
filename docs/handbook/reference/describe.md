@@ -199,8 +199,8 @@ When both reports carry the fingerprints:
 
 Comparing a formula-1 report with a formula-2 one adds
 `{ id: "*", field: "targetHashVersion", direction: "changed", before: 1, after: 2 }`
-and, for each target with nothing else reported, compares its formula-1 value
-(`targetHash` in the older report, `targetHashV1` in the newer), reporting
-`behavior` `changed` when they differ, so a SQL change shipped with the upgrade
-still shows. When either value is missing, such a target gets
+and, for every target, even one with other fields reported, compares its
+formula-1 value (`targetHash` in the older report, `targetHashV1` in the newer),
+reporting `behavior` `changed` when they differ, so a SQL change shipped with
+the upgrade always shows. When the newer report lacks `targetHashV1`, the target gets
 `{ field: "behavior", direction: "changed", unverified: true }`.
