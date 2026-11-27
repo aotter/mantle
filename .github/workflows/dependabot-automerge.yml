@@ -7,12 +7,16 @@
 # into `develop`; once CI is green
 # `gh pr merge --auto` queues the merge.
 #
-# Breaking changes: a bump that changes a published peer range (for example
-# `@aotter/mantle`'s exact Better Auth peers, which resolve from the default
-# catalog) fails breaking-changes.yml until a maintainer adds the
-# `breaking-change` label and a Migration line to the PR body
-# (CONTRIBUTING.md, "Breaking changes"); the edit reruns that check and the
-# queued merge proceeds once it is green.
+# Better Auth is never auto-merged. `@aotter/mantle` peers it exactly, so
+# a bump is a breaking change that also needs the packaged examples' pins and
+# a handbook release note moved in the same PR; twice a lone `@better-auth/*`
+# patch was merged here and left `develop` unable to install (#2165, #2182).
+# A maintainer takes the grouped Dependabot PR over by hand.
+#
+# Breaking changes: any other bump that changes a published peer range fails
+# breaking-changes.yml until a maintainer adds the `breaking-change` label
+# and a Migration line to the PR body (CONTRIBUTING.md, "Breaking changes");
+# the edit reruns that check and the queued merge proceeds once it is green.
 #
 # Lockfile note: unlike mantle-starters, this repo's dependabot setup
 # *does* regenerate `pnpm-lock.yaml` correctly (single root workspace
@@ -51,8 +55,9 @@ jobs:
       # noisy 'Merge pull request #N from ...' subjects we don't want.
       - name: Auto-approve + auto-merge patch + digest
         if: |
-          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
-          steps.meta.outputs.update-type == 'version-update:semver-digest'
+          !contains(steps.meta.outputs.dependency-names, 'better-auth') &&
+          (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-digest')
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
