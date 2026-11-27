@@ -149,11 +149,20 @@ try {
     if (!result.ok) throw new Error(JSON.stringify(result.diagnostics, null, 2));
     for (const warning of result.warnings ?? []) console.warn(`warning: ${warning}`);
     const read = [...paths, ...(values.auth ?? []), ...(values.site ? [values.site] : [])];
+    const schema = join(destination, "schema.sql");
+    const hadSchema = existsSync(schema);
     const changed = await writeArtifacts(
       destination,
       { ...result.files, [INPUTS_FILE]: inputsFingerprint(destination, read, target) },
       values.check,
     );
+    // A hint, not a classification (ADR-lite #2108): generate cannot see the databases built from the earlier file.
+    if (!values.check && hadSchema && changed.includes(schema)) {
+      const path = relative(process.cwd(), resolve(schema)).replaceAll("\\", "/");
+      console.warn(
+        `warning: ${path} changed. Databases built from the earlier ${path} do not change: generate and the runtime run no DDL. If \`git diff -- ${path}\` changes a table, write a migration from that diff and apply it with your own tooling (mantle help migrations).`,
+      );
+    }
     // After writing: the entry's imports of generated modules only resolve once they exist.
     for (const warning of await (await import("./mounts.js")).unmountedWarnings(
       values.entry!,

@@ -56,6 +56,40 @@ test("generate lists the Handlers keys ref Procedures need once, and not under -
   }
 }, 30_000);
 
+test("generate points to mantle help migrations only when an existing schema.sql changes", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "next-cli-schema-"));
+  try {
+    const source = join(dir, "notes.yaml");
+    const notes = (properties: object) =>
+      writeFile(
+        source,
+        JSON.stringify({
+          apiVersion: "cms.mantle.aotter.net/v2",
+          kind: "Schema",
+          metadata: { name: "notes" },
+          spec: { title: "Notes", schema: { type: "object", required: ["label"], properties } },
+        }),
+      );
+    const run = (...args: string[]) =>
+      spawnSync("node", [cli, "generate", "bun-sqlite", "generated", source, ...args], { cwd: dir, encoding: "utf8" });
+    const hint = "warning: generated/schema.sql changed. Databases built from the earlier generated/schema.sql";
+    await notes({ label: { type: "string" } });
+    expect(run().stderr).not.toContain(hint); // a first generation has no earlier database
+    expect(run().stderr).not.toContain(hint); // unchanged
+    await notes({ label: { type: "string" }, body: { type: "string" } });
+    const check = run("--check");
+    expect([check.status, check.stderr.includes(hint)]).toEqual([1, false]); // --check reports staleness only
+    const changed = run();
+    expect(changed.status).toBe(0);
+    expect(changed.stderr).toContain(
+      `${hint} do not change: generate and the runtime run no DDL. If \`git diff -- generated/schema.sql\` changes a table, write a migration from that diff and apply it with your own tooling (mantle help migrations).`,
+    );
+    expect(run().stderr).not.toContain(hint); // once per change
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("generate creates valid Wrangler config; edits preserve unrelated keys, comments and idempotence", async () => {
   const dir = await mkdtemp(join(tmpdir(), "next-cli-"));
   try {

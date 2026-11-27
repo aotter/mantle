@@ -30,7 +30,8 @@ unless the field is a geo field.
 ## Write a migration
 
 1. Start from a commit whose `generated/` matches what the databases run (`pnpm check` runs `generate --check`).
-2. Change the manifests and run `pnpm generate`. Never edit `generated/` by hand.
+2. Change the manifests and run `pnpm generate`. Never edit `generated/` by hand. When the run rewrites an existing
+   `schema.sql`, `generate` warns that databases built from the earlier file do not change and points here.
 3. Read the change: `git diff -- generated/schema.sql`, or `git diff <ref> -- generated/schema.sql` against the commit
    or release tag the databases were built from.
 4. Write the migration by hand from that diff with the rules below. Copy each statement from the new `schema.sql` and
