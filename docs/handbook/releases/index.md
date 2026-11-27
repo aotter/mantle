@@ -38,7 +38,7 @@ move, and never booting 0.2 against a 0.1.x database.
 
 Pin the three Mantle packages to `0.2.3-alpha.2` and move Better Auth with them.
 
-- **Breaking: Better Auth peers (#2165).** `better-auth`, `@better-auth/core` and `@better-auth/oauth-provider`
+- **Breaking: Better Auth peers (#2179).** `better-auth`, `@better-auth/core` and `@better-auth/oauth-provider`
   `1.7.16` → `1.7.20`; move every Better Auth package you install (`@better-auth/mcp`, `@better-auth/cimd`,
   `@better-auth/test-utils` included) to exact `1.7.20` together, `@better-auth/utils` stays `0.5.1`; no replacement
   for `1.7.16`. The auth schema is unchanged, so no migration. An OAuth issuer configured with `http` on a non-loopback
