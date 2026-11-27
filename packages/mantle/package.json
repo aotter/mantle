@@ -112,7 +112,7 @@
     "@types/node": "catalog:",
     "better-auth": "catalog:",
     "bun-types": "1.4.4",
-    "postgres": "3.4.9",
+    "postgres": "4.1.0",
     "typescript": "catalog:",
     "wrangler": "4.158.0",
     "vitest": "catalog:",
