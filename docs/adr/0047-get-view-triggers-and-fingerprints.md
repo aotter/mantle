@@ -139,7 +139,10 @@ Describe stays at `schemaVersion: 1`; every addition is a new key:
   `restBinding`. The report carries `targetHashVersion: 2`; an absent field means 1.
 - **Behavior** is what the operation does: the declaration minus presentation, effective `requires`, `restrict`,
   dialect, Schemas, user fields, `readOnly`, `opaque`, `nativeDatabase` and `trustedOnly`. Presentation is an explicit,
-  tested list: `title`, `description`, MCP annotations and tool display fields, and `uiSchema`. Authored SQL stays in
+  tested list: `title`, `description`, MCP annotations and tool display fields, and the `uiSchema` parts that only
+  present (`nav`, `list.columns`, a Procedure's `fields` and `collectionAction`). Every other `uiSchema` part stays in
+  behavior, including a View list's `filterFields` and `searchFields`, which decide the filters and searches its Admin
+  routes accept and compile into SQL; a part added later is behavior until shown otherwise. Authored SQL stays in
   behavior, so a whitespace-only SQL edit still reads as a behavior change (fail-closed). A route entry with one variant
   and no behavior of its own reuses that variant's `behaviorHash`.
 - **Exposure** is where and how it is reachable: for a canonical target its surfaces other than REST, its non-http

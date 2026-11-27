@@ -222,7 +222,7 @@ test("fingerprints: presentation is an explicit list that moves exposure, never 
   const values: Record<(typeof presentationFields)[number], unknown> = {
     title: { en: "Rename", fr: "Renommer" },
     description: "Renames one order.",
-    uiSchema: { title: { "ui:widget": "textarea" } },
+    uiSchema: { fields: { title: { widget: "textarea" } }, collectionAction: "orders" },
     mcp: { destructiveHint: false, idempotentHint: true },
   };
   for (const field of presentationFields) {
@@ -242,6 +242,37 @@ test("fingerprints: presentation is an explicit list that moves exposure, never 
   }
   function exposure() {
     return { behavior: false, exposure: true, pin: true };
+  }
+});
+
+test("fingerprints: a View list's filterFields and searchFields are behavior; its columns and nav are not", async () => {
+  // Admin's generated routes validate `filters`/`search` against these lists and compile them into SQL.
+  const plan = await compile(base),
+    before = await prints(plan);
+  const view = "view:regional-orders";
+  const routes = [
+    "admin:GET /views/:name",
+    "admin:GET /views/:name/export",
+    "admin:GET /view-batch",
+    "admin:GET /developer/views/:name",
+  ];
+  const rows: [string, Record<string, unknown>, boolean][] = [
+    ["filterFields", { list: { filterFields: ["region"] } }, true],
+    ["searchFields", { list: { searchFields: ["title"] } }, true],
+    ["columns", { list: { columns: ["title"] } }, false],
+    ["nav", { nav: { group: "content", order: 1 } }, false],
+  ];
+  for (const [name, uiSchema, behavioral] of rows) {
+    const p = copy(plan);
+    p.views["regional-orders"].uiSchema = uiSchema;
+    const after = await prints(p);
+    expect([name, moved(before, after, view)]).toEqual([name, { behavior: behavioral, exposure: true, pin: true }]);
+    for (const route of routes)
+      expect([name, route, moved(before, after, route)]).toEqual([
+        name,
+        route,
+        { behavior: behavioral, exposure: false, pin: behavioral },
+      ]);
   }
 });
 

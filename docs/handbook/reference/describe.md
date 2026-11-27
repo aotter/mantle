@@ -50,7 +50,9 @@ Each target’s `_meta` contains:
   whose one variant is `view:<name>`.
 - `behaviorHash`: what the operation does: its declaration without
   presentation (`title`, `description`, MCP annotations and tool display
-  fields, `uiSchema`), effective requirements, restrictions, related Schema
+  fields, and `uiSchema` other than a View list's `filterFields` and
+  `searchFields`, which decide what its Admin routes accept and run),
+  effective requirements, restrictions, related Schema
   definitions, user fields and flags. Authored SQL is included, so a
   whitespace-only SQL edit changes it. A `rest:` or `admin:` target with one
   variant and nothing of its own has that variant's `behaviorHash`.
