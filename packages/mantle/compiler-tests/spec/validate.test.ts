@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { generateFromSources } from "../../src/infrastructure/generate.js";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
 import type {
@@ -1064,5 +1065,124 @@ spec:
         path: "manifest:doc/0#/spec/input/properties/s/x-mantle-maxBytes",
         message: expect.stringContaining("x-mantle-maxBytes at /spec/input/properties/s must be a positive integer"),
       });
+  });
+});
+
+// ADR-0047: a Trigger targets a Procedure or, on GET only, a public View.
+describe("Trigger.spec.target — procedure or view", () => {
+  const triggerYaml = (source: string, target: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: order-detail-get }
+spec:
+  source: ${source}
+  target: ${target}
+`;
+  const get = '{ kind: http, method: GET, path: "/api/orders/{id}" }';
+  const post = "{ kind: http, method: POST, path: /api/orders }";
+  const mcp = "{ kind: mcp, surface: public }";
+  const exactlyOne = "Trigger.spec.target must declare exactly one of 'procedure' or 'view' as a string.";
+  const viewSource = "A Trigger targeting a View must use source { kind: http, method: GET }.";
+
+  it.each([
+    ["missing target", post, "", "Trigger.spec.target.procedure is required (string)", "/spec/target/procedure"],
+    ["empty target", post, "{}", "Trigger.spec.target.procedure is required (string)", "/spec/target/procedure"],
+    [
+      "non-string procedure",
+      post,
+      "{ procedure: 1 }",
+      "Trigger.spec.target.procedure is required (string)",
+      "/spec/target/procedure",
+    ],
+    ["both procedure and view", get, "{ procedure: bar, view: order-detail }", exactlyOne, "/spec/target"],
+    ["empty view", get, '{ view: "" }', exactlyOne, "/spec/target"],
+    ["non-string view", get, "{ view: 1 }", exactlyOne, "/spec/target"],
+    ["view with an mcp source", mcp, "{ view: order-detail }", viewSource, "/spec/source"],
+    ["view with POST", post, "{ view: order-detail }", viewSource, "/spec/source"],
+    [
+      "GET with a procedure",
+      get,
+      "{ procedure: bar }",
+      'Trigger.spec.source.method must be one of POST, PUT, PATCH, DELETE (v0.1); got "GET"',
+      "/spec/source/method",
+    ],
+    [
+      "unknown target key",
+      get,
+      "{ view: order-detail, schema: orders }",
+      "spec.target.schema is not supported",
+      "/spec/target/schema",
+    ],
+    [
+      "unknown target key on a Procedure Trigger",
+      post,
+      "{ procedure: bar, schema: orders }",
+      "spec.target.schema is not supported",
+      "/spec/target/schema",
+    ],
+  ])("refuses %s", (_case, source, target, message, path) => {
+    const yaml = target ? triggerYaml(source, target) : triggerYaml(source, "").replace("  target: \n", "");
+    const { diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: `manifest:doc/0#${path}`,
+      message: expect.stringContaining(message),
+    });
+  });
+
+  it("parses a GET Trigger that targets a View", () => {
+    const { diagnostics, manifests } = parseManifests(triggerYaml(get, "{ view: order-detail }"));
+    expect(diagnostics).toEqual([]);
+    expect((manifests[0] as TriggerManifest).spec).toEqual({
+      source: { kind: "http", method: "GET", path: "/api/orders/{id}" },
+      target: { view: "order-detail" },
+    });
+  });
+
+  const app = [
+    `apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: order-detail }
+spec:
+  surface: public
+  input: { type: object, properties: { id: { type: string } } }
+  sql: "SELECT 'ok' AS status"
+`,
+    triggerYaml(get, "{ view: order-detail }"),
+  ];
+
+  it("refuses a valid GET View Trigger with the temporary gate until it is served", () => {
+    const { diagnostics, linked } = validateManifests({
+      manifests: parseManifests(app).manifests,
+    });
+    expect(linked).toBeUndefined();
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
+        severity: "error",
+        path: "/spec/target/view",
+        message: "GET View Triggers are not served by this build.",
+      }),
+    ]);
+  });
+
+  it("reports the path, not the gate, when a GET View Trigger fails another check", () => {
+    const bad = [app[0]!, triggerYaml('{ kind: http, method: GET, path: "/orders/{id}" }', "{ view: order-detail }")];
+    const { diagnostics } = validateManifests({
+      manifests: parseManifests(bad).manifests,
+    });
+    expect(diagnostics.map(d => d.code)).toEqual(["TRIGGER_PATH_INVALID"]);
+  });
+
+  it("does not crash mantle generate on a GET View Trigger", async () => {
+    const result = await generateFromSources({
+      target: "bun-sqlite",
+      sources: {
+        sources: app.map((text, i) => ({ sourceId: `app-${i}.yaml`, text })),
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected the gate to refuse");
+    expect(result.diagnostics.map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_UNSUPPORTED"]);
   });
 });

@@ -174,7 +174,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       const tool = tools.find(t => t.kind === kind && t.source === name);
       const title = resolveLocalizedText(p.title, "en", "en") ?? name;
       const triggers = Object.entries(plan.triggers)
-        .filter(([, t]) => kind === "procedure" && t.procedure === name)
+        .filter(([, t]) => kind === "procedure" && "procedure" in t && t.procedure === name)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([id, t]) => ({ id, source: t.source }));
       const surfaces = [
@@ -267,7 +267,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     if (d.kind === "view" && d.surfaces.includes("public"))
       addRoute(`rest:GET /api/views/${d.id.slice(5)}`, [d], d.inputSchema);
   for (const [, t] of Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-    if (t.source.kind === "http") {
+    if ("procedure" in t && t.source.kind === "http") {
       const d = declarations.find(d => d.id === `procedure:${t.procedure}`)!;
       addRoute(`rest:${t.source.method} ${pathTemplate(t.source.path)}`, [d], d.inputSchema);
     }

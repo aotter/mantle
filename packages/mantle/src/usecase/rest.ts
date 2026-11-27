@@ -60,13 +60,14 @@ export function emitRest(
       `{ ${route("GET", `/api/views/${name}`)}, target: ${q({ kind: "view", name })}${guard(view.requires, `views/${name}`, (lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds)}, query: query${id}, page: ${boundaryPage(`page${id}`, wire)}${convert(conversions(view.input?.properties, (lowered.views[name]?.public ?? lowered.views[name]?.caller)?.binds ?? [], target))} }`,
     );
   }
+  // GET View Triggers (ADR-0047) are refused at generate until their routes are emitted; skipped here defensively.
   const triggers = Object.values(plan.triggers)
-    .filter(t => t.source.kind === "http")
+    .filter(t => "procedure" in t && t.source.kind === "http")
     .sort((a, b) =>
       a.source.kind === "http" && b.source.kind === "http" ? routeOrder(a.source.path, b.source.path) : 0,
     );
   for (const trigger of triggers) {
-    if (trigger.source.kind !== "http") continue;
+    if (!("procedure" in trigger) || trigger.source.kind !== "http") continue;
     const { method, path } = trigger.source,
       name = trigger.procedure,
       procedure = plan.procedures[name]!,

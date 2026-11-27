@@ -10,6 +10,7 @@ import {
   type AuthPredicate,
   type AuthorizationRequirements,
   type JsonSchema,
+  type PlanTrigger,
   type RuntimePlan,
   type SqlNode,
 } from "../spec/domain/index.js";
@@ -50,6 +51,10 @@ export function developerConsole(plan: RuntimePlan) {
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
   const views = Object.entries(plan.views).sort(([a], [b]) => a.localeCompare(b));
   const procedureAudience = (name: string): Audience => audienceOf(plan.procedures[name]?.requires) ?? "public";
+  // The console lists Procedure Triggers; a GET View Trigger (ADR-0047) is an exposure of its View.
+  const procedureTriggers = Object.entries(plan.triggers).filter(
+    (e): e is [string, Extract<PlanTrigger, { procedure: string }>] => "procedure" in e[1],
+  );
   const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) =>
     "ref" in h
       ? { kind: "ref" as const, ref: h.ref }
@@ -72,7 +77,7 @@ export function developerConsole(plan: RuntimePlan) {
           "ref" in p.handler ? p.handler : p.handler.steps ? { steps: p.handler.steps } : { source: p.handler.source },
       },
     }));
-  const triggers = Object.entries(plan.triggers)
+  const triggers = procedureTriggers
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, t]) => ({
       name,
@@ -160,7 +165,7 @@ export function developerConsole(plan: RuntimePlan) {
           : [],
       ),
     ]),
-    ...Object.entries(plan.triggers).map(([name, t]) =>
+    ...procedureTriggers.map(([name, t]) =>
       relation(
         `Trigger:${name}:target:${t.procedure}`,
         "trigger-target",
@@ -185,14 +190,14 @@ export function developerConsole(plan: RuntimePlan) {
       output: tool.outputSchema ?? null,
       trigger:
         tool.kind === "procedure"
-          ? (Object.entries(plan.triggers).find(
+          ? (procedureTriggers.find(
               ([, t]) => t.procedure === tool.source && t.source.kind === "mcp" && t.source.surface === surface,
             )?.[0] ?? null)
           : null,
     })),
   );
   const http = [
-    ...Object.entries(plan.triggers).flatMap(([name, t]) => {
+    ...procedureTriggers.flatMap(([name, t]) => {
       if (t.source.kind !== "http") return [];
       const p = plan.procedures[t.procedure]!;
       return [

@@ -90,6 +90,12 @@ export function checkSqlHandler(p: ProcedureManifest, filePaths?: ManifestFilePa
   ];
 }
 
+/**
+ * Acceptance gate for GET View Triggers (ADR-0047). While false, a View Trigger that passes every other check is refused, so no
+ * build accepts a GET route that has no generated route, describe entry or access target. Removed when they are served.
+ */
+const GET_VIEW_TRIGGERS_SERVED = false;
+
 export function checkTriggerRefs(
   triggers: ReadonlyArray<TriggerManifest>,
   proceduresByName: ReadonlyMap<string, ProcedureManifest>,
@@ -101,8 +107,9 @@ export function checkTriggerRefs(
   const undescribedMcpProcedures = new Set<string>();
 
   for (const t of triggers) {
-    const procName = t.spec.target.procedure;
-    if (!proceduresByName.has(procName)) {
+    const errorsBefore = out.length;
+    const procName = "procedure" in t.spec.target ? t.spec.target.procedure : undefined;
+    if (procName !== undefined && !proceduresByName.has(procName)) {
       out.push(
         validateDiagnostic({
           code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
@@ -176,7 +183,7 @@ export function checkTriggerRefs(
       }
     }
 
-    if (t.spec.source.kind === "mcp") {
+    if (procName !== undefined && t.spec.source.kind === "mcp") {
       // An MCP tool is described to a cold agent by `spec.description`.
       // The catalog falls back to "Invoke Procedure '<name>'." when it is
       // absent, which reads like a description and hides the gap; the
@@ -203,6 +210,19 @@ export function checkTriggerRefs(
         );
       }
     }
+
+    if ("view" in t.spec.target && !GET_VIEW_TRIGGERS_SERVED && out.length === errorsBefore) {
+      out.push(
+        validateDiagnostic({
+          code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
+          severity: "error",
+          path: manifestPath("Trigger", t.metadata.name, "/spec/target/view", filePaths),
+          value: t.spec.target.view,
+          expected: "a Trigger targeting a Procedure",
+          message: "GET View Triggers are not served by this build.",
+        }),
+      );
+    }
   }
   return out;
 }
@@ -219,7 +239,11 @@ export function checkMcpToolNameCollisions(
 ): Diagnostic[] {
   const seen = new Map<string, string>();
   const out: Diagnostic[] = [];
-  const exposed = new Set(triggers.flatMap(t => (t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [])));
+  const exposed = new Set(
+    triggers.flatMap(t =>
+      "procedure" in t.spec.target && t.spec.source.kind === "mcp" ? [t.spec.target.procedure] : [],
+    ),
+  );
   const claim = (kind: "View" | "Procedure", name: string) => {
     const segment = mcpToolNameSegment(name);
     if ((kind === "View" || exposed.has(name)) && (segment.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(segment))) {
@@ -254,7 +278,7 @@ export function checkMcpToolNameCollisions(
   const mcpTriggers = new Map<string, string>();
   for (const trigger of triggers) {
     const source = trigger.spec.source;
-    if (source.kind !== "mcp") continue;
+    if (source.kind !== "mcp" || !("procedure" in trigger.spec.target)) continue;
     const tool = mcpToolNameSegment(trigger.spec.target.procedure);
     const key = `${source.surface}\0${tool}`;
     const prior = mcpTriggers.get(key);

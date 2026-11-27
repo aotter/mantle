@@ -171,7 +171,7 @@ export function emitMcp(
     if (view.surface !== "internal") add(name, "views", view.surface);
   const exposed = new Set<string>();
   for (const trigger of Object.values(plan.triggers))
-    if (trigger.source.kind === "mcp") {
+    if ("procedure" in trigger && trigger.source.kind === "mcp") {
       const key = trigger.source.surface + ":" + trigger.procedure;
       if (!exposed.has(key)) {
         exposed.add(key);

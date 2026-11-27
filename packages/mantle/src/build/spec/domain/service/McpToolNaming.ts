@@ -86,7 +86,7 @@ export function mcpTools(plan: RuntimePlan, surface: "public" | "admin", locale 
     tools.set(tool.name, tool);
   };
   for (const t of Object.values(plan.triggers)) {
-    if (t.source.kind !== "mcp" || t.source.surface !== surface) continue;
+    if (!("procedure" in t) || t.source.kind !== "mcp" || t.source.surface !== surface) continue;
     const p = plan.procedures[t.procedure]!;
     const title = text(p.title),
       outputSchema = procedureOutputSchema(p);

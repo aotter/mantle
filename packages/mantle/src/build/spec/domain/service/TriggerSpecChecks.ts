@@ -1,5 +1,5 @@
 /** Trigger.spec and its sources: http and mcp. */
-import type { HttpMethod, TriggerManifest } from "../model/ManifestGrammar.js";
+import type { TriggerManifest } from "../model/ManifestGrammar.js";
 import {
   ManifestParseError,
   V01_HTTP_METHODS,
@@ -8,12 +8,15 @@ import {
   rejectUnknownKeys,
 } from "./ManifestFieldChecks.js";
 
-function validateHttpSource(source: Record<string, unknown>, idx: number): void {
+/** A View Trigger (ADR-0047) reads; it is served on GET only. */
+const VIEW_TRIGGER_METHODS: ReadonlySet<string> = new Set(["GET"]);
+
+function validateHttpSource(source: Record<string, unknown>, idx: number, methods: ReadonlySet<string>): void {
   rejectUnknownKeys(source, ["kind", "method", "path"], idx, "/spec/source");
   const method = source["method"];
-  if (typeof method !== "string" || !V01_HTTP_METHODS.has(method as HttpMethod)) {
+  if (typeof method !== "string" || !methods.has(method)) {
     throw new ManifestParseError(
-      `Trigger.spec.source.method must be one of ${[...V01_HTTP_METHODS].join(", ")} (v0.1); got ${JSON.stringify(method)}`,
+      `Trigger.spec.source.method must be one of ${[...methods].join(", ")} (v0.1); got ${JSON.stringify(method)}`,
       idx,
       "/spec/source/method",
     );
@@ -75,12 +78,29 @@ export function validateTriggerSpec(m: TriggerManifest, idx: number): TriggerMan
       "/spec/source/kind",
     );
   }
-  if (sourceKind === "http") validateHttpSource(source, idx);
-  else validateMcpSource(source, idx);
   const target = s["target"] as Record<string, unknown> | undefined;
-  if (!target || typeof target["procedure"] !== "string") {
+  const targetsView = typeof target === "object" && target !== null && Object.hasOwn(target, "view");
+  if (targetsView && (sourceKind !== "http" || source["method"] !== "GET")) {
+    throw new ManifestParseError(
+      "A Trigger targeting a View must use source { kind: http, method: GET }.",
+      idx,
+      "/spec/source",
+    );
+  }
+  if (sourceKind === "http") validateHttpSource(source, idx, targetsView ? VIEW_TRIGGER_METHODS : V01_HTTP_METHODS);
+  else validateMcpSource(source, idx);
+  if (targetsView) {
+    const view = target!["view"];
+    if (Object.hasOwn(target!, "procedure") || typeof view !== "string" || view.length === 0) {
+      throw new ManifestParseError(
+        "Trigger.spec.target must declare exactly one of 'procedure' or 'view' as a string.",
+        idx,
+        "/spec/target",
+      );
+    }
+  } else if (!target || typeof target["procedure"] !== "string") {
     throw new ManifestParseError("Trigger.spec.target.procedure is required (string)", idx, "/spec/target/procedure");
   }
-  rejectUnknownKeys(target, ["procedure"], idx, "/spec/target");
+  rejectUnknownKeys(target!, ["procedure", "view"], idx, "/spec/target");
   return m;
 }
