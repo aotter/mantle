@@ -426,6 +426,8 @@ export type DeveloperTriggerSource =
 export interface DeveloperTriggerModel {
   name: string;
   target: string;
+  /** Set for a GET View Trigger; `target` names a Procedure otherwise. */
+  targetKind?: "view";
   audience: DeveloperAudience;
   source: DeveloperTriggerSource;
   manifest: unknown;

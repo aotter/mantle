@@ -1,8 +1,8 @@
 {
   "precedence bun-sqlite": {
     "access-targets.ts": "5d6e41a6da6680c68d91afb46c1b7d86457d820be0723e3df9d53d5c98709470",
-    "admin-descriptors.ts": "c997f880bc93e7cb66bedcb323b0102a07657858ebbdbde824c28395c76b3945",
-    "admin-developer-console.ts": "44ad55565730af3758669450a54d633a042d0f0527e19d5bf70deea7a4e6d123",
+    "admin-descriptors.ts": "df799a0f02ac13f6ac72ed76073db33cd62ddd93d49c20612d24d1d887088ef9",
+    "admin-developer-console.ts": "de5b4ff881e5bee4ffe3bbdfee250b1bc9e0941c7d99dae363368917c88a95af",
     "generated.ts": "6b3334c5f971b35a762101c87319d8340fa76510f4e96a5ff50d2d96ccf0ccbd",
     "mcp.ts": "1cb108ff8e31736a6479c7258eabf87652343ea49b093a329676fa07286127e6",
     "paged/views/feed.ts": "2f1b537c81a55fe853984f5ebfdf924a072fd9624b3fe6216d710817ddbde0e8",
@@ -23,8 +23,8 @@
   },
   "precedence bun-postgres": {
     "access-targets.ts": "1c604aef44a2bec0d4602ce937940a1306d505127399e3fbced2f3c78051c29e",
-    "admin-descriptors.ts": "c997f880bc93e7cb66bedcb323b0102a07657858ebbdbde824c28395c76b3945",
-    "admin-developer-console.ts": "44ad55565730af3758669450a54d633a042d0f0527e19d5bf70deea7a4e6d123",
+    "admin-descriptors.ts": "df799a0f02ac13f6ac72ed76073db33cd62ddd93d49c20612d24d1d887088ef9",
+    "admin-developer-console.ts": "de5b4ff881e5bee4ffe3bbdfee250b1bc9e0941c7d99dae363368917c88a95af",
     "generated.ts": "c62ee821b2c5e8c8edb21a0cd9328b527ca08f5023622a20b5ffc1a9f5b2f5c2",
     "mcp.ts": "2946ecc9620dde64fd52574641ad8a5dc7015c82327c745745aef17c91d292fb",
     "paged/views/feed.ts": "7790f6fb184ed765471e3dbc107455caa822e5c7c2012579adcf3bb44dd5f57b",
@@ -45,8 +45,8 @@
   },
   "precedence cloudflare-d1": {
     "access-targets.ts": "5d6e41a6da6680c68d91afb46c1b7d86457d820be0723e3df9d53d5c98709470",
-    "admin-descriptors.ts": "c997f880bc93e7cb66bedcb323b0102a07657858ebbdbde824c28395c76b3945",
-    "admin-developer-console.ts": "44ad55565730af3758669450a54d633a042d0f0527e19d5bf70deea7a4e6d123",
+    "admin-descriptors.ts": "df799a0f02ac13f6ac72ed76073db33cd62ddd93d49c20612d24d1d887088ef9",
+    "admin-developer-console.ts": "de5b4ff881e5bee4ffe3bbdfee250b1bc9e0941c7d99dae363368917c88a95af",
     "generated.ts": "a5b32bc69d4ed968afc4aa369a824cfb493355641a9449da69da59b7a49bfeed",
     "mcp.ts": "173254b3061965192bb3157e5fc44afd068102f89d12ce89a0d5d8b104c4733a",
     "paged/views/feed.ts": "23e5cb729dfc83c5183e7f4d6c310d21498bb7a15dd3d03e758ed81a9fced7a9",
@@ -67,8 +67,8 @@
   },
   "precedence cloudflare-postgres": {
     "access-targets.ts": "1c604aef44a2bec0d4602ce937940a1306d505127399e3fbced2f3c78051c29e",
-    "admin-descriptors.ts": "c997f880bc93e7cb66bedcb323b0102a07657858ebbdbde824c28395c76b3945",
-    "admin-developer-console.ts": "44ad55565730af3758669450a54d633a042d0f0527e19d5bf70deea7a4e6d123",
+    "admin-descriptors.ts": "df799a0f02ac13f6ac72ed76073db33cd62ddd93d49c20612d24d1d887088ef9",
+    "admin-developer-console.ts": "de5b4ff881e5bee4ffe3bbdfee250b1bc9e0941c7d99dae363368917c88a95af",
     "generated.ts": "c62ee821b2c5e8c8edb21a0cd9328b527ca08f5023622a20b5ffc1a9f5b2f5c2",
     "mcp.ts": "2946ecc9620dde64fd52574641ad8a5dc7015c82327c745745aef17c91d292fb",
     "paged/views/feed.ts": "7790f6fb184ed765471e3dbc107455caa822e5c7c2012579adcf3bb44dd5f57b",
@@ -1379,8 +1379,8 @@
   },
   "rest bun-postgres": {
     "access-targets.ts": "dcae8139e455079bb12627ddd02bf1f7429688402a0cc92cfc1f5006e6fc3ec5",
-    "admin-descriptors.ts": "8b9f4cb961ccab49b909dbf198ba67bd5007b64a92816959a6a6353a1bbac14e",
-    "admin-developer-console.ts": "c33df7550a62269300357a0f9a116f19f43550a24d8194c4e67eda7c0fc69b37",
+    "admin-descriptors.ts": "76bbb6ddf7774c8678ceaffba032c5ad9269e7eed257142010ae0af19ba575e8",
+    "admin-developer-console.ts": "5dcd5314f61372d746f6386356564978050bc2a9a3e9a6286e9302f5b616f7c6",
     "generated.ts": "f499dceb5aec3764cee30ef29ceaf792cc12adfaf5d74243314c1d22fd62de63",
     "mcp.ts": "f735d360e3894c750c93dfd2643cf8e5f8278f15115e127fe5d32705cfe8b727",
     "paged/views/admin-notes.ts": "76f5c01790c04c17edf5be3dc69f21b5354b703645eb3211573444b208384053",
@@ -1415,8 +1415,8 @@
   },
   "rest cloudflare-postgres": {
     "access-targets.ts": "dcae8139e455079bb12627ddd02bf1f7429688402a0cc92cfc1f5006e6fc3ec5",
-    "admin-descriptors.ts": "8b9f4cb961ccab49b909dbf198ba67bd5007b64a92816959a6a6353a1bbac14e",
-    "admin-developer-console.ts": "c33df7550a62269300357a0f9a116f19f43550a24d8194c4e67eda7c0fc69b37",
+    "admin-descriptors.ts": "76bbb6ddf7774c8678ceaffba032c5ad9269e7eed257142010ae0af19ba575e8",
+    "admin-developer-console.ts": "5dcd5314f61372d746f6386356564978050bc2a9a3e9a6286e9302f5b616f7c6",
     "generated.ts": "f499dceb5aec3764cee30ef29ceaf792cc12adfaf5d74243314c1d22fd62de63",
     "mcp.ts": "f735d360e3894c750c93dfd2643cf8e5f8278f15115e127fe5d32705cfe8b727",
     "paged/views/admin-notes.ts": "76f5c01790c04c17edf5be3dc69f21b5354b703645eb3211573444b208384053",

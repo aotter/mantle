@@ -51,9 +51,12 @@ export function developerConsole(plan: RuntimePlan) {
   const schemas = Object.values(plan.schemas).sort((a, b) => a.name.localeCompare(b.name));
   const views = Object.entries(plan.views).sort(([a], [b]) => a.localeCompare(b));
   const procedureAudience = (name: string): Audience => audienceOf(plan.procedures[name]?.requires) ?? "public";
-  // The console lists Procedure Triggers; a GET View Trigger (ADR-0047) is an exposure of its View.
-  const procedureTriggers = Object.entries(plan.triggers).filter(
-    (e): e is [string, Extract<PlanTrigger, { procedure: string }>] => "procedure" in e[1],
+  const procedureTriggers = Object.entries(plan.triggers)
+    .filter((e): e is [string, Extract<PlanTrigger, { procedure: string }>] => "procedure" in e[1])
+    .sort(([a], [b]) => a.localeCompare(b));
+  // A GET View Trigger (ADR-0047) is shown like a Procedure's http Trigger, its target a View.
+  const viewTriggers = Object.entries(plan.triggers).filter(
+    (e): e is [string, Extract<PlanTrigger, { view: string }>] => "view" in e[1],
   );
   const handlerOf = (h: RuntimePlan["procedures"][string]["handler"]) =>
     "ref" in h
@@ -77,9 +80,10 @@ export function developerConsole(plan: RuntimePlan) {
           "ref" in p.handler ? p.handler : p.handler.steps ? { steps: p.handler.steps } : { source: p.handler.source },
       },
     }));
-  const triggers = procedureTriggers
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, t]) => ({
+  const viewAudience = (v: RuntimePlan["views"][string]): Audience =>
+    v.surface === "internal" ? "system" : v.surface === "admin" ? "admin" : (audienceOf(v.requires) ?? "public");
+  const triggers = [
+    ...procedureTriggers.map(([name, t]) => ({
       name,
       target: t.procedure,
       source: t.source,
@@ -87,9 +91,16 @@ export function developerConsole(plan: RuntimePlan) {
       audience: (t.source.kind === "mcp" && t.source.surface === "admin"
         ? "admin"
         : procedureAudience(t.procedure)) as Audience,
-    }));
-  const viewAudience = (v: RuntimePlan["views"][string]): Audience =>
-    v.surface === "internal" ? "system" : v.surface === "admin" ? "admin" : (audienceOf(v.requires) ?? "public");
+    })),
+    ...viewTriggers.map(([name, t]) => ({
+      name,
+      target: t.view,
+      targetKind: "view" as const,
+      source: t.source,
+      manifest: t,
+      audience: viewAudience(plan.views[t.view]!),
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name));
 
   const relation = (id: string, kind: string, sourceId: string, targetId: string, at: string, value: string) => ({
     id,
@@ -175,6 +186,16 @@ export function developerConsole(plan: RuntimePlan) {
         t.procedure,
       ),
     ),
+    ...viewTriggers.map(([name, t]) =>
+      relation(
+        `Trigger:${name}:target:${t.view}`,
+        "trigger-target",
+        `Trigger:${name}`,
+        `View:${t.view}`,
+        "/spec/target/view",
+        t.view,
+      ),
+    ),
   ].sort((a, b) => a.id.localeCompare(b.id));
 
   const callable = (["public", "admin"] as const).flatMap(surface =>
@@ -215,21 +236,25 @@ export function developerConsole(plan: RuntimePlan) {
         },
       ];
     }),
-    // the preset mounts REST at /api
-    ...views
-      .filter(([, v]) => v.surface === "public")
-      .map(([name, v]) => ({
+    // the preset mounts REST at /api; a GET View Trigger adds a path of the application's own
+    ...[
+      ...views.filter(([, v]) => v.surface === "public").map(([name]) => [name, name, `/api/views/${name}`] as const),
+      ...viewTriggers.map(([name, t]) => [name, t.view, t.source.path] as const),
+    ].map(([name, target, path]) => {
+      const v = plan.views[target]!;
+      return {
         kind: "view" as const,
         name,
-        target: name,
+        target,
         method: "GET",
-        path: `/api/views/${name}`,
+        path,
         audience: viewAudience(v),
         title: typeof v.title === "string" ? v.title : null,
-        description: typeof v.description === "string" ? v.description : `Read View '${name}'.`,
+        description: typeof v.description === "string" ? v.description : `Read View '${target}'.`,
         input: v.input ?? { type: "object" },
         output: null,
-      })),
+      };
+    }),
   ].sort((a, b) => `${a.path}\0${a.method}`.localeCompare(`${b.path}\0${b.method}`));
   const adminProcedures = new Set(
     callable.filter(entry => entry.kind === "procedure" && entry.surface === "admin").map(entry => entry.target),

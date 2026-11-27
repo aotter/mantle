@@ -245,7 +245,9 @@ function LogicDefinition({
   const procedure =
     item.kind === "Procedure"
       ? item.model
-      : (snapshot.logic.procedures.find(({ name }) => name === item.model.target) ?? null);
+      : item.model.targetKind === "view"
+        ? null
+        : (snapshot.logic.procedures.find(({ name }) => name === item.model.target) ?? null);
   const title = item.kind === "Procedure" ? resolveLocalizedText(item.model.title, language) : null;
   const description = item.kind === "Procedure" ? resolveLocalizedText(item.model.description, language) : null;
   const atom = snapshot.graph.atoms.find(({ id }) => id === item.id);
