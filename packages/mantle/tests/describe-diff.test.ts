@@ -244,3 +244,188 @@ test("fingerprints: presentation is an explicit list that moves exposure, never 
     return { behavior: false, exposure: true, pin: true };
   }
 });
+
+// diffApp semantics (ADR-0047 §8, #2174).
+type Line = [id: string, field: string, direction: string, unverified?: true];
+const lines = (c: any[]): Line[] =>
+  c.map(x => (x.unverified ? [x.id, x.field, x.direction, x.unverified] : [x.id, x.field, x.direction]));
+/** A formula-2 report as a formula-1 reader saved it: no additive keys, `targetHash` read from `targetHashV1`. */
+const asFormulaV1 = (report: any) => {
+  const { targetHashVersion: _, ...rest } = copy(report);
+  for (const t of rest.targets) {
+    t._meta.targetHash = t._meta.targetHashV1;
+    for (const key of ["targetHashV1", "behaviorHash", "exposureHash", "exposure"]) delete t._meta[key];
+  }
+  return rest;
+};
+const projection = (p: any) => {
+  const v = p.views["my-doc"];
+  v.source = v.source.replace("SELECT id, title", "SELECT id, title, org");
+  v.stmts[0].SelectStmt.targetList.push(structuredClone(v.stmts[0].SelectStmt.targetList[0]));
+};
+const myDocRoutes = ["admin:GET /developer/views/:name", "rest:GET /api/docs/:id", "rest:GET /api/views/my-doc"];
+const behaviorLines = (ids: string[]): Line[] => ids.map(id => [id, "behavior", "changed"]);
+
+test("diff: a URI-only REST move is one exposure line; the path-only Trigger move is changed, not widened", async () => {
+  const before = await describeApp(await compile(withGet));
+  const rows: [string, string, string, string, string, string[]][] = [
+    [
+      "GET View Trigger",
+      'path: "/api/docs/{id}"',
+      'path: "/api/documents/{id}"',
+      "rest:GET /api/docs/:id",
+      "rest:GET /api/documents/:id",
+      ["admin:GET /developer/views/:name", "rest:GET /api/views/my-doc", "view:my-doc"],
+    ],
+    [
+      "POST Procedure Trigger",
+      "path: /api/orders/rename",
+      "path: /api/orders/retitle",
+      "rest:POST /api/orders/rename",
+      "rest:POST /api/orders/retitle",
+      ["admin:POST /operations/:name", "admin:POST /webmcp/:tool", "procedure:rename-order"],
+    ],
+  ];
+  for (const [name, from, to, oldId, newId, carriers] of rows) {
+    const changes = diffApp(before, await describeApp(await compile(withGet.replace(from, to))));
+    expect([name, changes.find(c => c.id === newId)]).toEqual([
+      name,
+      {
+        id: newId,
+        field: "exposure",
+        direction: "changed",
+        before: oldId,
+        after: newId,
+      },
+    ]);
+    const expected: Line[] = [
+      ...carriers.map((id): Line => [id, "triggers", "changed"]),
+      [newId, "exposure", "changed"],
+    ];
+    expect([name, lines(changes).sort()]).toEqual([name, expected.sort()]);
+  }
+});
+
+test("diff: a move that also renames {k} is not a URI-only move", async () => {
+  const text = withGet
+    .replace('path: "/api/docs/{id}"', 'path: "/api/docs/{doc}"')
+    .replace("required: [id], properties: {id: {type: string}}}", "required: [doc], properties: {doc: {type: string}}}")
+    .replace(
+      "WHERE id = input.id ORDER BY id\n---\n" + H + "kind: View\nmetadata: {name: member-docs}",
+      "WHERE id = input.doc ORDER BY id\n---\n" + H + "kind: View\nmetadata: {name: member-docs}",
+    );
+  const changes = diffApp(await describeApp(await compile(withGet)), await describeApp(await compile(text)));
+  expect(lines(changes.filter(c => c.id.startsWith("rest:GET /api/docs/")))).toEqual([
+    ["rest:GET /api/docs/:doc", "target", "widened"],
+    ["rest:GET /api/docs/:id", "target", "narrowed"],
+  ]);
+  expect(changes.some(c => c.field === "exposure" && c.before === "rest:GET /api/docs/:id")).toBe(false);
+});
+
+test("diff: exposure, behavior and requires lines on formula-2 reports", async () => {
+  const plan = await compile(withGet),
+    report = await describeApp(plan);
+  // Binding change: retyping {id} moves the rest entry's recorded binding.
+  const retyped = copy(plan);
+  retyped.views["my-doc"].input.properties.id.type = "integer";
+  expect(diffApp(report, await describeApp(retyped)).filter(c => c.field === "exposure")).toEqual([
+    {
+      id: "rest:GET /api/docs/:id",
+      field: "exposure",
+      direction: "changed",
+      before: {
+        head: false,
+        input: "query",
+        path: { id: "string" },
+        response: "page",
+        strict: true,
+      },
+      after: {
+        head: false,
+        input: "query",
+        path: { id: "number" },
+        response: "page",
+        strict: true,
+      },
+    },
+  ]);
+  // Projection change: behavior on the View and every route that reaches it, nothing else.
+  const projected = copy(plan);
+  projection(projected);
+  expect(lines(diffApp(report, await describeApp(projected)))).toEqual(behaviorLines([...myDocRoutes, "view:my-doc"]));
+  // Loosened requires stays widened; behavior is reported beside it.
+  const strict = copy(plan);
+  strict.views["my-doc"].requires = { auth: { all: ["ctx.user"] } };
+  expect(lines(diffApp(await describeApp(strict), report))).toEqual([
+    ["admin:GET /developer/views/:name", "variants", "widened"],
+    ["admin:GET /developer/views/:name", "behavior", "changed"],
+    ["rest:GET /api/docs/:id", "requires", "widened"],
+    ["rest:GET /api/docs/:id", "variants", "widened"],
+    ["rest:GET /api/docs/:id", "behavior", "changed"],
+    ["rest:GET /api/views/my-doc", "requires", "widened"],
+    ["rest:GET /api/views/my-doc", "variants", "widened"],
+    ["rest:GET /api/views/my-doc", "behavior", "changed"],
+    ["view:my-doc", "requires", "widened"],
+    ["view:my-doc", "behavior", "changed"],
+  ]);
+  // Exposure fallback: a description-only edit moves only the canonical target's exposureHash.
+  const described = copy(plan);
+  described.views["my-doc"].description = "One document, by id.";
+  expect(lines(diffApp(report, await describeApp(described)))).toEqual([["view:my-doc", "exposure", "changed"]]);
+});
+
+test("diff: across the formula change, formula 1 is compared on both sides and never suppressed", async () => {
+  const plan = await compile(withGet),
+    report = await describeApp(plan),
+    projected = copy(plan);
+  projection(projected);
+  const after = await describeApp(projected),
+    star = (before: number, after: number) => ({
+      id: "*",
+      field: "targetHashVersion",
+      direction: "changed" as const,
+      before,
+      after,
+    });
+  // A SQL change in the upgrade deploy: the `*` line, then behavior for exactly the targets it reached.
+  const upgrade = diffApp(asFormulaV1(report), after);
+  expect(upgrade[0]).toEqual(star(1, 2));
+  expect(lines(upgrade.slice(1))).toEqual(behaviorLines([...myDocRoutes, "view:my-doc"]));
+  expect(diffApp(after, asFormulaV1(report))[0]).toEqual(star(2, 1));
+  expect(lines(diffApp(after, asFormulaV1(report)).slice(1))).toEqual(lines(upgrade.slice(1)));
+  // A formula-2 report without the transition value: every target unverified, none silent.
+  const dropped = copy(after);
+  for (const t of dropped.targets) delete t._meta.targetHashV1;
+  expect(lines(diffApp(asFormulaV1(report), dropped))).toEqual([
+    ["*", "targetHashVersion", "changed"],
+    ...dropped.targets.map((t: any): Line => [t._meta.id, "behavior", "changed", true]).sort(),
+  ]);
+});
+
+test("diff: two formula-1 reports read as before formula 2", async () => {
+  const plan = await compile(withGet),
+    report = asFormulaV1(await describeApp(plan));
+  const projected = copy(plan),
+    strict = copy(plan);
+  projection(projected);
+  strict.views["my-doc"].requires = { auth: { all: ["ctx.user"] } };
+  expect(diffApp(report, report)).toEqual([]);
+  // Behavior only from the pin, and only when nothing else was recorded; no `*`, exposure or unverified line.
+  expect(lines(diffApp(report, asFormulaV1(await describeApp(projected))))).toEqual(
+    behaviorLines([...myDocRoutes, "view:my-doc"]),
+  );
+  expect(lines(diffApp(asFormulaV1(await describeApp(strict)), report))).toEqual([
+    ["admin:GET /developer/views/:name", "variants", "widened"],
+    ["rest:GET /api/docs/:id", "requires", "widened"],
+    ["rest:GET /api/docs/:id", "variants", "widened"],
+    ["rest:GET /api/views/my-doc", "requires", "widened"],
+    ["rest:GET /api/views/my-doc", "variants", "widened"],
+    ["view:my-doc", "requires", "widened"],
+  ]);
+  // Without formula-2 keys a REST path move cannot be verified as URI-only: it stays a removed and an added target.
+  const moved = asFormulaV1(await describeApp(await compile(withGet.replace("/api/docs/", "/api/documents/"))));
+  expect(lines(diffApp(report, moved).filter(c => c.id.startsWith("rest:GET /api/doc")))).toEqual([
+    ["rest:GET /api/docs/:id", "target", "narrowed"],
+    ["rest:GET /api/documents/:id", "target", "widened"],
+  ]);
+});

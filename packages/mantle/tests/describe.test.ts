@@ -588,11 +588,17 @@ test("the saved v1 report equals today's report read through formula 1, and diff
   expect(diffApp(saved, saved)).toEqual([]);
   expect(diffApp(report, report)).toEqual([]);
   expect(diffApp(saved, asFormulaV1(report))).toEqual([]);
-  // Across the formula change every pin differs; until diffApp compares targetHashV1 (#2174, next slice) each target
-  // reads as a behavior change, never as silence.
-  const expected = saved.targets.map(t => ({ id: t._meta.id, field: "behavior", direction: "changed" as const }));
-  expect(diffApp(saved, report)).toEqual(expected);
-  expect(diffApp(report, saved)).toEqual(expected);
+  // Across the formula change every pin differs; diffApp compares formula 1 on both sides (ADR-0047 §8.6), so an
+  // unchanged application reads as the formula change alone.
+  const line = (before: number, after: number) => ({
+    id: "*",
+    field: "targetHashVersion",
+    direction: "changed" as const,
+    before,
+    after,
+  });
+  expect(diffApp(saved, report)).toEqual([line(1, 2)]);
+  expect(diffApp(report, saved)).toEqual([line(2, 1)]);
 });
 
 test("matchTarget resolves the saved v1 report as it resolves today's report", async () => {
