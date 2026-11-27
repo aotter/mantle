@@ -45,7 +45,7 @@ spec:
   which is a follow-up.
 - The generated `GET /api/views/<name>` route stays; each Trigger adds one exposure.
 - The plan lowers the Trigger to `{ source, view }`. Existing Triggers keep their exact lowered shape, so existing plan
-  fingerprints do not change. The plan stores no binding: one function derives it (§2.5).
+  fingerprints do not change. The plan stores no binding: one function derives it (§6).
 
 ### 2. Path templates for GET Triggers
 
