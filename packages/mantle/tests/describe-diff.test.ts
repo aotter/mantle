@@ -245,6 +245,23 @@ test("fingerprints: presentation is an explicit list that moves exposure, never 
   }
 });
 
+test("fingerprints: the first http Trigger of an otherwise internal Procedure moves only its own rest entry", async () => {
+  const before = await prints(await compile(base)),
+    after = await prints(
+      await compile(
+        base +
+          `---\n${H}kind: Trigger\nmetadata: {name: rename-doc-http}\nspec: {source: {kind: http, method: POST, path: /api/docs/rename}, target: {procedure: rename-doc}}\n`,
+      ),
+    );
+  expect(moved(before, after, "procedure:rename-doc")).toEqual(same);
+  expect(pinsMoved(before, after)).toEqual([]);
+  expect(after.has("rest:POST /api/docs/rename")).toBe(true);
+  // An internal View still differs from an admin one: its declared surface is behavior.
+  const admin = copy(await compile(base));
+  admin.views["all-orders"].surface = "admin";
+  expect(moved(before, await prints(admin), "view:all-orders").pin).toBe(true);
+});
+
 test("fingerprints: a View list's filterFields and searchFields are behavior; its columns and nav are not", async () => {
   // Admin's generated routes validate `filters`/`search` against these lists and compile them into SQL.
   const plan = await compile(base),
