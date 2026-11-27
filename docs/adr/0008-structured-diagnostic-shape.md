@@ -3,7 +3,7 @@
 **Status:** Carried over from POC v0.0.x; amended for the shipped v0.1
 diagnostic emitters and measured harnesses.
 
-**Date:** 2026-04-30 (POC); last amended 2026-08-31.
+**Date:** 2026-04-30 (POC); last amended 2026-11-27.
 
 **Deciders**: phsu
 
@@ -21,6 +21,14 @@ diagnostic emitters and measured harnesses.
 > other never-raised codes are removed; the shape below is otherwise current.
 > References below to `boot`, `test`, `@aotter/mantle-spec` and these codes
 > are decision history.
+
+> **Amended 2026-11-27 (#2174, [ADR-0047](0047-get-view-triggers-and-fingerprints.md)).** Four `validate` codes join the
+> catalogue for Triggers that target a View: `TRIGGER_TARGET_VIEW_UNKNOWN` and
+> `TRIGGER_TARGET_VIEW_SURFACE` at `/spec/target/view`, and
+> `TRIGGER_PATH_RESERVED` and `TRIGGER_PATH_PARAM_INVALID` at
+> `/spec/source/path`. `TRIGGER_PATH_INVALID` and `TRIGGER_PATH_COLLISION` keep
+> their codes and cover GET templates too. A Trigger reports one root cause, in
+> the order target, path grammar, parameters, collision.
 
 ---
 

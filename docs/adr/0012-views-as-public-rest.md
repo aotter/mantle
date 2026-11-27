@@ -3,7 +3,17 @@
 **Status:** Accepted for v0.1.0. Amended to match the shipped public/staff
 surface and authorization contract.
 
-**Date:** 2026-05-05; amended 2026-08-03
+**Date:** 2026-05-05; amended 2026-08-03 and 2026-11-27
+
+> **2026-11-27 amendment (#2174, [ADR-0047](0047-get-view-triggers-and-fingerprints.md)):** a `surface: public` View may also
+> be read through GET Triggers at application-chosen paths such as
+> `/api/orders/{id}`, which reuse the View's reader, paging, guard and scope.
+> `/api/views/<name>` stays and keeps its lenient handling (first value wins,
+> unknown keys ignored, `limit` clamped). The Trigger route is strict: a
+> repeated or unknown query key is 400 `INPUT_VALIDATION_FAILED` before any
+> data read, and it answers GET only. The first path segment after `/api/` may
+> not be `views` or `auth`. This is a Trigger, not a second exposure switch on
+> the View, so the rejection of `expose.rest` below stands.
 
 ## Context
 
