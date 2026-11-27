@@ -96,10 +96,16 @@ export function checkSqlHandler(p: ProcedureManifest, filePaths?: ManifestFilePa
  */
 const GET_VIEW_TRIGGERS_SERVED = false;
 
+/** Scalar input types a GET path parameter may bind, `null` aside (ADR-0047 §2). */
+const PATH_PARAM_TYPES = ["string", "integer", "number", "boolean"] as const;
+
 export function checkTriggerRefs(
   triggers: ReadonlyArray<TriggerManifest>,
   proceduresByName: ReadonlyMap<string, ProcedureManifest>,
+  viewsByName: ReadonlyMap<string, ViewManifest>,
   filePaths?: ManifestFilePaths,
+  /** Test-only: opens the acceptance gate so the real diagnostics are observable before GET View Triggers are served. */
+  options: { readonly getViewTriggersServed?: boolean } = {},
 ): Diagnostic[] {
   const out: Diagnostic[] = [];
   const httpRoutes = new Map<string, string>();
@@ -107,9 +113,25 @@ export function checkTriggerRefs(
   const undescribedMcpProcedures = new Set<string>();
 
   for (const t of triggers) {
-    const errorsBefore = out.length;
-    const procName = "procedure" in t.spec.target ? t.spec.target.procedure : undefined;
-    if (procName !== undefined && !proceduresByName.has(procName)) {
+    if ("view" in t.spec.target) {
+      const problem = checkViewTrigger(t, t.spec.target.view, viewsByName, httpRoutes, filePaths);
+      if (problem) out.push(problem);
+      else if (!(options.getViewTriggersServed ?? GET_VIEW_TRIGGERS_SERVED)) {
+        out.push(
+          validateDiagnostic({
+            code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
+            severity: "error",
+            path: manifestPath("Trigger", t.metadata.name, "/spec/target/view", filePaths),
+            value: t.spec.target.view,
+            expected: "a Trigger targeting a Procedure",
+            message: "GET View Triggers are not served by this build.",
+          }),
+        );
+      }
+      continue;
+    }
+    const procName = t.spec.target.procedure;
+    if (!proceduresByName.has(procName)) {
       out.push(
         validateDiagnostic({
           code: "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
@@ -126,64 +148,18 @@ export function checkTriggerRefs(
 
     if (t.spec.source.kind === "http") {
       const httpPath = t.spec.source.path;
-      // describe writes `{name}` as `:name`, so a literal `:name` segment or a brace outside a whole `{name}` segment
-      // would read as another route; refused so describe templates name exactly one route.
-      const ambiguous = httpPath
-        .split("/")
-        .find(segment => !/^\{[^{}/]+\}$/.test(segment) && (segment.startsWith(":") || /[{}]/.test(segment)));
-      const isValidPrefix = httpPath.startsWith("/api/") && ambiguous === undefined;
-      if (ambiguous !== undefined) {
-        out.push(
-          validateDiagnostic({
-            code: "TRIGGER_PATH_INVALID",
-            severity: "error",
-            path: manifestPath("Trigger", t.metadata.name, "/spec/source/path", filePaths),
-            value: httpPath,
-            expected: "literal segments not starting with ':', and parameters as whole '{name}' segments",
-            message:
-              `Trigger '${t.metadata.name}' has path segment '${ambiguous}' — describe writes a '{name}' parameter ` +
-              `as ':name', so this segment would be read as another route. Use '{name}' for a parameter.`,
-          }),
-        );
-      } else if (!httpPath.startsWith("/api/")) {
-        out.push(
-          validateDiagnostic({
-            code: "TRIGGER_PATH_INVALID",
-            severity: "error",
-            path: manifestPath("Trigger", t.metadata.name, "/spec/source/path", filePaths),
-            value: httpPath,
-            expected: "path starting with '/api/'",
-            message:
-              `Trigger '${t.metadata.name}' has path '${httpPath}' — http Trigger ` +
-              `paths MUST start with '/api/' so adapters can route public ` +
-              `pages and Procedure endpoints without ambiguity.`,
-          }),
-        );
-      }
+      const pathProblem = httpPathProblem(t, httpPath, filePaths);
+      if (pathProblem) out.push(pathProblem);
       // Only track valid paths for collision detection — emitting both
       // TRIGGER_PATH_INVALID and TRIGGER_PATH_COLLISION for the same
       // bad path produces noisy diagnostics that misdescribe the root
       // cause (collision is secondary; the path is the real error).
-      // Parameter names do not change which requests match: `/api/{a}/x` and `/api/{b}/x` are one route, and the second is unreachable.
-      const key = `${t.spec.source.method} ${httpPath.replace(/\{[^}]+\}/g, "{}")}`;
-      const prior = httpRoutes.get(key);
-      if (prior) {
-        out.push(
-          validateDiagnostic({
-            code: "TRIGGER_PATH_COLLISION",
-            severity: "error",
-            path: manifestPath("Trigger", t.metadata.name, "/spec/source", filePaths),
-            value: `${t.spec.source.method} ${httpPath}`,
-            expected: `unique (method, path) across all http Triggers, parameter names aside (also declared by '${prior}')`,
-            message: `Trigger '${t.metadata.name}' shares route ${t.spec.source.method} ${httpPath} with Trigger '${prior}'; only one of them could ever match.`,
-          }),
-        );
-      } else if (isValidPrefix) {
-        httpRoutes.set(key, t.metadata.name);
-      }
+      const collision = claimRoute(t, t.spec.source.method, httpPath, httpRoutes, filePaths);
+      if (collision) out.push(collision);
+      else if (!pathProblem) httpRoutes.set(routeKey(t.spec.source.method, httpPath), t.metadata.name);
     }
 
-    if (procName !== undefined && t.spec.source.kind === "mcp") {
+    if (t.spec.source.kind === "mcp") {
       // An MCP tool is described to a cold agent by `spec.description`.
       // The catalog falls back to "Invoke Procedure '<name>'." when it is
       // absent, which reads like a description and hides the gap; the
@@ -210,21 +186,167 @@ export function checkTriggerRefs(
         );
       }
     }
-
-    if ("view" in t.spec.target && !GET_VIEW_TRIGGERS_SERVED && out.length === errorsBefore) {
-      out.push(
-        validateDiagnostic({
-          code: "TRIGGER_TARGET_VIEW_UNSUPPORTED",
-          severity: "error",
-          path: manifestPath("Trigger", t.metadata.name, "/spec/target/view", filePaths),
-          value: t.spec.target.view,
-          expected: "a Trigger targeting a Procedure",
-          message: "GET View Triggers are not served by this build.",
-        }),
-      );
-    }
   }
   return out;
+}
+
+/**
+ * One root cause per GET View Trigger, in ADR-0047's order: target, path grammar (invalid, then reserved), parameters,
+ * collision. A path that fails an earlier check is not claimed for collision detection.
+ */
+function checkViewTrigger(
+  t: TriggerManifest,
+  viewName: string,
+  viewsByName: ReadonlyMap<string, ViewManifest>,
+  httpRoutes: Map<string, string>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic | undefined {
+  const name = t.metadata.name;
+  const at = (pointer: string) => manifestPath("Trigger", name, pointer, filePaths);
+  const view = viewsByName.get(viewName);
+  if (!view) {
+    return validateDiagnostic({
+      code: "TRIGGER_TARGET_VIEW_UNKNOWN",
+      severity: "error",
+      path: at("/spec/target/view"),
+      value: viewName,
+      expected: "name of a declared View",
+      candidates: [...viewsByName.keys()],
+      suggestion: bestMatch(viewName, [...viewsByName.keys()]),
+      message: `Trigger '${name}' targets unknown View '${viewName}'.`,
+    });
+  }
+  if (view.spec.surface !== "public") {
+    return validateDiagnostic({
+      code: "TRIGGER_TARGET_VIEW_SURFACE",
+      severity: "error",
+      path: at("/spec/target/view"),
+      value: view.spec.surface,
+      expected: "a View with surface 'public'",
+      message: `Trigger '${name}' targets View '${viewName}' with surface '${view.spec.surface}'; a GET Trigger exposes a public View only.`,
+    });
+  }
+  if (t.spec.source.kind !== "http") return undefined; // Parse refuses this; narrowed for the type.
+  const httpPath = t.spec.source.path;
+  const pathProblem = httpPathProblem(t, httpPath, filePaths);
+  if (pathProblem) return pathProblem;
+  // split("/") of a path starting with "/api/" is ["", "api", ...segments].
+  const segments = httpPath.split("/").slice(2);
+  if (segments.some(segment => segment === "" || segment === "." || segment === ".." || segment.includes("%"))) {
+    return validateDiagnostic({
+      code: "TRIGGER_PATH_INVALID",
+      severity: "error",
+      path: at("/spec/source/path"),
+      value: httpPath,
+      expected: "non-empty segments that are not '.' or '..' and contain no '%', with no trailing '/'",
+      message: `GET Trigger '${name}' path '${httpPath}' must not contain empty, '.', '..' or percent-encoded segments or end with '/'.`,
+    });
+  }
+  const first = segments[0]!;
+  if (first === "views" || first === "auth" || first.startsWith("{")) {
+    const generated = viewsByName.get(segments[1] ?? "");
+    const collides =
+      first === "views" && segments.length === 2 && generated?.spec.surface === "public"
+        ? `; it collides with GET /api/views/${segments[1]}`
+        : "";
+    return validateDiagnostic({
+      code: "TRIGGER_PATH_RESERVED",
+      severity: "error",
+      path: at("/spec/source/path"),
+      value: httpPath,
+      expected: "a first segment after '/api/' that is a literal other than 'views' or 'auth'",
+      message:
+        `GET Trigger '${name}' path '${httpPath}' must start with a literal segment other than 'views' or 'auth' ` +
+        `after '/api/'; Core reserves those for generated routes${collides}.`,
+    });
+  }
+  const properties = view.spec.input?.properties ?? {};
+  const seen = new Set<string>();
+  for (const segment of segments) {
+    if (!segment.startsWith("{")) continue;
+    const param = segment.slice(1, -1);
+    const reason = seen.has(param)
+      ? "appears more than once"
+      : !Object.hasOwn(properties, param)
+        ? `is not a property of View '${viewName}' input`
+        : !hasType(properties[param], PATH_PARAM_TYPES)
+          ? `is not a ${PATH_PARAM_TYPES.join(", ")} input of View '${viewName}'`
+          : undefined;
+    seen.add(param);
+    if (reason) {
+      return validateDiagnostic({
+        code: "TRIGGER_PATH_PARAM_INVALID",
+        severity: "error",
+        path: at("/spec/source/path"),
+        value: param,
+        expected: `a scalar top-level input property of View '${viewName}', used once`,
+        candidates: Object.keys(properties),
+        message: `GET Trigger '${name}' path parameter '{${param}}' ${reason}.`,
+      });
+    }
+  }
+  const collision = claimRoute(t, "GET", httpPath, httpRoutes, filePaths);
+  if (!collision) httpRoutes.set(routeKey("GET", httpPath), name);
+  return collision;
+}
+
+/** The http grammar every Trigger shares: the `/api/` prefix, and literal or whole-`{name}` segments. */
+function httpPathProblem(t: TriggerManifest, httpPath: string, filePaths?: ManifestFilePaths): Diagnostic | undefined {
+  // describe writes `{name}` as `:name`, so a literal `:name` segment or a brace outside a whole `{name}` segment
+  // would read as another route; refused so describe templates name exactly one route.
+  const ambiguous = httpPath
+    .split("/")
+    .find(segment => !/^\{[^{}/]+\}$/.test(segment) && (segment.startsWith(":") || /[{}]/.test(segment)));
+  if (ambiguous !== undefined) {
+    return validateDiagnostic({
+      code: "TRIGGER_PATH_INVALID",
+      severity: "error",
+      path: manifestPath("Trigger", t.metadata.name, "/spec/source/path", filePaths),
+      value: httpPath,
+      expected: "literal segments not starting with ':', and parameters as whole '{name}' segments",
+      message:
+        `Trigger '${t.metadata.name}' has path segment '${ambiguous}' — describe writes a '{name}' parameter ` +
+        `as ':name', so this segment would be read as another route. Use '{name}' for a parameter.`,
+    });
+  }
+  if (!httpPath.startsWith("/api/")) {
+    return validateDiagnostic({
+      code: "TRIGGER_PATH_INVALID",
+      severity: "error",
+      path: manifestPath("Trigger", t.metadata.name, "/spec/source/path", filePaths),
+      value: httpPath,
+      expected: "path starting with '/api/'",
+      message:
+        `Trigger '${t.metadata.name}' has path '${httpPath}' — http Trigger ` +
+        `paths MUST start with '/api/' so adapters can route public ` +
+        `pages and Procedure endpoints without ambiguity.`,
+    });
+  }
+  return undefined;
+}
+
+/** Parameter names do not change which requests match: `/api/{a}/x` and `/api/{b}/x` are one route, and the second is unreachable. */
+function routeKey(method: string, httpPath: string): string {
+  return `${method} ${httpPath.replace(/\{[^}]+\}/g, "{}")}`;
+}
+
+function claimRoute(
+  t: TriggerManifest,
+  method: string,
+  httpPath: string,
+  httpRoutes: ReadonlyMap<string, string>,
+  filePaths?: ManifestFilePaths,
+): Diagnostic | undefined {
+  const prior = httpRoutes.get(routeKey(method, httpPath));
+  if (!prior) return undefined;
+  return validateDiagnostic({
+    code: "TRIGGER_PATH_COLLISION",
+    severity: "error",
+    path: manifestPath("Trigger", t.metadata.name, "/spec/source", filePaths),
+    value: `${method} ${httpPath}`,
+    expected: `unique (method, path) across all http Triggers, parameter names aside (also declared by '${prior}')`,
+    message: `Trigger '${t.metadata.name}' shares route ${method} ${httpPath} with Trigger '${prior}'; only one of them could ever match.`,
+  });
 }
 
 /**

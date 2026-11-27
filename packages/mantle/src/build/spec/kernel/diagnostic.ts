@@ -74,6 +74,11 @@ export const DIAGNOSTIC_CODES = [
   "TRIGGER_TARGET_PROCEDURE_UNKNOWN",
   "TRIGGER_PATH_COLLISION",
   "TRIGGER_PATH_INVALID",
+  // ADR-0047: GET Triggers that target a View.
+  "TRIGGER_TARGET_VIEW_UNKNOWN",
+  "TRIGGER_TARGET_VIEW_SURFACE",
+  "TRIGGER_PATH_RESERVED",
+  "TRIGGER_PATH_PARAM_INVALID",
   // Feature-branch only (ADR-0047 slices S3-S6): refuses GET View Triggers until they are served; deleted with the gate.
   "TRIGGER_TARGET_VIEW_UNSUPPORTED",
   "MCP_TOOL_NAME_COLLISION",
