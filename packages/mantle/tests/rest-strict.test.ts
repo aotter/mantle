@@ -95,6 +95,9 @@ test("strict refusals before the database is opened", async () => {
     ["/api/orders/1.5", "Expected a valid number.", "views/orders/input/id"],
     ["/api/flags/yes", "Expected true or false.", "views/orders/input/urgent"],
     ["/api/orders/5?urgent=1", "Expected true or false.", "views/orders/input/urgent"],
+    // Fixed order (D8): a repeat before coercion, coercion before an unknown key.
+    ["/api/orders/5?urgent=1&urgent=1", "Query parameter is repeated.", "views/orders/input/urgent"],
+    ["/api/orders/5?unknown=1&urgent=1", "Expected true or false.", "views/orders/input/urgent"],
   ];
   for (const [path, message, at] of rows) {
     const { response, json, count } = await send("GET", path);
