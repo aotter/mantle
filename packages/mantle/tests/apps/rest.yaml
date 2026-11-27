@@ -38,6 +38,21 @@ spec:
 ---
 apiVersion: cms.mantle.aotter.net/v2
 kind: View
+metadata: {name: note-titles}
+spec:
+ surface: public
+ input: {type: object, properties: {title: {type: string}, after: {type: string}}, additionalProperties: false}
+ sql: SELECT id,title FROM notes WHERE (input.title IS NULL OR title=input.title) AND (input.after IS NULL OR id > input.after) ORDER BY id
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: {name: note-titles-get}
+spec:
+ source: {kind: http, method: GET, path: '/api/titles/{title}'}
+ target: {view: note-titles}
+---
+apiVersion: cms.mantle.aotter.net/v2
+kind: View
 metadata: {name: admin-notes}
 spec:
  surface: admin

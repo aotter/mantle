@@ -483,11 +483,18 @@ export interface CtxAuthScopePredicate {
 
 export type TriggerManifest = ManifestEnvelope<"Trigger", TriggerManifestSpec>;
 
-export interface TriggerManifestSpec {
-  readonly source: TriggerSource;
-  /** The Procedure invoked when this Trigger fires. */
-  readonly target: { readonly procedure: string };
-}
+/** A Procedure Trigger, or a GET Trigger that exposes a public View at a custom path (ADR-0047). */
+export type TriggerManifestSpec =
+  | {
+      readonly source: TriggerSource;
+      /** The Procedure invoked when this Trigger fires. */
+      readonly target: { readonly procedure: string };
+    }
+  | {
+      readonly source: HttpViewSource;
+      /** The public View this GET route reads. */
+      readonly target: { readonly view: string };
+    };
 
 /** Supported Trigger sources. Scheduling and lifecycle hooks are application code, not Trigger sources. */
 export type TriggerSource = HttpTriggerSource | McpTriggerSource;
@@ -497,6 +504,14 @@ export interface HttpTriggerSource {
   readonly method: HttpMethod;
   /** OpenAPI `{param}` syntax. Path params auto-bind to identically-named
    *  fields on the target Procedure's `input`. No optional segments. */
+  readonly path: string;
+}
+
+/** The only source of a View Trigger: GET is never a Procedure method. */
+export interface HttpViewSource {
+  readonly kind: "http";
+  readonly method: "GET";
+  /** OpenAPI `{param}` syntax; each parameter names a scalar property of the View's `input`. */
   readonly path: string;
 }
 

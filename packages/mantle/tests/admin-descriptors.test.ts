@@ -132,6 +132,49 @@ test("wiring graph distinguishes Store-only Procedures from real HTTP and MCP en
   expect(interfaces.callable.some(entry => entry.target === "create-event" && entry.surface === "admin")).toBe(true);
   expect([...interfaces.http, ...interfaces.callable].some(entry => entry.target === "register-write")).toBe(false);
 });
+test("the Developer console shows a GET View Trigger's route, Trigger and relation to its View", async () => {
+  const task = manifest("View", "one-task", {
+    surface: "public",
+    title: "One task",
+    input: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+    sql: "SELECT id,title FROM tasks WHERE id = input.id ORDER BY id",
+  });
+  const get = manifest("Trigger", "task-get", {
+    source: { kind: "http", method: "GET", path: "/api/tasks/{id}" },
+    target: { view: "one-task" },
+  });
+  const { graph, interfaces, logic } = developerConsole(await planOf([...sources, task, get]));
+  expect(interfaces.http.find(entry => entry.name === "task-get")).toEqual({
+    kind: "view",
+    name: "task-get",
+    target: "one-task",
+    method: "GET",
+    path: "/api/tasks/{id}",
+    audience: "public",
+    title: "One task",
+    description: "Read View 'one-task'.",
+    input: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+    output: null,
+  });
+  expect(logic.triggers.find(entry => entry.name === "task-get")).toMatchObject({
+    target: "one-task",
+    targetKind: "view",
+    audience: "public",
+    source: { kind: "http", method: "GET", path: "/api/tasks/{id}" },
+  });
+  expect(graph.atoms.find(atom => atom.id === "Trigger:task-get")).toMatchObject({
+    kind: "Trigger",
+    transport: "http",
+  });
+  expect(graph.relations.find(r => r.sourceId === "Trigger:task-get")).toEqual({
+    id: "Trigger:task-get:target:one-task",
+    kind: "trigger-target",
+    sourceId: "Trigger:task-get",
+    targetId: "View:one-task",
+    pointer: "/spec/target/view",
+    value: "one-task",
+  });
+});
 async function metadata(plan: RuntimePlan) {
   const diagnostics: GenerateDiagnostic[] = [];
   const files = emitAdminDescriptors({ plan }, diagnostics);

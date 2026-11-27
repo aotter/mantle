@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { generateFromSources } from "../../src/infrastructure/generate.js";
+import { checkTriggerRefs } from "../../src/build/spec/domain/service/TriggerGraphChecks.js";
 import { validateManifests } from "./parse.js";
 import { parseManifests } from "./parse.js";
 import type {
@@ -1064,5 +1066,436 @@ spec:
         path: "manifest:doc/0#/spec/input/properties/s/x-mantle-maxBytes",
         message: expect.stringContaining("x-mantle-maxBytes at /spec/input/properties/s must be a positive integer"),
       });
+  });
+});
+
+// ADR-0047: a Trigger targets a Procedure or, on GET only, a public View.
+describe("Trigger.spec.target — procedure or view", () => {
+  const triggerYaml = (source: string, target: string) => `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: order-detail-get }
+spec:
+  source: ${source}
+  target: ${target}
+`;
+  const get = '{ kind: http, method: GET, path: "/api/orders/{id}" }';
+  const post = "{ kind: http, method: POST, path: /api/orders }";
+  const mcp = "{ kind: mcp, surface: public }";
+  const exactlyOne = "Trigger.spec.target must declare exactly one of 'procedure' or 'view' as a string.";
+  const viewSource = "A Trigger targeting a View must use source { kind: http, method: GET }.";
+
+  it.each([
+    ["missing target", post, "", "Trigger.spec.target.procedure is required (string)", "/spec/target/procedure"],
+    ["empty target", post, "{}", "Trigger.spec.target.procedure is required (string)", "/spec/target/procedure"],
+    [
+      "non-string procedure",
+      post,
+      "{ procedure: 1 }",
+      "Trigger.spec.target.procedure is required (string)",
+      "/spec/target/procedure",
+    ],
+    ["both procedure and view", get, "{ procedure: bar, view: order-detail }", exactlyOne, "/spec/target"],
+    ["both procedure and view on POST", post, "{ procedure: bar, view: order-detail }", exactlyOne, "/spec/target"],
+    ["both procedure and view on mcp", mcp, "{ procedure: bar, view: order-detail }", exactlyOne, "/spec/target"],
+    ["non-string view on POST", post, "{ view: 1 }", exactlyOne, "/spec/target"],
+    ["empty view", get, '{ view: "" }', exactlyOne, "/spec/target"],
+    ["non-string view", get, "{ view: 1 }", exactlyOne, "/spec/target"],
+    ["view with an mcp source", mcp, "{ view: order-detail }", viewSource, "/spec/source"],
+    ["view with POST", post, "{ view: order-detail }", viewSource, "/spec/source"],
+    [
+      "GET with a procedure",
+      get,
+      "{ procedure: bar }",
+      'Trigger.spec.source.method must be one of POST, PUT, PATCH, DELETE (v0.1); got "GET"',
+      "/spec/source/method",
+    ],
+    [
+      "unknown target key",
+      get,
+      "{ view: order-detail, schema: orders }",
+      "spec.target.schema is not supported",
+      "/spec/target/schema",
+    ],
+    [
+      "unknown target key on a Procedure Trigger",
+      post,
+      "{ procedure: bar, schema: orders }",
+      "spec.target.schema is not supported",
+      "/spec/target/schema",
+    ],
+  ])("refuses %s", (_case, source, target, message, path) => {
+    const yaml = target ? triggerYaml(source, target) : triggerYaml(source, "").replace("  target: \n", "");
+    const { diagnostics } = parseManifests(yaml);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      code: "INVALID_MANIFEST_ENVELOPE",
+      path: `manifest:doc/0#${path}`,
+      message: expect.stringContaining(message),
+    });
+  });
+
+  it("parses a GET Trigger that targets a View", () => {
+    const { diagnostics, manifests } = parseManifests(triggerYaml(get, "{ view: order-detail }"));
+    expect(diagnostics).toEqual([]);
+    expect((manifests[0] as TriggerManifest).spec).toEqual({
+      source: { kind: "http", method: "GET", path: "/api/orders/{id}" },
+      target: { view: "order-detail" },
+    });
+  });
+
+  const app = [
+    `apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: order-detail }
+spec:
+  surface: public
+  input: { type: object, properties: { id: { type: string } } }
+  sql: "SELECT 'ok' AS status"
+`,
+    triggerYaml(get, "{ view: order-detail }"),
+  ];
+
+  it("accepts a valid GET View Trigger and links it to its View", () => {
+    const { diagnostics, linked } = validateManifests({
+      manifests: parseManifests(app).manifests,
+    });
+    expect(diagnostics).toEqual([]);
+    expect(linked?.triggers.map(t => t.manifest.spec.target)).toEqual([{ view: "order-detail" }]);
+  });
+
+  it("reports the path when a GET View Trigger fails another check", () => {
+    const bad = [app[0]!, triggerYaml('{ kind: http, method: GET, path: "/orders/{id}" }', "{ view: order-detail }")];
+    const { diagnostics } = validateManifests({
+      manifests: parseManifests(bad).manifests,
+    });
+    expect(diagnostics.map(d => d.code)).toEqual(["TRIGGER_PATH_INVALID"]);
+  });
+
+  it("generates the strict route of a GET View Trigger", async () => {
+    const result = await generateFromSources({
+      target: "bun-sqlite",
+      sources: {
+        sources: app.map((text, i) => ({ sourceId: `app-${i}.yaml`, text })),
+      },
+    });
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    expect(result.files["rest.ts"]).toContain('id: "rest:GET /api/orders/:id"');
+    expect(result.files["rest.ts"]).toContain("strict: true");
+  });
+});
+
+// ADR-0047 §3: graph diagnostics for GET View Triggers.
+describe("checkTriggerRefs — GET View Triggers", () => {
+  const orderDetail = view("order-detail", "orders", {
+    input: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        seq: { type: ["integer", "null"] },
+        price: { type: "number" },
+        open: { type: "boolean" },
+        tags: { type: "array", items: { type: "string" } },
+        filter: { type: "object" },
+      },
+    },
+  });
+  const views = new Map(
+    [
+      orderDetail,
+      view("orders-admin", "orders", { surface: "admin" }),
+      view("orders-internal", "orders", { surface: "internal" }),
+    ].map(v => [v.metadata.name, v] as const),
+  );
+  const procedures = new Map([["restockProduct", procedure("restockProduct")]]);
+  const getTrigger = (name: string, path: string, viewName = "order-detail"): TriggerManifest => ({
+    apiVersion,
+    kind: "Trigger",
+    metadata: { name },
+    spec: {
+      source: { kind: "http", method: "GET", path },
+      target: { view: viewName },
+    },
+  });
+  // The manifest pointer, without the `manifest:Trigger/<name>#` locator.
+  const check = (triggers: TriggerManifest[]) =>
+    checkTriggerRefs(triggers, procedures, views).map(d => ({
+      ...d,
+      path: d.path.replace(/^[^#]*#/, ""),
+    }));
+  const reservedMessage = (path: string, suffix = "") =>
+    `GET Trigger 'order-get' path '${path}' must start with a literal segment other than 'views' or 'auth' ` +
+    `after '/api/'; Core reserves those for generated routes${suffix}.`;
+  const normalForm = (path: string) =>
+    `GET Trigger 'order-get' path '${path}' must not contain empty, '.', '..' or percent-encoded segments or end with '/'.`;
+
+  it.each([
+    ["a literal path", "/api/orders/latest"],
+    ["a string parameter", "/api/orders/{id}"],
+    ["a nullable integer parameter", "/api/orders/by-seq/{seq}"],
+    ["number and boolean parameters", "/api/orders/{price}/{open}"],
+    ["a parameter after literals", "/api/shop/orders/{id}"],
+  ])("accepts %s", (_case, path) => {
+    expect(check([getTrigger("order-get", path)])).toEqual([]);
+  });
+
+  it.each([
+    [
+      "unknown View with a suggestion",
+      getTrigger("order-get", "/api/orders/{id}", "order-detial"),
+      {
+        code: "TRIGGER_TARGET_VIEW_UNKNOWN",
+        path: "/spec/target/view",
+        value: "order-detial",
+        suggestion: "order-detail",
+        candidates: ["order-detail", "orders-admin", "orders-internal"],
+        message: "Trigger 'order-get' targets unknown View 'order-detial'.",
+      },
+    ],
+    [
+      "admin surface",
+      getTrigger("order-get", "/api/orders", "orders-admin"),
+      {
+        code: "TRIGGER_TARGET_VIEW_SURFACE",
+        path: "/spec/target/view",
+        message:
+          "Trigger 'order-get' targets View 'orders-admin' with surface 'admin'; a GET Trigger exposes a public View only.",
+      },
+    ],
+    [
+      "internal surface",
+      getTrigger("order-get", "/api/orders", "orders-internal"),
+      {
+        code: "TRIGGER_TARGET_VIEW_SURFACE",
+        path: "/spec/target/view",
+        message:
+          "Trigger 'order-get' targets View 'orders-internal' with surface 'internal'; a GET Trigger exposes a public View only.",
+      },
+    ],
+    [
+      "undeclared parameter",
+      getTrigger("order-get", "/api/orders/{orderId}"),
+      {
+        code: "TRIGGER_PATH_PARAM_INVALID",
+        path: "/spec/source/path",
+        value: "orderId",
+        message: "GET Trigger 'order-get' path parameter '{orderId}' is not a property of View 'order-detail' input.",
+      },
+    ],
+    [
+      "object parameter",
+      getTrigger("order-get", "/api/orders/{filter}"),
+      {
+        code: "TRIGGER_PATH_PARAM_INVALID",
+        path: "/spec/source/path",
+        value: "filter",
+        message:
+          "GET Trigger 'order-get' path parameter '{filter}' is not a string, integer, number, boolean input of View 'order-detail'.",
+      },
+    ],
+    [
+      "array parameter",
+      getTrigger("order-get", "/api/orders/{tags}"),
+      {
+        code: "TRIGGER_PATH_PARAM_INVALID",
+        path: "/spec/source/path",
+        value: "tags",
+      },
+    ],
+    [
+      "repeated parameter",
+      getTrigger("order-get", "/api/orders/{id}/lines/{id}"),
+      {
+        code: "TRIGGER_PATH_PARAM_INVALID",
+        path: "/spec/source/path",
+        value: "id",
+        message: "GET Trigger 'order-get' path parameter '{id}' appears more than once.",
+      },
+    ],
+    [
+      "a generated View route",
+      getTrigger("order-get", "/api/views/order-detail"),
+      {
+        code: "TRIGGER_PATH_RESERVED",
+        path: "/spec/source/path",
+        message: reservedMessage("/api/views/order-detail", "; it collides with GET /api/views/order-detail"),
+      },
+    ],
+    [
+      "a path under /api/views",
+      getTrigger("order-get", "/api/views/x"),
+      {
+        code: "TRIGGER_PATH_RESERVED",
+        path: "/spec/source/path",
+        message: reservedMessage("/api/views/x"),
+      },
+    ],
+    [
+      "an admin View name under /api/views (not a generated public route)",
+      getTrigger("order-get", "/api/views/orders-admin"),
+      {
+        code: "TRIGGER_PATH_RESERVED",
+        message: reservedMessage("/api/views/orders-admin"),
+      },
+    ],
+    [
+      "a path under /api/auth",
+      getTrigger("order-get", "/api/auth/me"),
+      {
+        code: "TRIGGER_PATH_RESERVED",
+        path: "/spec/source/path",
+        message: reservedMessage("/api/auth/me"),
+      },
+    ],
+    [
+      "a parameter as the first segment",
+      getTrigger("order-get", "/api/{id}/x"),
+      {
+        code: "TRIGGER_PATH_RESERVED",
+        path: "/spec/source/path",
+        message: reservedMessage("/api/{id}/x"),
+      },
+    ],
+    [
+      "a '..' segment",
+      getTrigger("order-get", "/api/x/../views/o"),
+      {
+        code: "TRIGGER_PATH_INVALID",
+        path: "/spec/source/path",
+        message: normalForm("/api/x/../views/o"),
+      },
+    ],
+    [
+      "a '.' segment",
+      getTrigger("order-get", "/api/x/."),
+      { code: "TRIGGER_PATH_INVALID", message: normalForm("/api/x/.") },
+    ],
+    [
+      "a percent-encoded segment",
+      getTrigger("order-get", "/api/x/%2e%2e"),
+      { code: "TRIGGER_PATH_INVALID", message: normalForm("/api/x/%2e%2e") },
+    ],
+    [
+      "a trailing slash",
+      getTrigger("order-get", "/api/orders/"),
+      { code: "TRIGGER_PATH_INVALID", message: normalForm("/api/orders/") },
+    ],
+    [
+      "an empty segment",
+      getTrigger("order-get", "/api/orders//{id}"),
+      {
+        code: "TRIGGER_PATH_INVALID",
+        message: normalForm("/api/orders//{id}"),
+      },
+    ],
+    [
+      "a path outside /api/",
+      getTrigger("order-get", "/orders/{id}"),
+      {
+        code: "TRIGGER_PATH_INVALID",
+        value: "/orders/{id}",
+        expected: "path starting with '/api/'",
+      },
+    ],
+    [
+      "a ':name' segment",
+      getTrigger("order-get", "/api/orders/:id"),
+      { code: "TRIGGER_PATH_INVALID", value: "/api/orders/:id" },
+    ],
+  ])("refuses %s with one diagnostic", (_case, t, expected) => {
+    expect(check([t])).toEqual([expect.objectContaining({ severity: "error", ...expected })]);
+  });
+
+  it.each([
+    [
+      "unknown View before a bad path",
+      getTrigger("order-get", "/orders/../{x}", "nope"),
+      "TRIGGER_TARGET_VIEW_UNKNOWN",
+    ],
+    [
+      "surface before a reserved path",
+      getTrigger("order-get", "/api/views/x", "orders-admin"),
+      "TRIGGER_TARGET_VIEW_SURFACE",
+    ],
+    ["invalid before reserved", getTrigger("order-get", "/api/views/./x"), "TRIGGER_PATH_INVALID"],
+    ["reserved before a bad parameter", getTrigger("order-get", "/api/{nope}/{nope}"), "TRIGGER_PATH_RESERVED"],
+    [
+      "a bad parameter before a repeat",
+      getTrigger("order-get", "/api/orders/{nope}/{nope}"),
+      "TRIGGER_PATH_PARAM_INVALID",
+    ],
+  ])("reports one root cause per Trigger: %s", (_case, t, code) => {
+    expect(check([t]).map(d => d.code)).toEqual([code]);
+  });
+
+  it("refuses duplicate normalized templates on the second Trigger only", () => {
+    const diagnostics = check([
+      getTrigger("order-get", "/api/orders/{id}"),
+      getTrigger("order-by-seq", "/api/orders/{seq}"),
+      getTrigger("order-latest", "/api/orders/latest"),
+    ]);
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: "TRIGGER_PATH_COLLISION",
+        path: "/spec/source",
+        value: "GET /api/orders/{seq}",
+        message:
+          "Trigger 'order-by-seq' shares route GET /api/orders/{seq} with Trigger 'order-get'; only one of them could ever match.",
+      }),
+    ]);
+  });
+
+  it("does not claim a refused path for collision detection", () => {
+    const diagnostics = check([
+      getTrigger("order-admin-get", "/api/orders/{id}", "orders-admin"),
+      getTrigger("order-get", "/api/orders/{id}"),
+    ]);
+    expect(diagnostics.map(d => d.code)).toEqual(["TRIGGER_TARGET_VIEW_SURFACE"]);
+  });
+
+  it("accepts a valid GET View Trigger", () => {
+    expect(check([getTrigger("order-get", "/api/orders/{id}")])).toEqual([]);
+  });
+
+  it("keeps write-Trigger diagnostics unchanged", () => {
+    const post = (name: string, path: string, procedureName = "restockProduct"): TriggerManifest => ({
+      apiVersion,
+      kind: "Trigger",
+      metadata: { name },
+      spec: {
+        source: { kind: "http", method: "POST", path },
+        target: { procedure: procedureName },
+      },
+    });
+    // GET-only rules do not apply to write Triggers.
+    expect(
+      check([post("a", "/api/views/x"), post("b", "/api/auth/me"), post("c", "/api/{id}/x"), post("d", "/api/x/../y")]),
+    ).toEqual([]);
+    // A write Trigger still reports an unknown Procedure and a bad path together, and collides on the same key.
+    expect(
+      check([post("e", "/bad", "nope"), post("f", "/api/orders/{a}"), post("g", "/api/orders/{b}")]).map(d => d.code),
+    ).toEqual(["TRIGGER_TARGET_PROCEDURE_UNKNOWN", "TRIGGER_PATH_INVALID", "TRIGGER_PATH_COLLISION"]);
+    // A GET View Trigger and a POST write Trigger on one template do not collide.
+    expect(check([post("h", "/api/orders/{id}"), getTrigger("order-get", "/api/orders/{id}")])).toEqual([]);
+  });
+
+  it.each(["limit", "cursor"])("keeps a View input named %s a VIEW_INPUT_RESERVED_NAME refusal", reserved => {
+    const { diagnostics } = parseManifests([
+      `apiVersion: cms.mantle.aotter.net/v2
+kind: View
+metadata: { name: order-detail }
+spec:
+  surface: public
+  input: { type: object, properties: { ${reserved}: { type: string } } }
+  sql: "SELECT 'ok' AS status"
+`,
+      `apiVersion: cms.mantle.aotter.net/v2
+kind: Trigger
+metadata: { name: order-get }
+spec:
+  source: { kind: http, method: GET, path: "/api/orders/{${reserved}}" }
+  target: { view: order-detail }
+`,
+    ]);
+    expect(diagnostics.map(d => d.code)).toEqual(["VIEW_INPUT_RESERVED_NAME"]);
   });
 });

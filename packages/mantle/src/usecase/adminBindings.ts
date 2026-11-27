@@ -369,7 +369,7 @@ export function emitAdminBindings(
   }
   for (const [name, p] of Object.entries(plan.procedures).filter(([name]) =>
     Object.values(plan.triggers).some(
-      t => t.procedure === name && t.source.kind === "mcp" && t.source.surface === "admin",
+      t => "procedure" in t && t.procedure === name && t.source.kind === "mcp" && t.source.surface === "admin",
     ),
   )) {
     const n = operations.length,

@@ -28,14 +28,16 @@ function compile<Meta extends MatchMeta>(describe: MatchDescription<Meta>): Tabl
   const table: Table<Meta> = { rest: [], admin: [], tools: [] };
   for (const { name, _meta: meta } of describe.targets) {
     const [, surface, method, template] = route.exec(meta.id) ?? [];
-    if (surface === "rest")
+    if (surface === "rest") {
+      // Only a View's generated route answers HEAD; a GET View Trigger's route answers GET only (ADR-0047).
+      const variant = meta.variants?.[0]?.id;
       table.rest.push({
         method: method!,
         pattern: new RegExp(routeSource(routePath(template!)).source),
-        view: meta.variants?.[0]?.id.startsWith("view:") === true,
+        view: variant?.startsWith("view:") === true && meta.id === `rest:GET /api/views/${variant.slice(5)}`,
         meta,
       });
-    else if (surface === "admin")
+    } else if (surface === "admin")
       table.admin.push({
         method: method!,
         pattern: new RegExp(routeSource(routePath(template!), ADMIN_API_BASE).source),
@@ -95,7 +97,7 @@ export function matchTarget<Meta extends MatchMeta>(
     if (request.path !== ADMIN_API_BASE && !request.path.startsWith(ADMIN_API_BASE + "/")) return null;
     return table.admin.find(r => r.method === method && r.pattern.test(path))?.meta ?? null;
   }
-  // HEAD is served by a View's GET route only.
+  // HEAD is served by a View's generated GET route only.
   return (
     table.rest.find(
       r => r.pattern.test(path) && (r.method === method || (method === "HEAD" && r.method === "GET" && r.view)),

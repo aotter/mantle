@@ -206,10 +206,14 @@ function outputNameWarnings(plan: RuntimePlan): string[] {
 
 function missingMcpWarnings(plan: RuntimePlan): string[] {
   const mcp = new Set(
-    Object.values(plan.triggers).flatMap(trigger => (trigger.source.kind === "mcp" ? [trigger.procedure] : [])),
+    Object.values(plan.triggers).flatMap(trigger =>
+      "procedure" in trigger && trigger.source.kind === "mcp" ? [trigger.procedure] : [],
+    ),
   );
   const http = new Set(
-    Object.values(plan.triggers).flatMap(trigger => (trigger.source.kind === "http" ? [trigger.procedure] : [])),
+    Object.values(plan.triggers).flatMap(trigger =>
+      "procedure" in trigger && trigger.source.kind === "http" ? [trigger.procedure] : [],
+    ),
   );
   return [...http]
     .filter(name => !mcp.has(name))

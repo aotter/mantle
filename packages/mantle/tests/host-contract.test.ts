@@ -63,6 +63,11 @@ const source = [
     source: { kind: "http", method: "POST", path: "/api/records/{id}/rename" },
     target: { procedure: "rename" },
   }),
+  // A GET View Trigger (ADR-0047): the restricted View read at a custom path. It adds no MCP tool, so the catalogue keeps its version.
+  manifest("Trigger", "restricted-records-get", {
+    source: { kind: "http", method: "GET", path: "/api/records/restricted" },
+    target: { view: "restricted-records" },
+  }),
 ].join("\n---\n");
 const without = (props: object, ...keys: string[]) =>
   Object.fromEntries(Object.entries(props).filter(([key]) => !keys.includes(key)));
@@ -562,6 +567,48 @@ test("host contract v1: callers, refusals, surface answers and access events", a
       mcpCall(withUser("view:restricted-records", { region: { all: true }, stores: ["A"] }), "restricted_records"),
     );
 
+    // A GET View Trigger: pinned to its own route id, scoped and restricted like the View, refusing before any database handle.
+    const CUSTOM_READ = "rest:GET /api/records/restricted",
+      customRead =
+        (props: unknown, query = "", method = "GET") =>
+        async () =>
+          http(
+            await api(
+              new Request(`${ORIGIN}/api/records/restricted${query}`, { method }),
+              {},
+              {
+                props: { mantle: props },
+              },
+            ),
+          );
+    await record("rest GET View Trigger allow admin read", customRead(pinnedTo(CUSTOM_READ)));
+    await record(
+      "rest GET View Trigger allow member read",
+      customRead(without(base({ layer: "member" }), "target", "targetHash")),
+    );
+    await record(
+      "rest GET View Trigger allow snapshot read",
+      customRead(pinnedTo(CUSTOM_READ, { authenticatedAs: "snapshot" })),
+    );
+    await record(
+      "rest GET View Trigger TARGET_MISMATCH pinned to the View route",
+      customRead(pinnedTo("rest:GET /api/views/restricted-records")),
+    );
+    await record(
+      "rest GET View Trigger TARGET_HASH_MISMATCH",
+      customRead(pinnedTo(CUSTOM_READ, { targetHash: targets["rest:GET /api/views/restricted-records"]!.targetHash })),
+    );
+    await record(
+      "rest GET View Trigger restrict term: all refused",
+      customRead(withUser(CUSTOM_READ, { region: { all: true }, stores: ["A"] })),
+    );
+    await record("rest GET View Trigger unknown query parameter", customRead(pinnedTo(CUSTOM_READ), "?store=A"));
+    await record(
+      "rest GET View Trigger repeated query parameter",
+      customRead(pinnedTo(CUSTOM_READ), "?limit=1&limit=2"),
+    );
+    await record("rest GET View Trigger HEAD", customRead(pinnedTo(CUSTOM_READ), "", "HEAD"));
+
     // A read-only Procedure: no manifest Procedure is proved read-only today, so a hand-written table carries the flag.
     const peekTargets = async () =>
       Object.fromEntries(
@@ -771,6 +818,26 @@ test("host contract v1: callers, refusals, surface answers and access events", a
     for (const name of ["rest restrict term: all refused", ...both("mcp restrict term: all refused")])
       expect([name, codeOf(name), acquisitions[name]]).toEqual([name, "AUTH_DENIED", 0]);
     expect(answers["rest restrict term: listed value"]!.status).toBe(200);
+    // 7. A GET View Trigger answers the View's scoped, restricted rows under its own pin, and refuses before any read.
+    for (const name of [
+      "rest GET View Trigger allow admin read",
+      "rest GET View Trigger allow member read",
+      "rest GET View Trigger allow snapshot read",
+    ])
+      expect([name, answers[name]!.status, answers[name]!.body.rows.map((r: { title: string }) => r.title)]).toEqual([
+        name,
+        200,
+        ["changed"],
+      ]);
+    for (const [name, status, code] of [
+      ["rest GET View Trigger TARGET_MISMATCH pinned to the View route", 412, "TARGET_MISMATCH"],
+      ["rest GET View Trigger TARGET_HASH_MISMATCH", 412, "TARGET_HASH_MISMATCH"],
+      ["rest GET View Trigger restrict term: all refused", 403, "AUTH_DENIED"],
+      ["rest GET View Trigger unknown query parameter", 400, "INPUT_VALIDATION_FAILED"],
+      ["rest GET View Trigger repeated query parameter", 400, "INPUT_VALIDATION_FAILED"],
+      ["rest GET View Trigger HEAD", 405, "METHOD_NOT_ALLOWED"],
+    ] as const)
+      expect([name, answers[name]!.status, codeOf(name), acquisitions[name]]).toEqual([name, status, code, 0]);
     // Fail closed: the only writes that reached the table are the two allowed ones.
     expect(titles()).toEqual(["changed", "second", "third"]);
 

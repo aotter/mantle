@@ -70,7 +70,10 @@ export async function visibleMetadata<Database, Handlers>(
       sees("procedure", operations, String(item.name)),
     );
     const names = new Set(procedures.map(item => item.name));
-    const triggers = (d.logic?.triggers ?? []).filter(item => names.has(item.target));
+    const viewNames = new Set(devViews.map(item => item.name));
+    const triggers = (d.logic?.triggers ?? []).filter(item =>
+      (item.targetKind === "view" ? viewNames : names).has(item.target),
+    );
     const atoms = new Set([
       ...schemas.map(item => "Schema:" + item.name),
       ...devViews.map(item => "View:" + item.name),

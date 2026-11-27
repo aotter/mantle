@@ -1057,3 +1057,41 @@ test("identity capability: only with a directory and never for a host caller, wh
   );
   expect([await site(admin), await site(admin, directory), await site(host, directory)]).toEqual([false, true, false]);
 });
+
+test("developer metadata keeps a GET View Trigger only while its View is visible", async () => {
+  const { visibleMetadata } = await import("../../src/server/authorization.js");
+  const trigger = (name: string, target: string, view?: true) => ({
+    name,
+    target,
+    ...(view ? { targetKind: "view" } : {}),
+  });
+  const snapshot = {
+    dataModel: { schemas: [], views: [{ name: "report" }, { name: "secret" }] },
+    logic: {
+      procedures: [{ name: "rename" }],
+      triggers: [
+        trigger("rename-http", "rename"),
+        trigger("report-get", "report", true),
+        trigger("secret-get", "secret", true),
+        // a View Trigger never borrows a visible Procedure's name
+        trigger("rename-get", "rename", true),
+      ],
+    },
+    interfaces: { http: [], callable: [] },
+    graph: { atoms: [], relations: [] },
+    operations: { schedules: [], ttlPolicies: [] },
+  };
+  const route = (name: string) => ({ name, allows: () => true });
+  const visible = await visibleMetadata(
+    { collections: [], views: [], operations: [], webmcp: {} } as unknown as Metadata,
+    {},
+    [],
+    [route("rename")] as never,
+    [route("report"), route("secret")] as never,
+    async target => target.name !== "secret",
+    admin,
+    snapshot,
+  );
+  const names = (visible.developerConsole as typeof snapshot).logic.triggers.map(t => t.name);
+  expect(names).toEqual(["rename-http", "report-get"]);
+});

@@ -1,0 +1,4735 @@
+{
+  "access": {
+    "orgIds": {
+      "multiple": true,
+      "type": "string"
+    },
+    "ownerOrgIds": {
+      "multiple": true,
+      "type": "string"
+    },
+    "region": {
+      "multiple": true,
+      "type": "string"
+    },
+    "tier": {
+      "multiple": true,
+      "type": "string"
+    }
+  },
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "_meta": {
+        "id": "admin:DELETE /admin/invitations/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "547e38800ab0aa3da2ab075bc4c344a03324ac15b1ccd79a7d13d2ecb124eaff",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:DELETE /admin/invitations/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_DELETE__admin_invitations__id",
+      "title": "admin:DELETE /admin/invitations/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:DELETE /entries/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "e34f10a83da828cc34fe98f38eab996792d0729182814def1f784abe07ff225c",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:DELETE /entries/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_DELETE__entries__id",
+      "title": "admin:DELETE /entries/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:DELETE /media/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "61095b46fff6cc3959d45bd1debe163928b2eb286501ec274337ffe12a2d7e9e",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:DELETE /media/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_DELETE__media__id",
+      "title": "admin:DELETE /media/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /admin",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "580c05f96322646019f3fef26e68a9902bb1fea388c9da16cd84807886ea3cbe",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /admin",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__admin",
+      "title": "admin:GET /admin"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /bootstrap",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "ceedd5ff9e70a68ab9320ec0d830ced3f083d290b5ecdf63da71bcfbe2fb19b8",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /bootstrap",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__bootstrap",
+      "title": "admin:GET /bootstrap"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /collections",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "ac9e956f433ff81ca14bf5878e7e5921129d97dd26bdb4b01d987f7188600415",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /collections",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__collections",
+      "title": "admin:GET /collections"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /collections/:name/statistics",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f834e66de373383d7ac8cb082399ff3d4d223bf3f63859112482f8d18f0e5b96",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /collections/:name/statistics",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__collections__name_statistics",
+      "title": "admin:GET /collections/:name/statistics"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /developer-console",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "8c6012580e0db841fc37ec825ac5ec34725fc8a989ccaa963f86c7f69c5cbfef",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /developer-console",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__developer-console",
+      "title": "admin:GET /developer-console"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /developer/views/:name",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "documents": {
+            "terms": []
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "ac6540df2366dd354cfd403488215eb0af7ed4d78f42a6f75a1305c446fa70f0",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:all-orders",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "view:member-docs",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "documents": {
+                "or": [
+                  [
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    },
+                    {
+                      "owner": "author_id"
+                    }
+                  ],
+                  [
+                    {
+                      "column": "org",
+                      "field": "orgIds",
+                      "type": "string"
+                    },
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    }
+                  ]
+                ],
+                "terms": []
+              }
+            },
+            "scope": {
+              "documents": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "view:my-doc",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "documents": {
+                "or": [
+                  [
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    },
+                    {
+                      "owner": "author_id"
+                    }
+                  ]
+                ],
+                "terms": []
+              }
+            },
+            "scope": {
+              "documents": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "view:my-docs",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "documents": {
+                "or": [
+                  [
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    },
+                    {
+                      "owner": "author_id"
+                    }
+                  ]
+                ],
+                "terms": []
+              }
+            },
+            "scope": {
+              "documents": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "view:notes-list",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "notes": {
+                "terms": [
+                  {
+                    "column": "area",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "view:regional-orders",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "view:tier-orders",
+            "inputSchema": {
+              "properties": {},
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "tier",
+                    "field": "tier",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "admin:GET /developer/views/:name",
+      "inputSchema": {
+        "anyOf": [
+          {
+            "properties": {
+              "name": {
+                "const": "all-orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "member-docs",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "my-doc",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "my-docs",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "notes-list",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "regional-orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "tier-orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__developer_views__name",
+      "title": "admin:GET /developer/views/:name"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /entries",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "62ea8126ab37608dff1588b73422302e89ed9accacf06203ea50e4202f404ca0",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /entries",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__entries",
+      "title": "admin:GET /entries"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /entries/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "7d8c44d600c557f2c46f4fd19c6ed55cb3eec485bce672f57879d365829537aa",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /entries/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__entries__id",
+      "title": "admin:GET /entries/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /entries/export",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "22b318af3d6000601f6a8314dbfffa51040eca64ff2acc2aca27087e03488d89",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /entries/export",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__entries_export",
+      "title": "admin:GET /entries/export"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /me",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "2273bde586a50af51e347c17179147948435ab4c422034a596b0abebdb551088",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /me",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__me",
+      "title": "admin:GET /me"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /media",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "ef3ab66755df17fe3ea5e6a3a2dcad758be2ec25e2da956a04aa8d5cfb6f64e8",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /media",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__media",
+      "title": "admin:GET /media"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /media/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "9149c6127547d22a9107713df8252e9aad819bc7c8e9a08c4771d18783200134",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /media/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__media__id",
+      "title": "admin:GET /media/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /members",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "cdf1927670d66a46634a53416bf8b8f388f2dc07f430e088216efae185e69157",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /members",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__members",
+      "title": "admin:GET /members"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /operations",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "13391a3bab5704d8b435668954f83c1915801eaeef2b9a42bee75aa601db8f35",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /operations",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__operations",
+      "title": "admin:GET /operations"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /site",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "84a3adc533cd3268daa777e37a80673b5749ef2746a32fdd9d0310b373a7f3dc",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /site",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__site",
+      "title": "admin:GET /site"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /site-settings",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "e60dc2e603a861f6fb9b3a95b173066a8dd9a1b89de3949430b610d2cbe5d2dd",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /site-settings",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__site-settings",
+      "title": "admin:GET /site-settings"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /view-batch",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "scope": {
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "20fc8ab012e98e27b5217ac2af34befb03a45eb00ca03c77de9f64902fb5a5eb",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:notes-list",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "notes": {
+                "terms": [
+                  {
+                    "column": "area",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "view:regional-orders",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "admin:GET /view-batch",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__view-batch",
+      "title": "admin:GET /view-batch"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /views-manifest",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "688b4e8c709de408e10900ce3ae4441c7fe846b14b0d402d9dd53a6c6d8f6852",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /views-manifest",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__views-manifest",
+      "title": "admin:GET /views-manifest"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /views/:name",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "scope": {
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "3d320ce8fa932700dde76d3d727a220842051cadb74b759337e6a5c6fda9fe05",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:notes-list",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "notes": {
+                "terms": [
+                  {
+                    "column": "area",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "view:regional-orders",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "admin:GET /views/:name",
+      "inputSchema": {
+        "anyOf": [
+          {
+            "properties": {
+              "name": {
+                "const": "notes-list",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "regional-orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__views__name",
+      "title": "admin:GET /views/:name"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /views/:name/export",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "scope": {
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "6b0dd83028d228171a94a5e845ec11a0a95870b26e5235f77d4c18da04ef7944",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:notes-list",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "notes": {
+                "terms": [
+                  {
+                    "column": "area",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "view:regional-orders",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "admin:GET /views/:name/export",
+      "inputSchema": {
+        "anyOf": [
+          {
+            "properties": {
+              "name": {
+                "const": "notes-list",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "name": {
+                "const": "regional-orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__views__name_export",
+      "title": "admin:GET /views/:name/export"
+    },
+    {
+      "_meta": {
+        "id": "admin:GET /webmcp",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f84d38ecfdaee07c8e2196383b43f2b683e9fed7aa49be4e19981b0005b958cf",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:GET /webmcp",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_GET__webmcp",
+      "title": "admin:GET /webmcp"
+    },
+    {
+      "_meta": {
+        "id": "admin:PATCH /admin/:id/role",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "bc45d7d312c57baab4a72b11c4bbcd9ad4103d9ec2ecc5adc1982c91776b39dd",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:PATCH /admin/:id/role",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_PATCH__admin__id_role",
+      "title": "admin:PATCH /admin/:id/role"
+    },
+    {
+      "_meta": {
+        "id": "admin:PATCH /entries/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "6df1be5ae3505bd0f20f978f4549a377d2ceee266c88fbee12e96af66c1623d5",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:PATCH /entries/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_PATCH__entries__id",
+      "title": "admin:PATCH /entries/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:PATCH /media/:id",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "981038487bfc67f950bf5b6e5d68e2d01d7641af3402774d63e8269a2cf66f7e",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:PATCH /media/:id",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_PATCH__media__id",
+      "title": "admin:PATCH /media/:id"
+    },
+    {
+      "_meta": {
+        "id": "admin:PATCH /site-settings",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "3cedf0a733673d4cca1f266172c94a1c41e21948b7735eb28c48f3fe06643789",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:PATCH /site-settings",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_PATCH__site-settings",
+      "title": "admin:PATCH /site-settings"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /admin/invitations",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "5d299d541b89d18289d8fdf0569f1a4032061737430324eb0d07cd8de647ebbc",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /admin/invitations",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__admin_invitations",
+      "title": "admin:POST /admin/invitations"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /entries",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "b819013abe3f8d712a7fc5c56b17525e82397f8d7a5f06e3f065fa7a833224cd",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /entries",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__entries",
+      "title": "admin:POST /entries"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /entries/:id/archive",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "baa97cd2b75f0683320cf7a4a5592dd38c272698e83c859bae11779a4dd05982",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /entries/:id/archive",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__entries__id_archive",
+      "title": "admin:POST /entries/:id/archive"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /entries/:id/publish",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "6553dacc9bf7b8eae0ec00e75c4d4798d7718a7cbfc877860659cfa092a00e6a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /entries/:id/publish",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__entries__id_publish",
+      "title": "admin:POST /entries/:id/publish"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /entries/:id/unpublish",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "documents": {
+            "terms": []
+          },
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "15031a974a47ac31fbd1c823eecaae08b79e4de91a66c3059ef34a7d2759d2d7",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /entries/:id/unpublish",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__entries__id_unpublish",
+      "title": "admin:POST /entries/:id/unpublish"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /media/uploads",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "94b7432dd017c1b6da9e7a2b866e2baacd2070a656a3ab8f7e00b66cb355954d",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /media/uploads",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__media_uploads",
+      "title": "admin:POST /media/uploads"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /media/uploads/:groupId/commit",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "dca819fe3e5a56a012a445f7a8cacd326a6de90546572bfa47eb728017973d4a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /media/uploads/:groupId/commit",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__media_uploads__groupId_commit",
+      "title": "admin:POST /media/uploads/:groupId/commit"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /operations/:name",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "6c0a12174a0779b96732bb446170cbcd7ec8053675087d28778cc93d2dcd734c",
+        "triggers": [
+          {
+            "id": "rename-order-http",
+            "source": {
+              "kind": "http",
+              "method": "POST",
+              "path": "/api/orders/rename"
+            }
+          },
+          {
+            "id": "rename-order-mcp",
+            "source": {
+              "kind": "mcp",
+              "surface": "admin"
+            }
+          }
+        ],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "procedure:rename-order",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /operations/:name",
+      "inputSchema": {
+        "anyOf": [
+          {
+            "properties": {
+              "name": {
+                "const": "rename-order",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__operations__name",
+      "title": "admin:POST /operations/:name"
+    },
+    {
+      "_meta": {
+        "id": "admin:POST /webmcp/:tool",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "scope": {
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          },
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "c8e8c9f8d6de1d30a4e2f33386c6bab5726fef8d953845b3284399557b3c36c7",
+        "triggers": [
+          {
+            "id": "rename-order-http",
+            "source": {
+              "kind": "http",
+              "method": "POST",
+              "path": "/api/orders/rename"
+            }
+          },
+          {
+            "id": "rename-order-mcp",
+            "source": {
+              "kind": "mcp",
+              "surface": "admin"
+            }
+          }
+        ],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:notes-list",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {
+              "notes": {
+                "terms": [
+                  {
+                    "column": "area",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "view:regional-orders",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "procedure:rename-order",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          },
+          {
+            "id": "admin:tool:upload_media",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "file": {
+                  "properties": {
+                    "download_url": {
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "file_id": {
+                      "maxLength": 255,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "download_url",
+                    "file_id"
+                  ],
+                  "type": "object"
+                },
+                "filename": {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                "uploadId": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "variants": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "byteSize": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "mimeType": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "primary",
+                          "alternate",
+                          "fallback"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "mimeType",
+                      "byteSize",
+                      "role"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:find_media",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "ids": {
+                  "items": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 100,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "search": {
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:update_media",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:delete_media",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:get_media_upload_policy",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {},
+              "required": [],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:create_media_upload",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "filename": {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "variants": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "byteSize": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "mimeType": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "primary",
+                          "alternate",
+                          "fallback"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "mimeType",
+                      "byteSize",
+                      "role"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "filename",
+                "purpose",
+                "variants"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:commit_media_upload",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "uploadGroupId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "uploadGroupId"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:list_media_assets",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "search": {
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:get_media_asset",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:update_media_asset",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:delete_media_asset",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          },
+          {
+            "id": "admin:tool:open_media_upload",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "alt": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "caption": {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                "file": {
+                  "properties": {
+                    "download_url": {
+                      "maxLength": 4096,
+                      "type": "string"
+                    },
+                    "file_id": {
+                      "maxLength": 255,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "download_url",
+                    "file_id"
+                  ],
+                  "type": "object"
+                },
+                "filename": {
+                  "maxLength": 255,
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                "uploadId": {
+                  "maxLength": 100,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "variants": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "byteSize": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "mimeType": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "primary",
+                          "alternate",
+                          "fallback"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "mimeType",
+                      "byteSize",
+                      "role"
+                    ],
+                    "type": "object"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": true,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {},
+            "scope": {},
+            "trustedOnly": false,
+            "unscopedReads": false
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "admin:POST /webmcp/:tool",
+      "inputSchema": {
+        "anyOf": [
+          {
+            "properties": {
+              "tool": {
+                "const": "notes_list",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "regional_orders",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "rename_order",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "upload_media",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "find_media",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "update_media",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "delete_media",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "get_media_upload_policy",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "create_media_upload",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "commit_media_upload",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "list_media_assets",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "get_media_asset",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "update_media_asset",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "delete_media_asset",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          {
+            "properties": {
+              "tool": {
+                "const": "open_media_upload",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "properties": {},
+        "type": "object"
+      },
+      "name": "admin_POST__webmcp__tool",
+      "title": "admin:POST /webmcp/:tool"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:commit_media_upload",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "1a6d248857137c2253d3ff6a3f2a41c03ba0dab62fcda92ecc0755cec546c091",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Deprecated, removed in 0.3: call upload_media with { uploadId }. Verify all uploaded variants and commit one permanent media asset. Store the returned asset id in fields referencing media_assets.id, never a temporary upload URL. Unknown or expired upload groups require a new create_media_upload.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "uploadGroupId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uploadGroupId"
+        ],
+        "type": "object"
+      },
+      "name": "commit_media_upload",
+      "title": "Commit media upload"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:create_media_upload",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f87bf7f94b381960dd1a36d398fa55f785c93211c2d577bf5381bb812236c39c",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Deprecated, removed in 0.3: use upload_media. Create short-lived PUT capabilities for image variants. Read site media purpose policy first; optimize images locally. Obtain attachment bytes yourself, then PUT each variant with its requiredHeaders and call commit_media_upload. Never store upload URLs as published images or ask the user to run terminal commands.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "filename": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "byteSize": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "mimeType": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "primary",
+                    "alternate",
+                    "fallback"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mimeType",
+                "byteSize",
+                "role"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename",
+          "purpose",
+          "variants"
+        ],
+        "type": "object"
+      },
+      "name": "create_media_upload",
+      "title": "Create media upload"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:delete_media",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f03f030c739ce103d4aa78de61edb6d19d58ba36e4c55187e9500aab0a70e29e",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Delete an asset's objects and library record. Check application references first. A partial failure can be retried using the same id.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "delete_media",
+      "title": "Delete media"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:delete_media_asset",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "60040fa244f8bf4d9cc31f548b1c347a473e80c124ef49b2055f6322fa13d214",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Deprecated, removed in 0.3: use delete_media. Delete an asset's objects and library record. Check application references first. A partial failure can be retried using the same id.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "delete_media_asset",
+      "title": "Delete media asset"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:find_media",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "d66331e2aa742ee8c3a4faf5e805f51014debc0f85f51b1e57e7594b5ab6840e",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Find committed image assets with their permanent variants and alt/caption: by ids (ids not found are listed in missing), or newest first, where search matches id, alt or caption; reuse only a returned cursor.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "search": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "find_media",
+      "title": "Find media"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:get_media_asset",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "aa4ff9901cf2ed04c82d4e63185371a09ff15aa729b883990e43a4fa30d4a4da",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Deprecated, removed in 0.3: use find_media with ids. Read one committed media asset and its permanent variant URLs.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "get_media_asset",
+      "title": "Get media asset"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:get_media_upload_policy",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "cd33fa367f2ed1489fd29113736773a3f21bff5a2c1a6b8812d9f1535da02b67",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Deprecated, removed in 0.3: call upload_media with only a purpose. Read declared image purpose MIME slots and byte caps before preparing variants or requesting an upload. Optimization runs locally, never in the host.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "required": [],
+        "type": "object"
+      },
+      "name": "get_media_upload_policy",
+      "title": "Get media upload policy"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:list_media_assets",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "ce7a00b09827d408eb3aa99a3aa670ffda394459182ebdedca709dc5fcf68985",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": true
+      },
+      "description": "Deprecated, removed in 0.3: use find_media. List committed media assets, newest first, with their permanent variants and alt/caption. Search matches id, alt or caption; reuse only a returned cursor.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "search": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "list_media_assets",
+      "title": "List media assets"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:open_media_upload",
+        "nativeDatabase": false,
+        "opaque": true,
+        "openai/fileParams": [
+          "file"
+        ],
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "c973569caa1235e7756d0f112e87aade304632cc237f66cc2f924a10aac21c4a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Fallback: open a manual upload card so the person can pick a file. Agents with a local file should use upload_media to get presigned PUT targets and upload bytes directly. The card uses this tool's upload_media-compatible arguments to prepare and commit its own uploads.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "file": {
+            "properties": {
+              "download_url": {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              "file_id": {
+                "maxLength": 255,
+                "type": "string"
+              }
+            },
+            "required": [
+              "download_url",
+              "file_id"
+            ],
+            "type": "object"
+          },
+          "filename": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "uploadId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "byteSize": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "mimeType": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "primary",
+                    "alternate",
+                    "fallback"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mimeType",
+                "byteSize",
+                "role"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "open_media_upload",
+      "title": "Open media upload"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:update_media",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "2e9fec59279bb47cb65a16ca242bdea25873a65e7f8eb154c72a2edb026379ec",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Update a committed asset's alt or caption; omitted fields remain unchanged and empty strings clear text.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "update_media",
+      "title": "Update media"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:update_media_asset",
+        "nativeDatabase": false,
+        "opaque": true,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f0e10e653c7f5af56ffa2116ca824d6f816f2d8c853687404098480b1e9b9d27",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Deprecated, removed in 0.3: use update_media. Update committed asset alt or caption; omitted fields remain unchanged and empty strings clear text.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "update_media_asset",
+      "title": "Update media asset"
+    },
+    {
+      "_meta": {
+        "id": "admin:tool:upload_media",
+        "nativeDatabase": false,
+        "opaque": true,
+        "openai/fileParams": [
+          "file"
+        ],
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {},
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "f3bacfc59e0fd39b665a9f3e302083911a9c37c701a2052f4c539ee9125dac37",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Upload one file (an image, a PDF or any type the purpose takes) to the media library in two calls; bytes never pass through MCP and file content is never accepted as base64. 1. Call with purpose, filename and variants (one per slot the purpose takes, exactly one primary; optimize an image locally first). The result has an uploadId and the upload targets, which expire in 15 minutes and serve this one upload. PUT each variant's bytes to its target url with its headers. 2. Call with { uploadId } to commit, and store the returned asset id in fields that reference media_assets.id, never an upload URL. An unknown or expired uploadId needs a new first call. Called with only a purpose, it returns that purpose's accepted types and byte caps. Use open_media_upload only as a manual upload-card fallback when direct file transfer is unavailable. With purpose and sourceUrl (a public https file) or file (an attachment), the server fetches the file and commits it in one call; that takes a purpose with a single variant slot.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "caption": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "file": {
+            "properties": {
+              "download_url": {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              "file_id": {
+                "maxLength": 255,
+                "type": "string"
+              }
+            },
+            "required": [
+              "download_url",
+              "file_id"
+            ],
+            "type": "object"
+          },
+          "filename": {
+            "maxLength": 255,
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "sourceUrl": {
+            "format": "uri",
+            "maxLength": 2048,
+            "type": "string"
+          },
+          "uploadId": {
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "variants": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "byteSize": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "mimeType": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "primary",
+                    "alternate",
+                    "fallback"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mimeType",
+                "byteSize",
+                "role"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "name": "upload_media",
+      "title": "Upload media"
+    },
+    {
+      "_meta": {
+        "id": "procedure:delete-doc",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "internal"
+        ],
+        "targetHash": "080c2bd858f12a8f2b6be5910fffd850b461b9e479ee2be429fa5ee7bf9a4b84",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Delete a document",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "delete_doc",
+      "title": "Delete a document"
+    },
+    {
+      "_meta": {
+        "id": "procedure:rename-doc",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "internal"
+        ],
+        "targetHash": "1c203344691a8b94d8a812f043ddc3516480144cea905bd6ef23e6be60c461a6",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "Rename a document",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "rename_doc",
+      "title": "Rename a document"
+    },
+    {
+      "_meta": {
+        "id": "procedure:rename-order",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "rest"
+        ],
+        "targetHash": "79a02d3163bce5b2904aace97637de252b78e22dd668479e7408589660801116",
+        "triggers": [
+          {
+            "id": "rename-order-http",
+            "source": {
+              "kind": "http",
+              "method": "POST",
+              "path": "/api/orders/rename"
+            }
+          },
+          {
+            "id": "rename-order-mcp",
+            "source": {
+              "kind": "mcp",
+              "surface": "admin"
+            }
+          }
+        ],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Rename an order",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "rename_order",
+      "title": "Rename an order"
+    },
+    {
+      "_meta": {
+        "id": "rest:GET /api/views/my-doc",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "rest"
+        ],
+        "targetHash": "f7a9967fc595e559850faed515d56e6b4d35dbc4d627276b1004027042c1657d",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:my-doc",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": []
+            },
+            "restrict": {
+              "documents": {
+                "or": [
+                  [
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    },
+                    {
+                      "owner": "author_id"
+                    }
+                  ]
+                ],
+                "terms": []
+              }
+            },
+            "scope": {
+              "documents": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "rest:GET /api/views/my-doc",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "rest_GET__api_views_my-doc",
+      "title": "rest:GET /api/views/my-doc"
+    },
+    {
+      "_meta": {
+        "id": "rest:GET /api/views/my-docs",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "rest"
+        ],
+        "targetHash": "e7d09a437ee82204697f5abe23eac63f71fee1c518c20b220a63fe68087964ca",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "view:my-docs",
+            "inputSchema": {
+              "properties": {
+                "cursor": {
+                  "type": "string"
+                },
+                "limit": {
+                  "maximum": 500,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": true,
+            "requires": {
+              "all": []
+            },
+            "restrict": {
+              "documents": {
+                "or": [
+                  [
+                    {
+                      "column": "org",
+                      "field": "ownerOrgIds",
+                      "type": "string"
+                    },
+                    {
+                      "owner": "author_id"
+                    }
+                  ]
+                ],
+                "terms": []
+              }
+            },
+            "scope": {
+              "documents": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "rest:GET /api/views/my-docs",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "rest_GET__api_views_my-docs",
+      "title": "rest:GET /api/views/my-docs"
+    },
+    {
+      "_meta": {
+        "id": "rest:POST /api/orders/rename",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": false,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "rest"
+        ],
+        "targetHash": "c93521e00b4e37e0e3003d4b703441378c5bf371f13b3683a8541063d9dae4db",
+        "triggers": [
+          {
+            "id": "rename-order-http",
+            "source": {
+              "kind": "http",
+              "method": "POST",
+              "path": "/api/orders/rename"
+            }
+          },
+          {
+            "id": "rename-order-mcp",
+            "source": {
+              "kind": "mcp",
+              "surface": "admin"
+            }
+          }
+        ],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": [
+          {
+            "id": "procedure:rename-order",
+            "inputSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ],
+              "type": "object"
+            },
+            "nativeDatabase": false,
+            "opaque": false,
+            "readOnly": false,
+            "requires": {
+              "all": [
+                "ctx.admin"
+              ]
+            },
+            "restrict": {
+              "orders": {
+                "terms": [
+                  {
+                    "column": "region",
+                    "field": "region",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "scope": {
+              "orders": {
+                "terms": []
+              }
+            },
+            "trustedOnly": false,
+            "unscopedReads": true
+          }
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false
+      },
+      "description": "rest:POST /api/orders/rename",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "rest_POST__api_orders_rename",
+      "title": "rest:POST /api/orders/rename"
+    },
+    {
+      "_meta": {
+        "id": "view:all-orders",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {},
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "internal"
+        ],
+        "targetHash": "d93b1ba64588ff8a211d0d2454ce7e51c5cb7b9419c15eb7780ad5666577135a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Every order",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "all_orders",
+      "title": "Every order"
+    },
+    {
+      "_meta": {
+        "id": "view:member-docs",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ],
+              [
+                {
+                  "column": "org",
+                  "field": "orgIds",
+                  "type": "string"
+                },
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "internal"
+        ],
+        "targetHash": "ffffaba4d59a3294a1c1c43815fa2d1adb2680905462bff5b912f0eeae80620c",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "My documents in organizations I belong to, or any document of an organization I own",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "member_docs",
+      "title": "My documents in organizations I belong to, or any document of an organization I own"
+    },
+    {
+      "_meta": {
+        "id": "view:my-doc",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "targetHash": "28f9dfaf1adc4a34474f21eb7a2f7ec640e51dc557dbe7c0c8e43029d3584173",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "description": "One document I created or whose organization I own",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "name": "my_doc",
+      "title": "One document I created or whose organization I own"
+    },
+    {
+      "_meta": {
+        "id": "view:my-docs",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "documents": {
+            "or": [
+              [
+                {
+                  "column": "org",
+                  "field": "ownerOrgIds",
+                  "type": "string"
+                },
+                {
+                  "owner": "author_id"
+                }
+              ]
+            ],
+            "terms": []
+          }
+        },
+        "scope": {
+          "documents": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "public",
+          "rest"
+        ],
+        "targetHash": "50ebe9c793901a6e441af47191a1d5ad4743d75910e25eef20648e96009b472a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Documents I created or whose organization I own",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "my_docs",
+      "title": "Documents I created or whose organization I own"
+    },
+    {
+      "_meta": {
+        "id": "view:notes-list",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {},
+        "scope": {
+          "notes": {
+            "terms": [
+              {
+                "column": "area",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "96458b23f893dae785c84d0e60622abad5294b9868036efeb405524d00379cb2",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": false,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Notes I can see",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "notes_list",
+      "title": "Notes I can see"
+    },
+    {
+      "_meta": {
+        "id": "view:regional-orders",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": [
+            "ctx.admin"
+          ]
+        },
+        "restrict": {
+          "orders": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin"
+        ],
+        "targetHash": "5435153a1306380044f911bc1d0e1ba1a4eab8f45c3b32b20b73ed589d24dc93",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Orders whose region is one of the caller's regions.",
+      "inputSchema": {
+        "properties": {
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "regional_orders",
+      "title": "Orders in my regions"
+    },
+    {
+      "_meta": {
+        "id": "view:tier-orders",
+        "nativeDatabase": false,
+        "opaque": false,
+        "readOnly": true,
+        "requires": {
+          "all": []
+        },
+        "restrict": {
+          "orders": {
+            "terms": [
+              {
+                "column": "tier",
+                "field": "tier",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "scope": {
+          "orders": {
+            "terms": []
+          }
+        },
+        "surfaces": [
+          "admin",
+          "internal"
+        ],
+        "targetHash": "f8422b2e0348c542cbff456a5e39a308650c65b5e225392e870746bc84da2d3a",
+        "triggers": [],
+        "trustedOnly": false,
+        "unscopedReads": true,
+        "variants": []
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "description": "Orders of my tier",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "tier_orders",
+      "title": "Orders of my tier"
+    }
+  ]
+}

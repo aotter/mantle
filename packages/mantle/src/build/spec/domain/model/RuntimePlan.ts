@@ -5,6 +5,7 @@
 import type {
   AuthorizationRequirements,
   HandlerStep,
+  HttpViewSource,
   JsonSchema,
   LocalizedText,
   ProcedureMcpAnnotations,
@@ -103,10 +104,9 @@ export interface PlanProcedure {
     | { readonly sql: SqlPlan; readonly source: string; readonly steps?: readonly HandlerStep[] };
 }
 
-export interface PlanTrigger {
-  readonly source: TriggerSource;
-  readonly procedure: string;
-}
+export type PlanTrigger =
+  | { readonly source: TriggerSource; readonly procedure: string }
+  | { readonly source: HttpViewSource; readonly view: string };
 
 /** A statement as the dialect printed it at `mantle generate` (ADR-0044). Binds are Core's BindSpec as JSON. */
 export interface LoweredStatement {

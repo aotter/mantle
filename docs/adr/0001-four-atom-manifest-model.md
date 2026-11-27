@@ -3,7 +3,7 @@
 **Status:** Accepted for the four-atom grammar and multi-document YAML;
 the fixed `site.yaml` file contract is superseded by ADR-0019.
 
-**Date**: 2026-04-30 (POC origin); last amended 2026-08-16
+**Date**: 2026-04-30 (POC origin); last amended 2026-11-27
 
 **Deciders**: phsu
 
@@ -22,6 +22,13 @@ the fixed `site.yaml` file contract is superseded by ADR-0019.
 > instead (`scheduled()` or a custom handler); generation had refused both
 > since 0.2.0, so no generated application changes. Statements below that list
 > `lifecycle` as a source kind are decision history.
+
+> **2026-11-27 amendment (#2174, [ADR-0047](0047-get-view-triggers-and-fingerprints.md)):** a Trigger's `target` declares
+> exactly one of `procedure` or `view`. A `view` target binds an http `GET`
+> route to a `surface: public` View and accepts no other source or method;
+> `GET` stays refused for Procedure targets. A target without `view` keeps
+> today's grammar and diagnostics, so existing manifests and plans do not
+> change.
 
 ---
 

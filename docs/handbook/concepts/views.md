@@ -6,7 +6,7 @@ Use internal Views for joins, aggregates, OR and reusable reads. Simple handler 
 
 | Surface | Exposure when mounted |
 | --- | --- |
-| public | REST `/api/views/<name>` and public MCP |
+| public | REST `/api/views/<name>`, any [GET Trigger](../reference/trigger.md#get-triggers-for-a-view) paths, and public MCP |
 | admin | Admin View API and admin MCP |
 | internal | Generated operation only; no public route/tool |
 

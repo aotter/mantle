@@ -63,7 +63,7 @@ export function validateManifestGraph(
     diags.push(...checkProcedureTarget(p, schemasByName, filePaths));
   }
 
-  diags.push(...checkTriggerRefs(partitioned.triggers, proceduresByName, filePaths));
+  diags.push(...checkTriggerRefs(partitioned.triggers, proceduresByName, byName(partitioned.views), filePaths));
   diags.push(...checkMcpToolNameCollisions(partitioned.views, partitioned.procedures, partitioned.triggers, filePaths));
 
   return { diagnostics: diags, ...partitioned };

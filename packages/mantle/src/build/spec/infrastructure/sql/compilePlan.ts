@@ -4,7 +4,13 @@
  * declarations. Like `compileSql`, only the CLI and the plugin's helper scripts import this.
  */
 import { validateDiagnostic, type Diagnostic, type SourceLocation } from "../../kernel/diagnostic.js";
-import { stepProgram, type JsonSchema, type ProcedureManifest } from "../../domain/model/ManifestGrammar.js";
+import {
+  stepProgram,
+  type HttpViewSource,
+  type JsonSchema,
+  type ProcedureManifest,
+  type TriggerSource,
+} from "../../domain/model/ManifestGrammar.js";
 import {
   NATIVE_OUTPUT_TYPES,
   type PlanProcedure,
@@ -980,9 +986,11 @@ export async function compileLinkedPlan(
       };
   }
   const triggers: Record<string, PlanTrigger> = Object.fromEntries(
-    linked.triggers.map(({ manifest: t }) => [
-      t.metadata.name,
-      { source: t.spec.source, procedure: t.spec.target.procedure },
+    linked.triggers.map(({ manifest: { metadata, spec } }): [string, PlanTrigger] => [
+      metadata.name,
+      "view" in spec.target
+        ? { source: spec.source as HttpViewSource, view: spec.target.view }
+        : { source: spec.source as TriggerSource, procedure: spec.target.procedure },
     ]),
   );
   const warnings: string[] = [];

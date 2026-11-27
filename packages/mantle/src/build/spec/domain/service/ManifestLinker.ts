@@ -30,7 +30,8 @@ export interface LinkedProcedure extends ResolvedManifestReference<ParsedProcedu
 }
 
 export interface LinkedTrigger extends ResolvedManifestReference<ParsedTrigger> {
-  readonly target: ResolvedManifestReference<ParsedProcedure>;
+  /** The Procedure it invokes, or the public View a GET Trigger reads (ADR-0047). */
+  readonly target: ResolvedManifestReference<ParsedProcedure> | ResolvedManifestReference<ParsedView>;
 }
 
 declare const linkedManifestSetBrand: unique symbol;
@@ -58,6 +59,7 @@ export function linkManifestSet(parsed: ParsedManifestSet): LinkResult<LinkedMan
   const entriesByManifest = new Map(parsed.entries.map(entry => [entry.manifest, entry]));
   const schemasByName = new Map(graph.schemas.map(manifest => [manifest.metadata.name, manifest]));
   const proceduresByName = new Map(graph.procedures.map(manifest => [manifest.metadata.name, manifest]));
+  const viewsByName = new Map(graph.views.map(manifest => [manifest.metadata.name, manifest]));
   const resolve = <M extends ParsedManifest>(manifest: M): ResolvedManifestReference<M> => {
     const entry = entriesByManifest.get(manifest);
     if (!entry) throw new Error(`linked manifest '${manifest.kind}/${manifest.metadata.name}' lost its source`);
@@ -67,6 +69,8 @@ export function linkManifestSet(parsed: ParsedManifestSet): LinkResult<LinkedMan
     resolve(schemasByName.get(name) as ParsedSchema);
   const resolveProcedure = (name: string): ResolvedManifestReference<ParsedProcedure> =>
     resolve(proceduresByName.get(name) as ParsedProcedure);
+  const resolveView = (name: string): ResolvedManifestReference<ParsedView> =>
+    resolve(viewsByName.get(name) as ParsedView);
 
   const schemas = graph.schemas.map(manifest =>
     Object.freeze({
@@ -86,7 +90,10 @@ export function linkManifestSet(parsed: ParsedManifestSet): LinkResult<LinkedMan
   const triggers = graph.triggers.map(manifest =>
     Object.freeze({
       ...resolve(manifest as ParsedTrigger),
-      target: resolveProcedure(manifest.spec.target.procedure),
+      target:
+        "view" in manifest.spec.target
+          ? resolveView(manifest.spec.target.view)
+          : resolveProcedure(manifest.spec.target.procedure),
     }),
   );
 

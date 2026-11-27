@@ -10,6 +10,25 @@ import {
 import { canonical } from "../../build/spec/domain/service/PlanFingerprint.js";
 import { mediaDefinitions, publishingInput, publishingTransitions } from "../generated-tools.js";
 import { pathTemplate } from "../../kernel/route-pattern.js";
+import { restBinding, type RestBinding } from "../binding.js";
+
+/**
+ * Declaration fields that only present an operation (ADR-0047 §7): they move from its behavior fingerprint to its
+ * exposure fingerprint. `mcp` holds the MCP tool annotations; of `uiSchema`, only the parts `uiBehavior` drops.
+ */
+export const presentationFields = ["title", "description", "uiSchema", "mcp"] as const;
+
+/**
+ * The `uiSchema` parts Admin's generated routes act on: all but those known only to present (`nav`, `list.columns`, a
+ * Procedure's `fields` and `collectionAction`), so a part added later stays behavior until shown otherwise. A View
+ * list's `filterFields` and `searchFields` decide which filters and searches its Admin routes accept and compile into SQL.
+ */
+function uiBehavior(ui: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> | undefined {
+  const { nav, fields, collectionAction, list, ...rest } = ui ?? {};
+  const { columns, ...listed } = (list ?? {}) as Record<string, unknown>;
+  const behavior = { ...rest, ...(Object.keys(listed).length ? { list: listed } : {}) };
+  return Object.keys(behavior).length ? behavior : undefined;
+}
 
 export interface TargetDefinition {
   id: string;
@@ -31,7 +50,19 @@ export interface TargetDefinition {
   opaque: boolean;
   nativeDatabase?: boolean;
   trustedOnly: boolean;
+  /** Formula 1's behavior payload, kept verbatim for `targetHashV1`. */
   behavior: unknown;
+  /**
+   * What the target itself does, presentation excluded; absent when a route only dispatches to its variants, whose
+   * behavior is then its own (ADR-0047 §7).
+   */
+  ownBehavior?: unknown;
+  /** A `view:` or `procedure:` declaration, as opposed to a route or generated entry. */
+  canonical: boolean;
+  /** The declaration's presentation fields (`presentationFields`); empty for routes and generated entries. */
+  presentation: Record<string, unknown>;
+  /** How a `rest:` entry binds a request (`restBinding`). */
+  binding?: RestBinding;
   variants: TargetDefinition[];
 }
 
@@ -174,7 +205,9 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       const tool = tools.find(t => t.kind === kind && t.source === name);
       const title = resolveLocalizedText(p.title, "en", "en") ?? name;
       const triggers = Object.entries(plan.triggers)
-        .filter(([, t]) => kind === "procedure" && t.procedure === name)
+        .filter(
+          ([, t]) => ("view" in t ? t.view : t.procedure) === name && kind === ("view" in t ? "view" : "procedure"),
+        )
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([id, t]) => ({ id, source: t.source }));
       const surfaces = [
@@ -211,13 +244,29 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
         trustedOnly: !!proc?.trustedOnly,
         variants: [],
         behavior: { declaration: p, dependencies: inspected.dependencies },
+        ownBehavior: {
+          declaration: {
+            ...Object.fromEntries(
+              Object.entries(p).filter(([key]) => !(presentationFields as readonly string[]).includes(key)),
+            ),
+            ...(uiBehavior(p.uiSchema) ? { uiSchema: uiBehavior(p.uiSchema) } : {}),
+          },
+          dependencies: inspected.dependencies,
+        },
+        canonical: true,
+        presentation: Object.fromEntries(
+          Object.entries(p).filter(([key]) => (presentationFields as readonly string[]).includes(key)),
+        ),
       });
     }
   }
-  const addRoute = (id: string, dependencies: TargetDefinition[], inputSchema = objectInput) => {
+  const addRoute = (id: string, dependencies: TargetDefinition[], inputSchema = objectInput, binding?: RestBinding) => {
     const admin = id.startsWith("admin:");
     out.push({
       id,
+      canonical: false,
+      presentation: {},
+      ...(binding ? { binding } : {}),
       name: id.replace(/[^a-zA-Z0-9_-]/g, "_"),
       title: id,
       description: id,
@@ -265,11 +314,11 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
   );
   for (const d of declarations)
     if (d.kind === "view" && d.surfaces.includes("public"))
-      addRoute(`rest:GET /api/views/${d.id.slice(5)}`, [d], d.inputSchema);
+      addRoute(`rest:GET /api/views/${d.id.slice(5)}`, [d], d.inputSchema, restBinding(plan, d.id.slice(5)));
   for (const [, t] of Object.entries(plan.triggers).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
     if (t.source.kind === "http") {
-      const d = declarations.find(d => d.id === `procedure:${t.procedure}`)!;
-      addRoute(`rest:${t.source.method} ${pathTemplate(t.source.path)}`, [d], d.inputSchema);
+      const d = declarations.find(d => d.id === ("view" in t ? `view:${t.view}` : `procedure:${t.procedure}`))!;
+      addRoute(`rest:${t.source.method} ${pathTemplate(t.source.path)}`, [d], d.inputSchema, restBinding(plan, t));
     }
   const generated: TargetDefinition[] = [];
   for (const [schema, s] of Object.entries(plan.schemas).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
@@ -280,6 +329,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
         const inspected = inspectBehavior(plan, undefined, false, undefined, [
           { schema, operation: verb === "publish" ? "publish" : "update" },
         ]);
+        const behavior = { schema, verb, from, to, dependencies: inspected.dependencies };
         Object.assign(d, {
           kind: "procedure",
           name: mcpToolNameSegment(`${verb}_${s.name}`),
@@ -289,7 +339,8 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
           schemas: [...new Set([schema, ...inspected.schemas])].sort(),
           readSchemas: [...new Set([schema, ...inspected.readSchemas])].sort(),
           opaque: inspected.opaque,
-          behavior: { schema, verb, from, to, dependencies: inspected.dependencies },
+          behavior,
+          ownBehavior: behavior,
         });
         generated.push(d);
       }
@@ -306,6 +357,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
       opaque: !tool.annotations.readOnlyHint,
       annotations: tool.annotations,
       behavior: { tool, schemas: plan.schemas },
+      ownBehavior: { tool, schemas: plan.schemas },
     });
     generated.push(d);
   }
@@ -345,7 +397,7 @@ export function targetDefinitions(plan: RuntimePlan): TargetDefinition[] {
     if (generic) {
       d.schemas = Object.keys(plan.schemas).sort();
       d.readSchemas = d.schemas;
-      d.behavior = { schemas: plan.schemas, dependencies: [] };
+      d.behavior = d.ownBehavior = { schemas: plan.schemas, dependencies: [] };
     }
   }
   return [...new Map(out.map(d => [d.id, d])).values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

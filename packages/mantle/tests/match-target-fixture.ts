@@ -35,6 +35,20 @@ export const precedence = [
     manifest("Trigger", name + "-http", { source: { kind: "http", method, path }, target: { procedure: name } }),
   ]),
   manifest("Trigger", "item-mcp", { source: { kind: "mcp", surface: "admin" }, target: { procedure: "item" } }),
+  // GET View Triggers (ADR-0047): a literal path before a parameter, GET only (no HEAD), beside the POST and PATCH routes.
+  manifest("View", "item-detail", {
+    surface: "public",
+    input: { type: "object", properties: { id: { type: "string" } } },
+    sql: "SELECT id, title FROM items WHERE input.id IS NULL OR id = input.id ORDER BY id",
+  }),
+  manifest("Trigger", "item-detail-get", {
+    source: { kind: "http", method: "GET", path: "/api/items/{id}" },
+    target: { view: "item-detail" },
+  }),
+  manifest("Trigger", "feed-latest-get", {
+    source: { kind: "http", method: "GET", path: "/api/items/latest" },
+    target: { view: "feed" },
+  }),
 ].join("\n---\n");
 
 export async function apps(): Promise<[string, { sourceId: string; text: string }[]][]> {

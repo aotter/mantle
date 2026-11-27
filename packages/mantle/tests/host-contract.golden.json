@@ -4968,6 +4968,293 @@
       true
     ]
   },
+  "rest GET View Trigger allow admin read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger allow member read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "user",
+          "subject": "person",
+          "layer": "member"
+        },
+        "outcome": "allow"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger allow snapshot read": {
+    "answer": {
+      "status": 200,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "rows": [
+          {
+            "id": "<row 1>",
+            "title": "changed"
+          }
+        ]
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "allow"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger TARGET_MISMATCH pinned to the View route": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_MISMATCH",
+          "message": "TARGET_MISMATCH",
+          "target": "rest:GET /api/records/restricted"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_MISMATCH"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger TARGET_HASH_MISMATCH": {
+    "answer": {
+      "status": 412,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "TARGET_HASH_MISMATCH",
+          "message": "TARGET_HASH_MISMATCH",
+          "target": "rest:GET /api/records/restricted"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "TARGET_HASH_MISMATCH"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger restrict term: all refused": {
+    "answer": {
+      "status": 403,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "AUTH_DENIED",
+          "message": "This target restricts rows by 'region', which needs explicit values; { all: true } does not lift a restrict."
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "deny",
+        "reason": "AUTH_DENIED"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger unknown query parameter": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "message": "Unknown query parameter.",
+          "target": "views/restricted-records/input/store"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger repeated query parameter": {
+    "answer": {
+      "status": 400,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "INPUT_VALIDATION_FAILED",
+          "message": "Query parameter is repeated.",
+          "target": "views/restricted-records/limit"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "INPUT_VALIDATION_FAILED"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
+  "rest GET View Trigger HEAD": {
+    "answer": {
+      "status": 405,
+      "wwwAuthenticate": null,
+      "cacheControl": "private, no-store",
+      "body": {
+        "error": {
+          "code": "METHOD_NOT_ALLOWED",
+          "message": "Method is not allowed for this route.",
+          "target": "rest"
+        }
+      }
+    },
+    "events": [
+      {
+        "v": 1,
+        "requestId": "request-1",
+        "target": "rest:HEAD /api/records/restricted",
+        "targetHash": "",
+        "caller": {
+          "kind": "host",
+          "subject": "host:person",
+          "layer": "admin"
+        },
+        "outcome": "error",
+        "reason": "METHOD_NOT_ALLOWED"
+      }
+    ],
+    "frozen": [
+      true
+    ]
+  },
   "rest snapshot peek": {
     "answer": {
       "status": 200,
@@ -6143,6 +6430,44 @@
       }
     },
     {
+      "name": "rest_GET__api_records_restricted",
+      "_meta": {
+        "id": "rest:GET /api/records/restricted",
+        "targetHash": "<hash:rest:GET /api/records/restricted>",
+        "readOnly": true,
+        "surfaces": [
+          "rest"
+        ],
+        "scope": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              },
+              {
+                "column": "store",
+                "field": "stores",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "restrict": {
+          "records": {
+            "terms": [
+              {
+                "column": "region",
+                "field": "region",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "name": "rest_GET__api_views_public-records",
       "_meta": {
         "id": "rest:GET /api/views/public-records",
@@ -6392,6 +6717,13 @@
     }
   ],
   "matchTarget": {
+    "GET /api/records/restricted": "rest:GET /api/records/restricted",
+    "GET /api/records/restricted/": "rest:GET /api/records/restricted",
+    "GET /api/records/%72estricted": "rest:GET /api/records/restricted",
+    "GET //api/records/restricted": null,
+    "GET /api/records/restricted//": null,
+    "GET /API/RECORDS/RESTRICTED": null,
+    "GET /api/records/restricted/extra": null,
     "GET /api/views/public-records": "rest:GET /api/views/public-records",
     "GET /api/views/public-records/": "rest:GET /api/views/public-records",
     "GET /api/views/%70ublic-records": "rest:GET /api/views/public-records",

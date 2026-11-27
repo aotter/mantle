@@ -1,7 +1,8 @@
 import type { RuntimePlan } from "../../build/compiler.js";
 import type { PlanRestrict } from "../../build/spec/domain/model/RuntimePlan.js";
 import type { UserFieldSpec } from "../../build/spec/domain/model/UserFields.js";
-import { canonical, hashDefinition } from "./target-hash.js";
+import { canonical, fingerprinter, requirements, TARGET_HASH_VERSION } from "./target-hash.js";
+import type { RestBinding } from "../binding.js";
 import { targetDefinitions, type TargetDefinition } from "./targets.js";
 import { localizedSchema } from "../../kernel/localized-schema.js";
 export { matchTarget, type TargetRequest } from "./match.js";
@@ -17,7 +18,15 @@ export interface DescribeTarget {
     surfaces: string[];
     triggers: TargetDefinition["triggers"];
     id: string;
+    /** The runtime pin (formula `targetHashVersion`). */
     targetHash: string;
+    /** ADR-0047 §7; absent in reports from before formula 2, which readers treat as unknown. */
+    behaviorHash?: string;
+    exposureHash?: string;
+    /** Formula 1's `targetHash`, carried through the 0.2.x line for diffs across the formula change. */
+    targetHashV1?: string;
+    /** How a `rest:` entry binds a request. */
+    exposure?: RestBinding;
     readOnly: boolean;
     scope: PlanRestrict;
     restrict: PlanRestrict;
@@ -43,12 +52,10 @@ export interface DescribeTarget {
 interface Requirements {
   all: readonly (string | { readonly "ctx.auth.scope": string })[];
 }
-function requirements(d: TargetDefinition, surface: string): Requirements {
-  const all = d.requires?.auth?.all ?? [];
-  return { all: surface === "admin" && !all.includes("ctx.admin") ? ["ctx.admin", ...all] : all };
-}
 export interface AppDescription {
   schemaVersion: 1;
+  /** The `targetHash` formula; absent means 1. */
+  targetHashVersion?: number;
   access: Readonly<Record<string, UserFieldSpec>>;
   targets: DescribeTarget[];
 }
@@ -66,6 +73,7 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
     );
   const unscopedReads = (d: TargetDefinition) =>
     d.readSchemas.some(name => !plan.schemas[name]?.scope && !plan.schemas[name]?.userScopes?.length);
+  const fingerprints = fingerprinter(plan);
   const targets = await Promise.all(
     targetDefinitions(plan).map(async d => ({
       name: d.name,
@@ -79,7 +87,8 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
         surfaces: d.surfaces,
         triggers: d.triggers,
         id: d.id,
-        targetHash: await hashDefinition(plan, d),
+        ...(await fingerprints(d)),
+        ...(d.binding ? { exposure: d.binding } : {}),
         readOnly: d.readOnly,
         scope: scope(d),
         restrict: d.restrict,
@@ -103,7 +112,14 @@ export async function describeApp(plan: RuntimePlan): Promise<AppDescription> {
       },
     })),
   );
-  return JSON.parse(canonical({ schemaVersion: 1, access: plan.access?.userFields ?? {}, targets })) as AppDescription;
+  return JSON.parse(
+    canonical({
+      schemaVersion: 1,
+      targetHashVersion: TARGET_HASH_VERSION,
+      access: plan.access?.userFields ?? {},
+      targets,
+    }),
+  ) as AppDescription;
 }
 
 export interface AppChange {
@@ -112,6 +128,8 @@ export interface AppChange {
   direction: "widened" | "narrowed" | "changed";
   before?: unknown;
   after?: unknown;
+  /** Set when a report carries no value to compare across a formula change (ADR-0047 §8.6). */
+  unverified?: true;
 }
 type Direction = AppChange["direction"];
 const securityFlags = ["readOnly", "trustedOnly", "opaque", "unscopedReads", "nativeDatabase"] as const;
@@ -185,17 +203,82 @@ const nativeDatabaseDefaults = (m: DescribeTarget["_meta"]): DescribeTarget["_me
   nativeDatabase: m.nativeDatabase ?? false,
   variants: m.variants.map(v => ({ ...v, nativeDatabase: v.nativeDatabase ?? false })),
 });
+/** An http Trigger's path does not widen or narrow its exposure: a path-only move is `changed` (ADR-0047 §8.5). */
+const triggerKey = (t: DescribeTarget["_meta"]["triggers"][number]) =>
+  canonical(t.source.kind === "http" ? { ...t, source: { ...t.source, path: undefined } } : t);
+const restMethod = (id: string) => /^rest:([A-Z]+) /.exec(id)?.[1];
+/** Everything of a `rest:` entry except where it is: two entries equal under this are one route moved (§8.4). */
+const moveKey = (t: DescribeTarget) => {
+  const m = nativeDatabaseDefaults(t._meta);
+  return m.behaviorHash === undefined || m.exposure === undefined
+    ? undefined
+    : canonical({
+        method: restMethod(m.id),
+        behaviorHash: m.behaviorHash,
+        exposure: m.exposure,
+        requires: m.requires,
+        inputSchema: t.inputSchema,
+        surfaces: m.surfaces,
+        scope: m.scope,
+        restrict: m.restrict,
+        variants: m.variants,
+        flags: securityFlags.map(f => m[f]),
+      });
+};
+/** Pair each `rest:` entry that disappeared with one that appeared and differs from it only by its URI. */
+function uriMoves(old: Map<string, DescribeTarget>, next: Map<string, DescribeTarget>): Map<string, string> {
+  const moves = new Map<string, string>(),
+    gone = [...old.keys()].filter(id => !next.has(id) && restMethod(id)).sort(),
+    added = [...next.keys()].filter(id => !old.has(id) && restMethod(id)).sort();
+  for (const from of gone) {
+    const key = moveKey(old.get(from)!);
+    const to = key && added.find(id => !moves.has(id) && moveKey(next.get(id)!) === key);
+    if (to) moves.set(to, from);
+  }
+  return moves;
+}
 /** Report widening on any reachable surface or dispatcher variant. */
 export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
   if (a.schemaVersion !== 1 || b.schemaVersion !== 1) throw new TypeError("Unsupported describe schemaVersion.");
   const changes: AppChange[] = [],
     old = new Map(a.targets.map(t => [t._meta.id, t])),
     next = new Map(b.targets.map(t => [t._meta.id, t]));
+  const formulaA = a.targetHashVersion ?? 1,
+    formulaB = b.targetHashVersion ?? 1,
+    crossFormula = formulaA !== formulaB;
+  if (crossFormula)
+    changes.push({
+      id: "*",
+      field: "targetHashVersion",
+      direction: "changed",
+      before: formulaA,
+      after: formulaB,
+    });
+  // Formula 1's value on either side: a formula-1 report's pin, or a later report's transition field.
+  const formulaV1 = (m: DescribeTarget["_meta"], formula: number) => (formula === 1 ? m.targetHash : m.targetHashV1);
+  const moves = uriMoves(old, next),
+    moved = new Set(moves.values());
   for (const id of [...new Set([...old.keys(), ...next.keys()])].sort()) {
+    if (moved.has(id)) continue;
+    const from = moves.get(id);
+    if (from) {
+      changes.push({
+        id,
+        field: "exposure",
+        direction: "changed",
+        before: from,
+        after: id,
+      });
+      continue;
+    }
     const before = old.get(id),
       after = next.get(id);
     if (!before || !after) {
-      changes.push({ id, field: "target", direction: before ? "narrowed" : "widened" });
+      changes.push({
+        id,
+        field: "target",
+        direction: before ? "narrowed" : "widened",
+      });
       continue;
     }
     const x = nativeDatabaseDefaults(before._meta),
@@ -207,8 +290,13 @@ export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
     record("scope", x.scope, y.scope, policyDirection(x.scope, y.scope, true));
     record("restrict", x.restrict, y.restrict, policyDirection(x.restrict, y.restrict, false));
     record("requires", x.requires, y.requires, requiresDirection(x.requires, y.requires));
-    for (const field of ["surfaces", "triggers"] as const)
-      record(field, x[field], y[field], exposureDirection(x[field].map(canonical), y[field].map(canonical)));
+    record("surfaces", x.surfaces, y.surfaces, exposureDirection(x.surfaces.map(canonical), y.surfaces.map(canonical)));
+    record(
+      "triggers",
+      x.triggers,
+      y.triggers,
+      exposureDirection(x.triggers.map(triggerKey), y.triggers.map(triggerKey)),
+    );
     for (const field of securityFlags) record(field, x[field], y[field], flagDirection(field, y[field]));
     record("inputSchema", before.inputSchema, after.inputSchema, "changed");
     const directions: Direction[] = [];
@@ -232,8 +320,26 @@ export function diffApp(a: AppDescription, b: AppDescription): AppChange[] {
       }
     }
     record("variants", x.variants, y.variants, combine(directions));
-    if (changes.length === start && x.targetHash !== y.targetHash)
+    if (x.exposure !== undefined && y.exposure !== undefined) record("exposure", x.exposure, y.exposure, "changed");
+    if (x.behaviorHash !== undefined && y.behaviorHash !== undefined && x.behaviorHash !== y.behaviorHash)
       changes.push({ id, field: "behavior", direction: "changed" });
+    else if (crossFormula) {
+      // Across the formula change formula 1 is compared whatever else was recorded, so a SQL change is never hidden.
+      const left = formulaV1(x, formulaA),
+        right = formulaV1(y, formulaB);
+      if (left === undefined || right === undefined)
+        changes.push({
+          id,
+          field: "behavior",
+          direction: "changed",
+          unverified: true,
+        });
+      else if (left !== right) changes.push({ id, field: "behavior", direction: "changed" });
+    }
+    if (crossFormula || changes.length > start) continue;
+    if (x.exposureHash !== undefined && y.exposureHash !== undefined && x.exposureHash !== y.exposureHash)
+      changes.push({ id, field: "exposure", direction: "changed" });
+    else if (x.targetHash !== y.targetHash) changes.push({ id, field: "behavior", direction: "changed" });
   }
   return changes;
 }

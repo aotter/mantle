@@ -37,8 +37,8 @@ export function router<Env, Database, Handlers>(
         if (!match) continue;
         allowed.add(route.method);
         const view = isView(route);
-        // HEAD answers a View's GET route without its body.
-        const servesHead = request.method === "HEAD" && route.method === "GET" && view;
+        // HEAD answers a View's generated GET route without its body; a strict (GET View Trigger) route answers GET only.
+        const servesHead = request.method === "HEAD" && route.method === "GET" && view && !route.strict;
         if (route.method !== request.method && !servesHead) continue;
         const params = decode(route.keys ?? [], match, "Malformed path parameter.", "rest");
         const call: Call = {

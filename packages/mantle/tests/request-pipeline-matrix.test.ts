@@ -42,6 +42,11 @@ const source = [
   manifest("View", "members", { surface: "public", requires: requires("ctx.user"), sql: SELECT }),
   manifest("View", "staff", { surface: "public", requires: requires("ctx.admin"), sql: SELECT }),
   manifest("View", "audit", { surface: "admin", sql: SELECT }),
+  // A GET View Trigger (ADR-0047): the `members` View at a custom path, decided like its generated route.
+  manifest("Trigger", "members-get", {
+    source: { kind: "http", method: "GET", path: "/api/member-notes" },
+    target: { view: "members" },
+  }),
   ...procedure("peek", requires("ctx.user"), UPDATE),
   ...procedure("write", requires("ctx.user"), UPDATE),
   ...procedure("scoped", requires("ctx.user", { "ctx.auth.scope": "notes:write" }), UPDATE),
@@ -61,6 +66,7 @@ const targets: readonly TargetCase[] = [
   { name: "members", kind: "view", rest: "/api/views/members", mcp: "/mcp", web: "/members" },
   { name: "staff", kind: "view", rest: "/api/views/staff", mcp: "/mcp", web: "/staff" },
   { name: "audit", kind: "view", mcp: "/mcp/admin" },
+  { name: "members-get", kind: "view", rest: "/api/member-notes" },
   { name: "peek", kind: "procedure", rest: "/api/peek", mcp: "/mcp" },
   { name: "write", kind: "procedure", rest: "/api/write", mcp: "/mcp" },
   { name: "scoped", kind: "procedure", rest: "/api/scoped", mcp: "/mcp" },

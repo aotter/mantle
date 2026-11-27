@@ -510,3 +510,118 @@ test("@aotter/mantle/describe exports only matchTarget and statically loads no c
           })());
   expect(visit(entry)).not.toMatch(/libpg-query|from\s*"yaml"|build\/compiler|import\(/);
 });
+
+// Compatibility baselines for #2174: targetHash formula v1 as literal values, and a saved v1 report
+// (`fixtures/describe-v1-report.json`, the user-fields fixture on D1) that later readers must keep reading.
+// Formula 2 (ADR-0047 §7) re-pinned `targetHash` once; `targetHashV1` keeps the formula-1 values.
+const v1Pins: Record<string, string> = {
+  "procedure:delete-doc": "080c2bd858f12a8f2b6be5910fffd850b461b9e479ee2be429fa5ee7bf9a4b84",
+  "procedure:rename-doc": "1c203344691a8b94d8a812f043ddc3516480144cea905bd6ef23e6be60c461a6",
+  "procedure:rename-order": "79a02d3163bce5b2904aace97637de252b78e22dd668479e7408589660801116",
+  "rest:GET /api/views/my-doc": "f7a9967fc595e559850faed515d56e6b4d35dbc4d627276b1004027042c1657d",
+  "rest:GET /api/views/my-docs": "e7d09a437ee82204697f5abe23eac63f71fee1c518c20b220a63fe68087964ca",
+  "rest:POST /api/orders/rename": "c93521e00b4e37e0e3003d4b703441378c5bf371f13b3683a8541063d9dae4db",
+  "view:all-orders": "d93b1ba64588ff8a211d0d2454ce7e51c5cb7b9419c15eb7780ad5666577135a",
+  "view:member-docs": "ffffaba4d59a3294a1c1c43815fa2d1adb2680905462bff5b912f0eeae80620c",
+  "view:my-doc": "28f9dfaf1adc4a34474f21eb7a2f7ec640e51dc557dbe7c0c8e43029d3584173",
+  "view:my-docs": "50ebe9c793901a6e441af47191a1d5ad4743d75910e25eef20648e96009b472a",
+  "view:notes-list": "96458b23f893dae785c84d0e60622abad5294b9868036efeb405524d00379cb2",
+  "view:regional-orders": "5435153a1306380044f911bc1d0e1ba1a4eab8f45c3b32b20b73ed589d24dc93",
+  "view:tier-orders": "f8422b2e0348c542cbff456a5e39a308650c65b5e225392e870746bc84da2d3a",
+  "admin:GET /entries": "62ea8126ab37608dff1588b73422302e89ed9accacf06203ea50e4202f404ca0",
+  "admin:POST /operations/:name": "6c0a12174a0779b96732bb446170cbcd7ec8053675087d28778cc93d2dcd734c",
+  "admin:tool:find_media": "d66331e2aa742ee8c3a4faf5e805f51014debc0f85f51b1e57e7594b5ab6840e",
+};
+const v2Pins: Record<string, string> = {
+  "procedure:delete-doc": "5358484e1311141df6f74706b676494eb03f58cc7a21f25095ba05af77dbd09f",
+  "procedure:rename-doc": "252616b1b79d60df34f411c193dacbffac030487572ca8ff5a430cd35a1fe307",
+  "procedure:rename-order": "a92ec97d493265508ed5a26ffa5057ecebd99a3f0ecdddbf72319dfcf39b19f5",
+  "rest:GET /api/views/my-doc": "831060125c20f70a92dbc855a4863203d5fef050767c1270235695fcd2cdf9fa",
+  "rest:GET /api/views/my-docs": "65f3fa736183776e666b7d405fe1da4f95d84def9486a11cadea2743caff1b46",
+  "rest:POST /api/orders/rename": "24b2b67bb3c1b16a18693a84c3143f20aeb475b2a5b44ccdc153d35be80f7ef0",
+  "view:all-orders": "c1dccb35b3d5c82c94d558a3755569d4da4b6733c80b4a9da5ff5d5d429ea57c",
+  "view:member-docs": "8ea44837c2c5abdd5f4a1efd732a067799533f70d5d8a88af63b2483ee1d202d",
+  "view:my-doc": "7dd7efb7d5d33bc025699587983eff1e656c707dad49f5bb7be4f46f058fe65c",
+  "view:my-docs": "29b09e1b761eb21117ad2a4031400f75928e9ab0abb8146420e677bc4ab8799c",
+  "view:notes-list": "b790feea9b19eb8768d310dac272df0a18a4bc6fd255c357c84097c022f23ed0",
+  "view:regional-orders": "907e1d678bb8f55e3cd1525aab4fc4154eb76ea0b919cb3e152639f1e8c3ba8a",
+  "view:tier-orders": "b08585e0603a42178517ff372c541ea32dfdfdae9f38048f751854dde2809918",
+  "admin:GET /entries": "6abd9e6b323e23f39d29a3c18bbd5f0a15a866f8fe80c0ffb839eb908c9bd6e4",
+  "admin:POST /operations/:name": "9b1f2e3b0d85dc835a879ef067c8047d9c40861225fc579ef5b0340953b5695c",
+  "admin:tool:find_media": "ae5c6f05f0960bb4d9559529be0b606b58035087af2a01d043950dabdf0c6179",
+};
+const savedV1 = async () =>
+  JSON.parse(await readFile(new URL("fixtures/describe-v1-report.json", import.meta.url), "utf8")) as Awaited<
+    ReturnType<typeof describeApp>
+  >;
+
+test("targetHash formula v1 keeps its literal values as targetHashV1, and the saved v1 report carries them", async () => {
+  const report = await describeApp(await fixture()),
+    saved = await savedV1();
+  expect(report.targetHashVersion).toBe(2);
+  for (const [id, hash] of Object.entries(v1Pins)) {
+    expect([id, target(report, id).targetHashV1]).toEqual([id, hash]);
+    expect([id, target(saved, id).targetHash]).toEqual([id, hash]);
+  }
+  for (const [id, hash] of Object.entries(v2Pins)) expect([id, target(report, id).targetHash]).toEqual([id, hash]);
+  // Every target carries the transition value, and it is formula 1 for every one of them, not only the pinned ones.
+  for (const t of saved.targets)
+    expect([t._meta.id, target(report, t._meta.id).targetHashV1]).toEqual([t._meta.id, t._meta.targetHash]);
+});
+
+/** A formula-2 report with only the formula-1 keys: the additive keys dropped and `targetHash` read from `targetHashV1`. */
+const asFormulaV1 = (report: Awaited<ReturnType<typeof describeApp>>) => {
+  const { targetHashVersion: _, ...rest } = structuredClone(report);
+  for (const t of rest.targets) {
+    t._meta.targetHash = t._meta.targetHashV1!;
+    for (const key of ["targetHashV1", "behaviorHash", "exposureHash", "exposure"]) delete t._meta[key];
+  }
+  return rest;
+};
+
+test("the saved v1 report equals today's report read through formula 1, and diffApp reads it", async () => {
+  const report = JSON.parse(JSON.stringify(await describeApp(await fixture()))),
+    saved = await savedV1();
+  expect(saved.schemaVersion).toBe(1);
+  expect("targetHashVersion" in saved).toBe(false);
+  expect(asFormulaV1(report)).toEqual(saved);
+  expect(diffApp(saved, saved)).toEqual([]);
+  expect(diffApp(report, report)).toEqual([]);
+  expect(diffApp(saved, asFormulaV1(report))).toEqual([]);
+  // Across the formula change every pin differs; diffApp compares formula 1 on both sides (ADR-0047 §8.6), so an
+  // unchanged application reads as the formula change alone.
+  const line = (before: number, after: number) => ({
+    id: "*",
+    field: "targetHashVersion",
+    direction: "changed" as const,
+    before,
+    after,
+  });
+  expect(diffApp(saved, report)).toEqual([line(1, 2)]);
+  expect(diffApp(report, saved)).toEqual([line(2, 1)]);
+});
+
+test("matchTarget resolves the saved v1 report as it resolves today's report", async () => {
+  const { matchTarget } = await import("../dist/domain/describe/index.js");
+  const report = JSON.parse(JSON.stringify(await describeApp(await fixture()))),
+    saved = await savedV1();
+  const rows: [Parameters<typeof matchTarget>[1], string | null][] = [
+    [{ surface: "rest", method: "GET", path: "/api/views/my-docs" }, "rest:GET /api/views/my-docs"],
+    [{ surface: "rest", method: "HEAD", path: "/api/views/my-docs" }, "rest:GET /api/views/my-docs"],
+    [{ surface: "rest", method: "GET", path: "/api/views/my-doc" }, "rest:GET /api/views/my-doc"],
+    [{ surface: "rest", method: "POST", path: "/api/orders/rename" }, "rest:POST /api/orders/rename"],
+    [{ surface: "rest", method: "HEAD", path: "/api/orders/rename" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/orders/rename" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/views/all-orders" }, null],
+    [{ surface: "rest", method: "GET", path: "/api/orders/5" }, null],
+    [{ surface: "admin", method: "GET", path: "/admin/api/entries" }, "admin:GET /entries"],
+    [{ surface: "mcp", tool: "my_docs", path: "/mcp" }, "view:my-docs"],
+    [{ surface: "mcp", tool: "rename_order", path: "/mcp/admin" }, "procedure:rename-order"],
+    [{ surface: "mcp", tool: "find_media", path: "/mcp/admin" }, "admin:tool:find_media"],
+    [{ surface: "mcp", tool: "all_orders", path: "/mcp" }, null],
+  ];
+  for (const [request, id] of rows) {
+    expect([request, matchTarget(saved, request)?.id ?? null]).toEqual([request, id]);
+    expect([request, matchTarget(report, request)?.id ?? null]).toEqual([request, id]);
+  }
+});
